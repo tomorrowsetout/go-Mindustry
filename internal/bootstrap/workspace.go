@@ -1,0 +1,197 @@
+package bootstrap
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"mdt-server/internal/config"
+)
+
+type Result struct {
+	CreatedDirs  []string
+	CreatedFiles []string
+}
+
+func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
+	var out Result
+	createdDirSet := map[string]struct{}{}
+	createdFileSet := map[string]struct{}{}
+
+	mkdir := func(dir string) error {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return nil
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		if _, ok := createdDirSet[dir]; !ok {
+			out.CreatedDirs = append(out.CreatedDirs, dir)
+			createdDirSet[dir] = struct{}{}
+		}
+		return nil
+	}
+	writeIfMissing := func(path string, data []byte, mode os.FileMode) error {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return nil
+		}
+		if st, err := os.Stat(path); err == nil {
+			if st.IsDir() {
+				return fmt.Errorf("path is directory: %s", path)
+			}
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := mkdir(filepath.Dir(path)); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, data, mode); err != nil {
+			return err
+		}
+		if _, ok := createdFileSet[path]; !ok {
+			out.CreatedFiles = append(out.CreatedFiles, path)
+			createdFileSet[path] = struct{}{}
+		}
+		return nil
+	}
+
+	// Ensure config exists on first launch for better discoverability.
+	if strings.TrimSpace(cfgPath) != "" {
+		if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+			if err := config.Save(cfgPath, cfg); err != nil {
+				return out, err
+			}
+			out.CreatedFiles = append(out.CreatedFiles, cfgPath)
+			createdFileSet[cfgPath] = struct{}{}
+		} else if err != nil {
+			return out, err
+		}
+	}
+
+	dirs := []string{
+		"assets/worlds",
+		"logs",
+		cfg.Storage.Directory,
+		filepath.Join(cfg.Storage.Directory, "players"),
+		cfg.Persist.Directory,
+		cfg.Persist.MSAVDir,
+		filepath.Dir(strings.TrimSpace(cfg.Script.File)),
+		filepath.Dir(strings.TrimSpace(cfg.Admin.OpsFile)),
+		cfg.Mods.Directory,
+		cfg.Mods.JSDir,
+		cfg.Mods.NodeDir,
+		cfg.Mods.GoDir,
+		filepath.Dir(strings.TrimSpace(cfg.Runtime.VanillaProfiles)),
+	}
+	for _, d := range dirs {
+		if err := mkdir(d); err != nil {
+			return out, err
+		}
+	}
+
+	_ = writeIfMissing(filepath.Join(cfg.Storage.Directory, ".keep"), []byte(""), 0o644)
+	_ = writeIfMissing(filepath.Join(cfg.Storage.Directory, "players", ".keep"), []byte(""), 0o644)
+	_ = writeIfMissing(filepath.Join(cfg.Storage.Directory, "all.jsonl"), []byte(""), 0o644)
+
+	scriptPayload := map[string]any{
+		"version":       1,
+		"startup_tasks": []any{},
+		"daily_gc_time": "",
+		"updated_at":    time.Now().UTC().Format(time.RFC3339),
+	}
+	if b, err := json.MarshalIndent(scriptPayload, "", "  "); err == nil {
+		_ = writeIfMissing(cfg.Script.File, b, 0o644)
+	}
+	opsPayload := map[string]any{
+		"ops":      []any{},
+		"saved_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if b, err := json.MarshalIndent(opsPayload, "", "  "); err == nil {
+		_ = writeIfMissing(cfg.Admin.OpsFile, b, 0o644)
+	}
+	statePayload := map[string]any{
+		"map_path":  "",
+		"wave_time": 0,
+		"wave":      0,
+		"tick":      0,
+		"time_data": 0,
+		"rand0":     0,
+		"rand1":     0,
+		"saved_at":  "",
+	}
+	if b, err := json.MarshalIndent(statePayload, "", "  "); err == nil {
+		_ = writeIfMissing(filepath.Join(cfg.Persist.Directory, cfg.Persist.File), b, 0o644)
+	}
+	if strings.TrimSpace(cfg.Runtime.VanillaProfiles) != "" {
+		_ = writeIfMissing(cfg.Runtime.VanillaProfiles, []byte("{\n  \"units_by_name\": [],\n  \"turrets\": []\n}\n"), 0o644)
+	}
+
+	_ = writeIfMissing(filepath.Join(cfg.Mods.JSDir, "hello.js"), []byte("console.log('hello from mods/js/hello.js');\n"), 0o644)
+	_ = writeIfMissing(filepath.Join(cfg.Mods.NodeDir, "hello.js"), []byte("console.log('hello from mods/node/hello.js');\n"), 0o644)
+	_ = writeIfMissing(filepath.Join(cfg.Mods.GoDir, "hello.go"), []byte("package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello from mods/go/hello.go\")\n}\n"), 0o644)
+
+	if err := seedMapIfMissing("assets/worlds"); err != nil {
+		return out, err
+	}
+
+	return out, nil
+}
+
+func seedMapIfMissing(dstDir string) error {
+	msav, err := filepath.Glob(filepath.Join(dstDir, "*.msav"))
+	if err == nil && len(msav) > 0 {
+		return nil
+	}
+	candidates := []string{
+		filepath.Join("..", "assets", "worlds", "23315.msav"),
+		filepath.Join("go-server", "assets", "worlds", "23315.msav"),
+		filepath.Join("..", "go-server", "assets", "worlds", "23315.msav"),
+		filepath.Join("assets", "worlds", "file.msav"),
+		filepath.Join("..", "assets", "worlds", "file.msav"),
+	}
+	var src string
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && !st.IsDir() {
+			src = c
+			break
+		}
+	}
+	if src == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return err
+	}
+	dst := filepath.Join(dstDir, filepath.Base(src))
+	if st, err := os.Stat(dst); err == nil && !st.IsDir() {
+		return nil
+	}
+	return copyFile(src, dst)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
