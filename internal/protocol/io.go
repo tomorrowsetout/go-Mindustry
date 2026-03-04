@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 )
@@ -113,6 +114,10 @@ func (rd *Reader) ReadStringRaw() (string, error) {
 	if l == 0xFFFF {
 		return "", nil
 	}
+	// BOUNDS CHECK: Limit string length to prevent OOM attacks (65KB max)
+	if l > 65535 {
+		return "", fmt.Errorf("string length too large: %d", l)
+	}
 	b, err := rd.ReadBytes(int(l))
 	if err != nil {
 		return "", err
@@ -192,6 +197,10 @@ func (w *Writer) WriteStringRaw(s string) error {
 			return err
 		}
 		return nil
+	}
+	// BOUNDS CHECK: String length must fit in uint16
+	if len(s) > 65535 {
+		return fmt.Errorf("string too long: %d bytes (max 65535)", len(s))
 	}
 	if err := w.WriteUint16(uint16(len(s))); err != nil {
 		return err

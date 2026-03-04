@@ -17,6 +17,8 @@ type ContentRegistry struct {
 	weather     map[int16]Weather
 	effects     map[int16]Effect
 	sounds      map[int16]Sound
+	sectors     map[int16]Sector
+	planets     map[int16]Planet
 
 	teams       map[byte]Team
 	commands    map[int16]UnitCommand
@@ -35,6 +37,8 @@ func NewContentRegistry() *ContentRegistry {
 		weather:     map[int16]Weather{},
 		effects:     map[int16]Effect{},
 		sounds:      map[int16]Sound{},
+		sectors:     map[int16]Sector{},
+		planets:     map[int16]Planet{},
 		teams:       map[byte]Team{},
 		commands:    map[int16]UnitCommand{},
 		stances:     map[int16]UnitStance{},
@@ -130,7 +134,16 @@ func (r *ContentRegistry) RegisterEffect(e Effect) {
 	defer r.mu.Unlock()
 	r.effects[e.ID] = e
 }
-
+func (r *ContentRegistry) RegisterSector(s Sector) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sectors[s.ID] = s
+}
+func (r *ContentRegistry) RegisterPlanet(p Planet) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.planets[p.ID] = p
+}
 func (r *ContentRegistry) RegisterSound(s Sound) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -211,6 +224,16 @@ func (r *ContentRegistry) Effect(id int16) Effect {
 	defer r.mu.RUnlock()
 	return r.effects[id]
 }
+func (r *ContentRegistry) Sector(id int16) Sector {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sectors[id]
+}
+func (r *ContentRegistry) Planet(id int16) Planet {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.planets[id]
+}
 
 func (r *ContentRegistry) Sound(id int16) Sound {
 	r.mu.RLock()
@@ -246,6 +269,7 @@ func (r *ContentRegistry) UnitStance(id int16) UnitStance {
 }
 
 // Context builds a TypeIOContext wired to this registry.
+// Entity factory functions can be provided for proper unit/entity handling.
 func (r *ContentRegistry) Context() *TypeIOContext {
 	return &TypeIOContext{
 		Content:            r,
@@ -261,6 +285,13 @@ func (r *ContentRegistry) Context() *TypeIOContext {
 		TeamLookup:         r.Team,
 		UnitCommandLookup:  r.UnitCommand,
 		UnitStanceLookup:   r.UnitStance,
+		// Entity factory functions - set to safe no-op by default
+		// Server should override these in NewServer for proper entity management.
+		EntityFactory:      func(byte) UnitSyncEntity { return nil },
+		EntityByID:         func(int32) UnitSyncEntity { return nil },
+		IsEntityUsed:       func(int32) bool { return false },
+		AddEntity:          func(UnitSyncEntity) {},
+		AddRemovedEntity:   func(int32) {},
 	}
 }
 

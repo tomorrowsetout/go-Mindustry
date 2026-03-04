@@ -257,13 +257,17 @@ func (r *DebugRenderer) Flush() {
 func GetTeamColor(team world.TeamID) Color {
 	// 根据队伍ID返回颜色
 	colors := []Color{
-		{R: 0.93f, G: 0.36f, B: 0.36f, A: 1.0}, // neutor
-		{R: 0.34f, G: 0.69f, B: 0.79f, A: 1.0}, ///Shiyan
-		{R: 0.67f, G: 0.5f, B: 0.76f, A: 1.0},  // path
-		{R: 0.32f, G: 0.66f, B: 0.36f, A: 1.0}, // linner
-		{R: 0.95f, G: 0.56f, B: 0.12f, A: 1.0}, // rime
+		{R: 0.93, G: 0.36, B: 0.36, A: 1.0}, // neutor
+		{R: 0.34, G: 0.69, B: 0.79, A: 1.0}, // Shiyan
+		{R: 0.67, G: 0.5, B: 0.76, A: 1.0},  // path
+		{R: 0.32, G: 0.66, B: 0.36, A: 1.0}, // linner
+		{R: 0.95, G: 0.56, B: 0.12, A: 1.0}, // rime
 	}
-	teamIdx := int(team) % len(colors)
+	// Ensure teamIdx is non-negative and within bounds
+	teamIdx := int(team) % int32(len(colors))
+	if teamIdx < 0 {
+		teamIdx += int32(len(colors))
+	}
 	return colors[teamIdx]
 }
 
