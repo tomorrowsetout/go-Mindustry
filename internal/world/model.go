@@ -12,6 +12,7 @@ type TeamID byte
 type BlockID int16
 type FloorID int16
 type OverlayID int16
+type ConID int16
 
 type ItemID int16
 type LiquidID int16
@@ -36,6 +37,7 @@ type Tile struct {
 	Block    BlockID
 	Team     TeamID
 	Rotation int8
+	Con      ConID
 	Build    *Building
 }
 

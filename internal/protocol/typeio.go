@@ -21,14 +21,14 @@ func ReadString(r *Reader) (*string, error) {
 }
 
 func WriteBytes(w *Writer, b []byte) error {
-	if err := w.WriteInt16(int16(len(b))); err != nil {
+	if err := w.WriteInt32(int32(len(b))); err != nil {
 		return err
 	}
 	return w.WriteBytes(b)
 }
 
 func ReadBytes(r *Reader) ([]byte, error) {
-	l, err := r.ReadInt16()
+	l, err := r.ReadInt32()
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +177,10 @@ func ReadInts(r *Reader) ([]int32, error) {
 	}
 	if l < 0 {
 		return nil, nil
+	}
+	// BOUNDS CHECK: Limit array length to prevent OOM
+	if l > 10000 {
+		return nil, fmt.Errorf("int list too long: %d (max 10000)", l)
 	}
 	out := make([]int32, l)
 	for i := 0; i < int(l); i++ {

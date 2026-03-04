@@ -37,18 +37,26 @@ type Sound struct {
 	ID int16
 }
 
-// Content type IDs mirror mindustry.ctype.ContentType order.
+// Content type IDs mirror mindustry.ctype.ContentType order exactly.
+// Do not rearrange, ever!
 const (
-	ContentItem        ContentType = 0
-	ContentBlock       ContentType = 1
-	ContentBullet      ContentType = 3
-	ContentLiquid      ContentType = 4
-	ContentStatus      ContentType = 5
-	ContentUnit        ContentType = 6
-	ContentWeather     ContentType = 7
-	ContentTeam        ContentType = 15
-	ContentUnitCommand ContentType = 16
-	ContentUnitStance  ContentType = 17
+	ContentItem        ContentType = 0   // item(Item.class)
+	ContentBlock       ContentType = 1   // block(Block.class)
+	ContentUnit        ContentType = 6   // unit(UnitType.class) - ordinal 6, NOT 2!
+	ContentBullet      ContentType = 3   // bullet(BulletType.class)
+	ContentLiquid      ContentType = 4   // liquid(Liquid.class)
+	ContentStatus      ContentType = 5   // status(StatusEffect.class)
+	ContentWeather     ContentType = 7   // weather(Weather.class)
+	ContentEffect      ContentType = 8   // effect_UNUSED - but used for decoder
+	ContentSector      ContentType = 9   // sector(SectorPreset.class)
+	ContentLoadout     ContentType = 10  // loadout_UNUSED
+	ContentTypeId      ContentType = 11  // typeid_UNUSED
+	ContentError       ContentType = 12  // error(null)
+	ContentPlanet      ContentType = 13  // planet(Planet.class)
+	ContentAmmo        ContentType = 14  // ammo_UNUSED
+	ContentTeam        ContentType = 15  // team(TeamEntry.class)
+	ContentUnitCommand ContentType = 16  // unitCommand(UnitCommand.class)
+	ContentUnitStance  ContentType = 17  // unitStance(UnitStance.class)
 )
 
 type contentBox struct {
@@ -222,6 +230,18 @@ type ItemStack struct {
 type LiquidStack struct {
 	Liquid Liquid
 	Amount float32
+}
+
+// Sector represents a sector preset (unused in server protocol).
+type Sector struct {
+	ID int16
+	Name string
+}
+
+// Planet represents a planet (unused in server protocol).
+type Planet struct {
+	ID int16
+	Name string
 }
 
 type StatusEntry struct {
@@ -463,7 +483,7 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		if err := w.WriteByte(6); err != nil {
 			return err
 		}
-		if err := w.WriteInt16(int16(len(v.Items))); err != nil {
+		if err := w.WriteInt32(int32(len(v.Items))); err != nil {  // Java uses writeInt() (4 bytes), not writeShort!
 			return err
 		}
 		for _, n := range v.Items {
@@ -550,6 +570,11 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 			}
 		}
 		return nil
+	case UnitCommandBox:
+		if err := w.WriteByte(15); err != nil {
+			return err
+		}
+		return w.WriteInt16(v.ID)  // Java might just write ID directly
 	case Unit:
 		if err := w.WriteByte(17); err != nil {
 			return err
@@ -656,7 +681,7 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return contentBox{typ: ContentType(ct), id: id}, nil
 	case 6:
-		l, err := r.ReadInt16()
+		l, err := r.ReadInt32()
 		if err != nil {
 			return nil, err
 		}
@@ -741,11 +766,11 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return r.ReadBytes(int(l))
 	case 15:
-		_, err := r.ReadByte()
+		id, err := r.ReadInt16()  // Java might just read ID directly
 		if err != nil {
 			return nil, err
 		}
-		return nil, nil
+		return &UnitCommandBox{ID: id}, nil
 	case 16:
 		l, err := r.ReadInt32()
 		if err != nil {

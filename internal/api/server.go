@@ -792,11 +792,3 @@ func safeMapName(srv *netserver.Server) string {
 	}
 	return srv.MapNameFn()
 }
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
-}

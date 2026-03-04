@@ -272,6 +272,8 @@ func ReadUnitContainer(r *Reader, ctx *TypeIOContext) error {
 }
 
 // ReadUnitContainerBox reads a unit container and returns a minimal UnitSyncBox.
+// This function is used when only minimal entity information is needed (e.g., for parsing).
+// If full entity handling is required, use ReadUnitContainer instead.
 func ReadUnitContainerBox(r *Reader, ctx *TypeIOContext) (*UnitSyncBox, error) {
 	id, err := r.ReadInt32()
 	if err != nil {
@@ -281,15 +283,33 @@ func ReadUnitContainerBox(r *Reader, ctx *TypeIOContext) (*UnitSyncBox, error) {
 	if err != nil {
 		return nil, err
 	}
-	ent := UnitSyncEntity(&EntityBox{IDValue: id})
-	if ctx != nil && ctx.EntityFactory != nil {
+
+	// Try to get entity by ID first (for existing entities)
+	var ent UnitSyncEntity
+	if ctx != nil && ctx.EntityByID != nil {
+		if e := ctx.EntityByID(id); e != nil {
+			ent = e
+		}
+	}
+
+	// If not found, try to create new entity via factory
+	if ent == nil && ctx != nil && ctx.EntityFactory != nil {
 		if e := ctx.EntityFactory(byte(typeID)); e != nil {
 			ent = e
 			ent.SetID(id)
 		}
 	}
+
+	// Fallback: create EntityBox with fallback classID=0
+	// This ensures the function always returns a valid entity, even if incomplete
+	if ent == nil {
+		ent = &EntityBox{IDValue: id}
+	}
+
+	// Read entity sync data
 	if err := ent.ReadSync(r); err != nil {
 		return nil, err
 	}
+
 	return &UnitSyncBox{Entity: ent}, nil
 }
