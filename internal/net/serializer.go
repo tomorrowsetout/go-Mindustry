@@ -34,23 +34,32 @@ type CompatIgnoredPacket struct {
 // which carries no payload on client->server direction.
 type CompatUnitClearPacket struct{}
 
-// compatPacketID returns a re-mapped packet ID for compatibility with certain clients.
-// Most server->client packets use their standard IDs without re-mapping.
-// Only少数 exceptional cases need re-mapping.
 func compatPacketID(p protocol.Packet) (byte, bool) {
 	switch p.(type) {
+	case *protocol.Remote_NetClient_entitySnapshot_32:
+		return 43, true
+	case *protocol.Remote_NetClient_hiddenSnapshot_33:
+		return 46, true
+	case *protocol.Remote_NetClient_pingResponse_19:
+		return 66, true
+	case *protocol.Remote_NetClient_kick_22:
+		return 53, true
+	case *protocol.Remote_NetClient_kick_21:
+		return 54, true
+	case *protocol.Remote_NetClient_playerDisconnect_31:
+		return 67, true
+	case *protocol.Remote_CoreBlock_playerSpawn_140:
+		return 68, true
+	case *protocol.Remote_NetClient_sendMessage_15:
+		return 82, true
+	case *protocol.Remote_NetClient_sendMessage_14:
+		return 83, true
 	case *protocol.Remote_NetClient_stateSnapshot_35:
-		return 117, true  // Alternative ID for state snapshot
-	// NOTE: Removed incorrect mappings that confused client/server directions:
-	// - entitySnapshot (43): client->server, not server->client
-	// - hiddenSnapshot (46): client->server, not server->client
-	// - pingResponse (66): should use standard ID, but ping uses different packet
-	// - kick (53, 54): client->server packets, not server->client
-	// - playerDisconnect (67): client->client, not server->client
-	// - playerSpawn (68): server->client, uses standard ID 140
-	// - sendMessage (82, 83): client->server packets, not server->client
-	// - buildHealthUpdate (135): server->client, uses standard ID 135
-	// - unitClear (91): client->server, uses standard ID 91
+		return 117, true
+	case *protocol.Remote_Tile_buildHealthUpdate_135:
+		return 13, true
+	case *protocol.Remote_InputHandler_unitClear_91:
+		return 133, true
 	}
 	return 0, false
 }
@@ -100,8 +109,6 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 		if snap, err := readClientSnapshotCompat(payload, s.Ctx); err == nil {
 			return snap, nil
 		}
-	case 64: // SetLiquidCallPacket (client->server)
-		return &protocol.Remote_InputHandler_setLiquid_64{}, nil
 	case 65: // PingCallPacket (custom 155.4, payload is int64 only)
 		if len(payload) >= 8 {
 			t := int64(binary.BigEndian.Uint64(payload[:8]))
@@ -111,55 +118,8 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 		if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
 			return msg, nil
 		}
-	case 91: // UnitClearCallPacket (client->server, standard ID)
-		return &protocol.Remote_InputHandler_unitClear_91{}, nil
-	case 133: // UnitClearCallPacket (client->server, alternative ID for compat)
+	case 133: // UnitClearCallPacket (client->server carries no fields)
 		return &CompatUnitClearPacket{}, nil
-	case 128: // SetFloorCallPacket (server->client)
-		return &protocol.Remote_Tile_setFloor_128{}, nil
-	case 129: // SetOverlayCallPacket (server->client)
-		return &protocol.Remote_Tile_setOverlay_129{}, nil
-	case 130: // RemoveTileCallPacket (server->client)
-		return &protocol.Remote_Tile_removeTile_130{}, nil
-	case 131: // SetTileCallPacket (server->client)
-		return &protocol.Remote_Tile_setTile_131{}, nil
-	case 132: // SetTeamCallPacket (server->client)
-		return &protocol.Remote_Tile_setTeam_132{}, nil
-	case 134: // BuildDestroyedCallPacket (server->client)
-		return &protocol.Remote_Tile_buildDestroyed_134{}, nil
-	case 136: // DeconstructFinishCallPacket (server->client)
-		return &protocol.Remote_ConstructBlock_deconstructFinish_136{}, nil
-	case 138: // LandingPadLandedCallPacket (server->client)
-		return &protocol.Remote_LandingPad_landingPadLanded_138{}, nil
-	case 139: // AutoDoorToggleCallPacket (server->client)
-		return &protocol.Remote_AutoDoor_autoDoorToggle_139{}, nil
-	// Standard server→client packets that should be processed directly
-	case 32: // EntitySnapshotCallPacket (server->client)
-		return &protocol.Remote_NetClient_entitySnapshot_32{}, nil
-	case 33: // HiddenSnapshotCallPacket (server->client)
-		return &protocol.Remote_NetClient_hiddenSnapshot_33{}, nil
-	case 35: // StateSnapshotCallPacket (server->client)
-		return &protocol.Remote_NetClient_stateSnapshot_35{}, nil
-	case 45: // ClientSnapshotCallPacket (server->client)
-		return &protocol.Remote_NetServer_clientSnapshot_45{}, nil
-	case 47: // ConnectConfirmCallPacket (server->client)
-		return &protocol.Remote_NetServer_connectConfirm_47{}, nil
-	case 117: // StateSnapshotCallPacket (server->client, alternative ID)
-		return &protocol.Remote_NetClient_stateSnapshot_35{}, nil
-	case 135: // BuildHealthUpdateCallPacket (server->client)
-		return &protocol.Remote_Tile_buildHealthUpdate_135{}, nil
-	case 137: // ConstructFinishCallPacket (server->client)
-		return &protocol.Remote_ConstructBlock_constructFinish_137{}, nil
-	case 140: // PlayerSpawnCallPacket (server->client)
-		return &protocol.Remote_CoreBlock_playerSpawn_140{}, nil
-	case 141: // AssemblerUnitSpawnedCallPacket (server->client)
-		return &protocol.Remote_UnitAssembler_assemblerUnitSpawned_141{}, nil
-	case 142: // AssemblerDroneSpawnedCallPacket (server->client)
-		return &protocol.Remote_UnitAssembler_assemblerDroneSpawned_142{}, nil
-	case 143: // UnitBlockSpawnCallPacket (server->client)
-		return &protocol.Remote_UnitBlock_unitBlockSpawn_143{}, nil
-	case 144: // UnitTetherBlockSpawnedCallPacket (server->client)
-		return &protocol.Remote_UnitCargoLoader_unitTetherBlockSpawned_144{}, nil
 	}
 	// For this custom client, many other IDs are currently not aligned with
 	// generated registry order. Ignore them instead of mis-parsing and forcing

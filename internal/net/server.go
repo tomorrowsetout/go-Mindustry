@@ -1462,6 +1462,7 @@ func (c *Conn) sendNow(obj any) error {
 
 	buf := newBuffer()
 	if err := c.serial.WriteObject(buf, obj); err != nil {
+		fmt.Printf("[net] sendNow encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 		return err
 	}
 	payload := buf.Bytes()
@@ -1475,6 +1476,13 @@ func (c *Conn) sendNow(obj any) error {
 		} else {
 			packetID = int(payload[0])
 		}
+	}
+	// Avoid flooding logs with world stream chunks and other noisy traffic.
+	switch obj.(type) {
+	case *protocol.StreamChunk, *protocol.StreamBegin:
+		// skip
+	default:
+		fmt.Printf("[net] sendNow id=%d packetID=%d obj=%T payloadLen=%d\n", c.id, packetID, obj, len(payload))
 	}
 	if len(payload) > 0xFFFF {
 		return fmt.Errorf("payload too large: %d", len(payload))
@@ -1986,8 +1994,10 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 			payload, packetID, frameworkID, err := c.Encode(obj)
 			if err != nil {
 				c.udpErrors.Add(1)
+				fmt.Printf("[net] sendUnreliable encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 				return err
 			}
+			fmt.Printf("[net] sendUnreliable id=%d packetID=%d obj=%T payloadLen=%d\n", c.id, packetID, obj, len(payload))
 			retries := s.UdpRetryCount
 			delay := s.UdpRetryDelay
 			if retries < 0 {
@@ -2038,18 +2048,16 @@ func (s *Server) sendPlayerSpawn(c *Conn) bool {
 	}
 	tile := protocol.TileBox{PosValue: protocol.PackPoint2(pos.X, pos.Y)}
 	player := &protocol.EntityBox{IDValue: c.playerID}
+	fmt.Printf("[net] sendPlayerSpawn sending id=%d tile=(%d,%d) playerID=%d\n", c.id, pos.X, pos.Y, c.playerID)
 	if err := c.Send(&protocol.Remote_CoreBlock_playerSpawn_140{Tile: tile, Player: player}); err != nil {
+		fmt.Printf("[net] sendPlayerSpawn send failed id=%d err=%v\n", c.id, err)
 		if s.DevLogger != nil {
 			s.DevLogger.LogConnection("sendPlayerSpawn send failed", c.id, c.remoteIP(), c.name, c.uuid,
 				devlog.StringFld("error", err.Error()))
 		}
 		return false
 	}
-	if s.DevLogger != nil {
-		s.DevLogger.LogConnection("sendPlayerSpawn sent", c.id, c.remoteIP(), c.name, c.uuid,
-			devlog.Int32Fld("tile_x", pos.X),
-			devlog.Int32Fld("tile_y", pos.Y))
-	}
+	fmt.Printf("[net] sendPlayerSpawn sent id=%d\n", c.id)
 	return true
 }
 

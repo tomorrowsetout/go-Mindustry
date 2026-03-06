@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/base64"
-	"fmt"
 	"hash/crc32"
 )
 
@@ -173,11 +172,6 @@ func (p *ConnectPacket) Read(r *Reader, _ int) error {
 	p.Mobile = mobileByte == 1
 	p.Color = color
 
-	// BOUNDS CHECK: Limit mods count to prevent OOM
-	if modCount > 128 {
-		return fmt.Errorf("too many mods: %d (max 128)", modCount)
-	}
-
 	if modCount > 0 {
 		p.Mods = make([]string, 0, modCount)
 		for i := 0; i < int(modCount); i++ {
@@ -222,8 +216,8 @@ func (p *ConnectPacket) Write(w *Writer) error {
 		uuidBytes = padded
 	}
 
-	// Java writes 16 bytes UUID + 8 bytes CRC32, but only reads 16 bytes from client.
-	// We write CRC32 to match Java's write behavior exactly.
+	// Java writes 16 bytes + CRC32 (8 bytes) but only reads 16 back.
+	// We follow the exact write semantics for compatibility.
 	if err := w.WriteBytes(uuidBytes[:16]); err != nil {
 		return err
 	}

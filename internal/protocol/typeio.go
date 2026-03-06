@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -21,14 +20,14 @@ func ReadString(r *Reader) (*string, error) {
 }
 
 func WriteBytes(w *Writer, b []byte) error {
-	if err := w.WriteInt32(int32(len(b))); err != nil {
+	if err := w.WriteInt16(int16(len(b))); err != nil {
 		return err
 	}
 	return w.WriteBytes(b)
 }
 
 func ReadBytes(r *Reader) ([]byte, error) {
-	l, err := r.ReadInt32()
+	l, err := r.ReadInt16()
 	if err != nil {
 		return nil, err
 	}
@@ -177,10 +176,6 @@ func ReadInts(r *Reader) ([]int32, error) {
 	}
 	if l < 0 {
 		return nil, nil
-	}
-	// BOUNDS CHECK: Limit array length to prevent OOM
-	if l > 10000 {
-		return nil, fmt.Errorf("int list too long: %d (max 10000)", l)
 	}
 	out := make([]int32, l)
 	for i := 0; i < int(l); i++ {
@@ -763,11 +758,7 @@ func ReadLiquidStacks(r *Reader, ctx *TypeIOContext) ([]LiquidStack, error) {
 }
 
 func WriteRules(w *Writer, rules Rules) error {
-	// 使用 JSON 序列化规则
-	b, err := json.Marshal(rules)
-	if err != nil {
-		return err
-	}
+	b := []byte(rules.Raw)
 	if err := w.WriteInt32(int32(len(b))); err != nil {
 		return err
 	}
@@ -783,11 +774,7 @@ func ReadRules(r *Reader) (Rules, error) {
 	if err != nil {
 		return Rules{}, err
 	}
-	var rules Rules
-	if err := json.Unmarshal(b, &rules); err != nil {
-		return Rules{}, err
-	}
-	return rules, nil
+	return Rules{Raw: string(b)}, nil
 }
 
 func WriteObjectives(w *Writer, obj MapObjectives) error {

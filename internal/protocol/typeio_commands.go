@@ -1,15 +1,5 @@
 package protocol
 
-// UnitCommandBox is a boxed unit command for TypeIO serialization (ID=15).
-type UnitCommandBox struct {
-	ID int16
-}
-
-// UnitStanceBox is a boxed unit stance for TypeIO serialization.
-type UnitStanceBox struct {
-	ID int16
-}
-
 func WriteCommand(w *Writer, cmd *UnitCommand) error {
 	if cmd == nil {
 		return w.WriteByte(255)
