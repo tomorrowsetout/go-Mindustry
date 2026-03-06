@@ -224,12 +224,25 @@ func readClientSnapshotCompat(payload []byte, ctx *protocol.TypeIOContext) (*pro
 
 // WriteObject writes a framed object to buf.
 func (s *Serializer) WriteObject(buf *bytes.Buffer, obj any) error {
+	return s.writeObject(buf, obj, true)
+}
+
+// WriteObjectCompat writes a framed object with optional compat ID mapping.
+func (s *Serializer) WriteObjectCompat(buf *bytes.Buffer, obj any, compat bool) error {
+	return s.writeObject(buf, obj, compat)
+}
+
+func (s *Serializer) writeObject(buf *bytes.Buffer, obj any, compat bool) error {
 	switch v := obj.(type) {
 	case protocol.FrameworkMessage:
 		buf.WriteByte(0xFE)
 		return writeFramework(buf, v)
 	case protocol.Packet:
-		id, ok := compatPacketID(v)
+		var id byte
+		var ok bool
+		if compat {
+			id, ok = compatPacketID(v)
+		}
 		if !ok {
 			id, ok = s.Registry.PacketID(v)
 		}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"mdt-server/internal/vanilla"
 )
 
 type Snapshot struct {
@@ -54,6 +56,7 @@ type World struct {
 
 	blockNamesByID map[int16]string
 	unitNamesByID  map[int16]string
+	unitTypeDefsByID map[int16]vanilla.UnitTypeDef
 	buildStates    map[int32]buildCombatState
 	unitMountCDs   map[int32][]float32
 	unitTargets    map[int32]targetTrackState
@@ -498,6 +501,7 @@ func (w *World) SetModel(m *WorldModel) {
 	w.unitTargets = map[int32]targetTrackState{}
 	w.blockNamesByID = nil
 	w.unitNamesByID = nil
+	w.unitTypeDefsByID = nil
 
 	// 从 tags 解析规则并应用
 	if m != nil && m.Tags != nil {
@@ -518,6 +522,12 @@ func (w *World) SetModel(m *WorldModel) {
 		w.unitNamesByID = make(map[int16]string, len(m.UnitNames))
 		for k, v := range m.UnitNames {
 			w.unitNamesByID[k] = strings.ToLower(strings.TrimSpace(v))
+		}
+		w.unitTypeDefsByID = make(map[int16]vanilla.UnitTypeDef, len(m.UnitNames))
+		for id, name := range w.unitNamesByID {
+			if def, ok := vanilla.UnitTypesByName[name]; ok {
+				w.unitTypeDefsByID[id] = def
+			}
 		}
 	}
 }
@@ -773,6 +783,33 @@ func (w *World) AddEntity(typeID int16, x, y float32, team TeamID) (RawEntity, e
 		SlowMul:     1,
 		RuntimeInit: true,
 	}
+	w.applyUnitTypeDef(&ent)
+	w.applyWeaponProfile(&ent)
+	return w.model.AddEntity(ent), nil
+}
+
+func (w *World) AddEntityWithID(typeID int16, id int32, x, y float32, team TeamID) (RawEntity, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil {
+		return RawEntity{}, ErrOutOfBounds
+	}
+	ent := RawEntity{
+		TypeID:      typeID,
+		ID:          id,
+		X:           x,
+		Y:           y,
+		Health:      100,
+		MaxHealth:   100,
+		Shield:      25,
+		ShieldMax:   25,
+		ShieldRegen: 4.5,
+		Armor:       1.5,
+		SlowMul:     1,
+		RuntimeInit: true,
+		Team:        team,
+	}
+	w.applyUnitTypeDef(&ent)
 	w.applyWeaponProfile(&ent)
 	return w.model.AddEntity(ent), nil
 }
@@ -793,6 +830,20 @@ func (w *World) RemoveEntity(id int32) (RawEntity, bool) {
 		})
 	}
 	return ent, ok
+}
+
+func (w *World) GetEntity(id int32) (RawEntity, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.model == nil {
+		return RawEntity{}, false
+	}
+	for i := range w.model.Entities {
+		if w.model.Entities[i].ID == id {
+			return w.model.Entities[i], true
+		}
+	}
+	return RawEntity{}, false
 }
 
 // ApplyBuildPlans applies simplified build/break operations from client plans.
@@ -2091,6 +2142,9 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 	if e == nil {
 		return
 	}
+	if w.applyWeaponFromUnitTypeDef(e) {
+		return
+	}
 	p := defaultWeaponProfile
 	if name, ok := w.unitNamesByID[e.TypeID]; ok && name != "" {
 		if byName, exists := w.unitProfilesByName[name]; exists {
@@ -2153,6 +2207,54 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 	if e.HitRadius <= 0 {
 		e.HitRadius = entityHitRadiusForType(e.TypeID)
 	}
+}
+
+func (w *World) applyUnitTypeDef(e *RawEntity) {
+	if e == nil || w.unitTypeDefsByID == nil {
+		return
+	}
+	if def, ok := w.unitTypeDefsByID[e.TypeID]; ok {
+		if def.Health > 0 {
+			e.Health = def.Health
+			e.MaxHealth = def.Health
+		}
+		if def.Armor > 0 {
+			e.Armor = def.Armor
+		}
+		if def.HitSize > 0 {
+			e.HitRadius = def.HitSize
+		}
+		if def.Speed > 0 {
+			e.MoveSpeed = def.Speed
+		}
+	}
+}
+
+func (w *World) applyWeaponFromUnitTypeDef(e *RawEntity) bool {
+	if e == nil || w.unitTypeDefsByID == nil {
+		return false
+	}
+	def, ok := w.unitTypeDefsByID[e.TypeID]
+	if !ok {
+		return false
+	}
+	if def.Weapon.Damage <= 0 || def.Weapon.Interval <= 0 {
+		return false
+	}
+	e.AttackRange = def.Weapon.Range
+	e.AttackFireMode = def.Weapon.FireMode
+	e.AttackDamage = def.Weapon.Damage
+	e.AttackInterval = def.Weapon.Interval
+	e.AttackBulletSpeed = def.Weapon.BulletSpeed
+	e.AttackSplashRadius = def.Weapon.SplashRadius
+	e.AttackPierce = def.Weapon.Pierce
+	e.AttackTargetAir = def.Weapon.TargetAir
+	e.AttackTargetGround = def.Weapon.TargetGround
+	e.AttackBuildings = def.Weapon.TargetGround
+	if strings.TrimSpace(e.AttackTargetPriority) == "" {
+		e.AttackTargetPriority = "nearest"
+	}
+	return true
 }
 
 func maxf(a, b float32) float32 {

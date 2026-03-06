@@ -71,6 +71,14 @@ type Server struct {
 	PlayerUnitTypeFn func() int16
 	// Optional hook: apply client build plans from snapshot.
 	OnBuildPlans func(*Conn, []*protocol.BuildPlan)
+	// Respawn delay in "frames" (Mindustry Time.delta units). Defaults to 60 if zero.
+	RespawnDelayFrames float32
+	// Optional hook: spawn player unit in world/state. Uses provided unitID, returns world coords.
+	SpawnUnitFn func(c *Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool)
+	// Optional hook: remove a unit from world/state.
+	DropUnitFn func(unitID int32)
+	// Optional hook: query unit info from world/state.
+	UnitInfoFn func(unitID int32) (UnitInfo, bool)
 
 	StateSnapshotFn func() *protocol.Remote_NetClient_stateSnapshot_35
 	// Appends additional entities into entity snapshot stream.
@@ -117,7 +125,8 @@ func NewServer(addr string, buildVersion int) *Server {
 		ops:            map[string]struct{}{},
 		UdpRetryCount:  2,
 		UdpRetryDelay:  5 * time.Millisecond,
-		UdpFallbackTCP: true,
+		UdpFallbackTCP:     true,
+		RespawnDelayFrames: 60,
 	}
 	s.SetSnapshotIntervals(100, 250)
 	return s
@@ -160,11 +169,7 @@ func (s *Server) KillSelfUnit(c *Conn) bool {
 	if c == nil || c.playerID == 0 {
 		return false
 	}
-	if c.unitID != 0 {
-		s.dropPlayerUnitEntity(c, c.unitID)
-		c.unitID = 0
-	}
-	c.dead = true
+	s.markDead(c, "kill-self")
 	player := &protocol.EntityBox{IDValue: c.playerID}
 	_ = c.SendAsync(&protocol.Remote_InputHandler_unitClear_91{Player: player})
 	return true
@@ -313,7 +318,8 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 					action = v.Payload[0]
 				}
 				if action == 0 {
-					if c.unitID != 0 {
+					// Only drop when already dead; avoid clearing active units due to noisy clients.
+					if c.dead && c.unitID != 0 {
 						s.dropPlayerUnitEntity(c, c.unitID)
 						c.unitID = 0
 					}
@@ -338,11 +344,15 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 		}
 		return
-	case *CompatUnitClearPacket:
-		// Treat explicit UnitClear as a player respawn request (V/Q flow).
-		// Rate-limited to avoid spam loops from noisy clients.
-		s.requestRespawn(c, "compat-unitClear")
+case *CompatUnitClearPacket:
+	// Treat explicit UnitClear as a player respawn request (V/Q flow).
+	// Rate-limited to avoid spam loops from noisy clients.
+	// Ignore if player is already alive with a unit; some clients echo unitClear after spawn.
+	if c != nil && !c.dead && c.unitID != 0 {
 		return
+	}
+	s.requestRespawn(c, "compat-unitClear")
+	return
 	case *protocol.ConnectPacket:
 		// 记录详细连接包日志
 		if s.DevLogger != nil {
@@ -400,6 +410,8 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		c.name = v.Name
 		c.uuid = v.UUID
 		c.color = v.Color
+		// Use compat packet IDs (matches working go-Mindustry-main behavior).
+		c.compatIDs = true
 		if c.playerID == 0 {
 			c.playerID = s.nextPlayerID()
 		}
@@ -451,7 +463,28 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		c.boosting = v.Boosting
 		c.typing = v.Chatting
 		prevUnitID := c.unitID
-		c.dead = v.Dead
+			if v.Dead {
+				// Only honor client-dead when server agrees the unit is missing or dead.
+				shouldDead := c.unitID == 0
+				if !shouldDead {
+					if s.UnitInfoFn != nil {
+						info, ok := s.UnitInfoFn(c.unitID)
+						if !ok || info.Health <= 0 {
+							shouldDead = true
+						}
+					} else {
+						s.entityMu.Lock()
+						_, ok := s.entities[c.unitID]
+						s.entityMu.Unlock()
+						if !ok {
+							shouldDead = true
+					}
+				}
+			}
+				if shouldDead {
+					s.markDead(c, "client-dead")
+				}
+			}
 		if v.UnitID != 0 {
 			c.unitID = v.UnitID
 		} else if c.dead {
@@ -825,6 +858,11 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// 单位控制（需要进一步分析数据包结构）
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 90, "Remote_InputHandler_unitControl_90", "unit_control")
+		}
+		if c != nil && c.playerID != 0 {
+			if unitID := extractUnitID(v.Unit); unitID != 0 {
+				s.unitControl(c, unitID)
+			}
 		}
 	case protocol.FrameworkMessage:
 		switch m := v.(type) {
@@ -1335,6 +1373,7 @@ type Conn struct {
 	mu                  sync.Mutex
 	id                  int32
 	playerID            int32
+	compatIDs           bool
 	udpMu               sync.RWMutex
 	udpAddr             *net.UDPAddr
 	hasBegunConnecting  bool
@@ -1350,6 +1389,9 @@ type Conn struct {
 	boosting            bool
 	typing              bool
 	dead                bool
+	deathTimer          float32
+	lastRespawnCheck    time.Time
+	lastSpawnAt         time.Time
 	unitID              int32
 	lastRespawnReq      time.Time
 	building            bool
@@ -1376,6 +1418,16 @@ type Conn struct {
 	statsMu             sync.Mutex
 	byTypeSent          map[string]int64
 	byTypeBytes         map[string]int64
+}
+
+type UnitInfo struct {
+	ID        int32
+	X         float32
+	Y         float32
+	Health    float32
+	MaxHealth float32
+	TeamID    byte
+	TypeID    int16
 }
 
 func NewConn(c net.Conn, serial *Serializer) *Conn {
@@ -1461,7 +1513,7 @@ func (c *Conn) sendNow(obj any) error {
 	defer c.mu.Unlock()
 
 	buf := newBuffer()
-	if err := c.serial.WriteObject(buf, obj); err != nil {
+	if err := c.serial.WriteObjectCompat(buf, obj, c.compatIDs); err != nil {
 		fmt.Printf("[net] sendNow encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 		return err
 	}
@@ -1507,7 +1559,7 @@ func (c *Conn) sendNow(obj any) error {
 
 func (c *Conn) Encode(obj any) ([]byte, int, int, error) {
 	buf := newBuffer()
-	if err := c.serial.WriteObject(buf, obj); err != nil {
+	if err := c.serial.WriteObjectCompat(buf, obj, c.compatIDs); err != nil {
 		return nil, -1, -1, err
 	}
 	payload := buf.Bytes()
@@ -1905,8 +1957,7 @@ func (s *Server) ensurePostConnectStarted(c *Conn) {
 		return
 	}
 	c.postOnce.Do(func() {
-		s.ensurePlayerUnitEntity(c)
-		s.sendPlayerSpawn(c)
+		s.spawnPlayerInitial(c)
 		go s.postConnectLoop(c)
 	})
 }
@@ -1929,6 +1980,7 @@ func (s *Server) postConnectLoop(c *Conn) {
 	for {
 		select {
 		case <-stateTicker.C:
+			s.maybeRespawn(c)
 			state := buildStateSnapshot(s, c)
 			if err := s.sendUnreliable(c, state); err != nil {
 				fmt.Printf("[net] state snapshot send failed id=%d err=%v\n", c.id, err)
@@ -2046,6 +2098,13 @@ func (s *Server) sendPlayerSpawn(c *Conn) bool {
 		}
 		return false
 	}
+	return s.sendPlayerSpawnAt(c, pos)
+}
+
+func (s *Server) sendPlayerSpawnAt(c *Conn, pos protocol.Point2) bool {
+	if c == nil || c.playerID == 0 {
+		return false
+	}
 	tile := protocol.TileBox{PosValue: protocol.PackPoint2(pos.X, pos.Y)}
 	player := &protocol.EntityBox{IDValue: c.playerID}
 	fmt.Printf("[net] sendPlayerSpawn sending id=%d tile=(%d,%d) playerID=%d\n", c.id, pos.X, pos.Y, c.playerID)
@@ -2061,15 +2120,69 @@ func (s *Server) sendPlayerSpawn(c *Conn) bool {
 	return true
 }
 
+func (s *Server) spawnPlayerInitial(c *Conn) {
+	if c == nil || c.playerID == 0 || s.SpawnTileFn == nil {
+		return
+	}
+	pos, ok := s.SpawnTileFn()
+	if !ok {
+		return
+	}
+	playerTypeID := int16(1)
+	if s.PlayerUnitTypeFn != nil {
+		if t := s.PlayerUnitTypeFn(); t >= 0 {
+			playerTypeID = t
+		}
+	}
+	if s.SpawnUnitFn != nil {
+		c.unitID = s.nextUnitID()
+		if x, y, ok := s.SpawnUnitFn(c, c.unitID, pos, playerTypeID); ok {
+			c.snapX = x
+			c.snapY = y
+			c.lastSpawnAt = time.Now()
+		} else {
+			c.unitID = 0
+		}
+	}
+	s.ensurePlayerUnitEntity(c)
+	_ = s.sendPlayerSpawnAt(c, pos)
+}
+
 func (s *Server) forceRespawn(c *Conn, source string) {
 	if c == nil || c.playerID == 0 {
 		return
 	}
+	if s.SpawnTileFn == nil {
+		return
+	}
+	pos, ok := s.SpawnTileFn()
+	if !ok {
+		return
+	}
+	playerTypeID := int16(1)
+	if s.PlayerUnitTypeFn != nil {
+		if t := s.PlayerUnitTypeFn(); t >= 0 {
+			playerTypeID = t
+		}
+	}
+	if s.SpawnUnitFn != nil {
+		c.unitID = s.nextUnitID()
+		if x, y, ok := s.SpawnUnitFn(c, c.unitID, pos, playerTypeID); ok {
+			c.snapX = x
+			c.snapY = y
+			c.lastSpawnAt = time.Now()
+		} else {
+			c.unitID = 0
+		}
+	}
 	s.ensurePlayerUnitEntity(c)
 	player := &protocol.EntityBox{IDValue: c.playerID}
 	_ = c.SendAsync(&protocol.Remote_InputHandler_unitClear_91{Player: player})
-	if s.sendPlayerSpawn(c) {
+	if s.sendPlayerSpawnAt(c, pos) {
 		c.dead = false
+		c.deathTimer = 0
+		c.lastRespawnCheck = time.Time{}
+		c.lastRespawnReq = time.Now()
 		fmt.Printf("[net] respawn sent conn=%d source=%s\n", c.id, source)
 	} else {
 		fmt.Printf("[net] respawn skipped conn=%d source=%s reason=no-spawn-tile\n", c.id, source)
@@ -2081,17 +2194,129 @@ func (s *Server) requestRespawn(c *Conn, source string) {
 		return
 	}
 	now := time.Now()
-	if !c.lastRespawnReq.IsZero() && now.Sub(c.lastRespawnReq) < 600*time.Millisecond {
+	cooldown := 600 * time.Millisecond
+	if source == "compat-unitClear" {
+		cooldown = 1500 * time.Millisecond
+	}
+	if !c.lastRespawnReq.IsZero() && now.Sub(c.lastRespawnReq) < cooldown {
 		return
 	}
 	c.lastRespawnReq = now
+	s.markDead(c, source)
+	fmt.Printf("[net] respawn request conn=%d source=%s\n", c.id, source)
+}
+
+func (s *Server) respawnDelayFrames() float32 {
+	if s == nil || s.RespawnDelayFrames <= 0 {
+		return 60
+	}
+	return s.RespawnDelayFrames
+}
+
+func (s *Server) markDead(c *Conn, source string) {
+	if c == nil || c.playerID == 0 {
+		return
+	}
 	if c.unitID != 0 {
 		s.dropPlayerUnitEntity(c, c.unitID)
 		c.unitID = 0
 	}
-	c.dead = true
-	fmt.Printf("[net] respawn request conn=%d source=%s\n", c.id, source)
-	s.forceRespawn(c, source)
+	if !c.dead {
+		c.dead = true
+		c.deathTimer = 0
+		c.lastRespawnCheck = time.Now()
+		c.lastSpawnAt = time.Time{}
+	}
+	if s.DevLogger != nil {
+		s.DevLogger.LogConnection("player_dead", c.id, c.remoteIP(), c.name, c.uuid,
+			devlog.StringFld("source", source))
+	}
+}
+
+func (s *Server) maybeRespawn(c *Conn) {
+	if c == nil || c.playerID == 0 {
+		return
+	}
+	if !c.dead {
+		if c.unitID == 0 {
+			s.markDead(c, "unit-missing")
+			return
+		}
+		// Avoid immediate false-death right after spawn.
+		if !c.lastSpawnAt.IsZero() && time.Since(c.lastSpawnAt) < 1500*time.Millisecond {
+			return
+		}
+		s.entityMu.Lock()
+		ent, ok := s.entities[c.unitID]
+		s.entityMu.Unlock()
+		if !ok {
+			s.markDead(c, "unit-entity-missing")
+			return
+		}
+		if s.UnitInfoFn != nil {
+			info, ok := s.UnitInfoFn(c.unitID)
+			if !ok {
+				s.markDead(c, "unit-state-missing")
+				return
+			}
+			if info.Health <= 0 {
+				s.markDead(c, "unit-health")
+				return
+			}
+		}
+		if u, ok := ent.(*protocol.UnitEntitySync); ok {
+			if u.Health <= 0 {
+				s.markDead(c, "unit-health")
+				return
+			}
+		}
+		c.deathTimer = 0
+		c.lastRespawnCheck = time.Now()
+		return
+	}
+	if s.SpawnTileFn == nil {
+		c.lastRespawnCheck = time.Now()
+		return
+	}
+	if _, ok := s.SpawnTileFn(); !ok {
+		c.lastRespawnCheck = time.Now()
+		return
+	}
+	now := time.Now()
+	if c.lastRespawnCheck.IsZero() {
+		c.lastRespawnCheck = now
+		return
+	}
+	dt := now.Sub(c.lastRespawnCheck).Seconds()
+	if dt <= 0 {
+		c.lastRespawnCheck = now
+		return
+	}
+	c.lastRespawnCheck = now
+	// Mindustry Time.delta is scaled to 60 FPS; deathDelay=60f == ~1s.
+	c.deathTimer += float32(dt) * 60
+	if c.deathTimer >= s.respawnDelayFrames() {
+		c.deathTimer = 0
+		s.forceRespawn(c, "death-timer")
+	}
+}
+
+func (s *Server) MarkUnitDead(unitID int32, source string) {
+	if s == nil || unitID == 0 {
+		return
+	}
+	s.mu.Lock()
+	conns := make([]*Conn, 0, len(s.conns))
+	for c := range s.conns {
+		conns = append(conns, c)
+	}
+	s.mu.Unlock()
+	for _, c := range conns {
+		if c.unitID == unitID {
+			s.markDead(c, source)
+			return
+		}
+	}
 }
 
 func (s *Server) buildPlayerEntitySnapshot() (int16, []byte, error) {
@@ -2277,8 +2502,11 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 				u.Stack.Item = itemRef{id: 0}
 				u.Stack.Amount = 0
 			}
-			u.X = c.snapX
-			u.Y = c.snapY
+			s.syncUnitFromWorld(u)
+			if u.X == 0 && u.Y == 0 {
+				u.X = c.snapX
+				u.Y = c.snapY
+			}
 			u.Rotation = 90
 			u.TeamID = 1
 			u.TypeID = playerTypeID
@@ -2313,6 +2541,7 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		X:             c.snapX,
 		Y:             c.snapY,
 	}
+	s.syncUnitFromWorld(u)
 	s.entities[c.unitID] = u
 	return u
 }
@@ -2326,12 +2555,33 @@ func (s *Server) playerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 	if ent, ok := s.entities[c.unitID]; ok {
 		if u, ok2 := ent.(*protocol.UnitEntitySync); ok2 {
 			u.Controller = &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}
-			u.X = c.snapX
-			u.Y = c.snapY
+			s.syncUnitFromWorld(u)
+			if u.X == 0 && u.Y == 0 {
+				u.X = c.snapX
+				u.Y = c.snapY
+			}
 			return u
 		}
 	}
 	return nil
+}
+
+func (s *Server) syncUnitFromWorld(u *protocol.UnitEntitySync) {
+	if s == nil || u == nil || s.UnitInfoFn == nil {
+		return
+	}
+	info, ok := s.UnitInfoFn(u.ID())
+	if !ok {
+		return
+	}
+	u.X = info.X
+	u.Y = info.Y
+	if info.Health >= 0 {
+		u.Health = info.Health
+	}
+	if info.TypeID != 0 {
+		u.TypeID = info.TypeID
+	}
 }
 
 func (s *Server) dropPlayerUnitEntity(c *Conn, unitID int32) {
@@ -2353,6 +2603,9 @@ func (s *Server) dropPlayerUnitEntity(c *Conn, unitID int32) {
 		return
 	}
 	delete(s.entities, unitID)
+	if s.DropUnitFn != nil {
+		s.DropUnitFn(unitID)
+	}
 }
 
 func (s *Server) broadcastPlayerDisconnect(playerID int32) {
@@ -2741,13 +2994,110 @@ func (s *Server) ListOps() []string {
 	return out
 }
 
+func (s *Server) PlayerUnitIDSet() map[int32]struct{} {
+	out := map[int32]struct{}{}
+	if s == nil {
+		return out
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for c := range s.conns {
+		if c != nil && c.unitID != 0 {
+			out[c.unitID] = struct{}{}
+		}
+	}
+	return out
+}
+
 func (s *Server) unitControl(c *Conn, unitID int32) {
-	if c == nil {
+	if c == nil || c.playerID == 0 || unitID == 0 {
 		return
 	}
-	s.entityMu.Lock()
-	defer s.entityMu.Unlock()
+	// Look up unit info from world when available.
+	var info UnitInfo
+	if s.UnitInfoFn != nil {
+		if v, ok := s.UnitInfoFn(unitID); ok {
+			info = v
+		} else {
+			return
+		}
+	}
 
-	// 更新玩家控制的单位
+	// Load or create entity sync entry for this unit.
+	var u *protocol.UnitEntitySync
+	s.entityMu.Lock()
+	if ent, ok := s.entities[unitID]; ok {
+		if uu, ok2 := ent.(*protocol.UnitEntitySync); ok2 {
+			u = uu
+		}
+	}
+	if u == nil {
+		u = &protocol.UnitEntitySync{
+			IDValue:       unitID,
+			Abilities:     []protocol.Ability{},
+			Controller:    nil,
+			Elevation:     0,
+			Flag:          0,
+			Health:        info.Health,
+			Shooting:      false,
+			Mounts:        []protocol.WeaponMount{},
+			Plans:         []*protocol.BuildPlan{},
+			Rotation:      0,
+			Shield:        0,
+			SpawnedByCore: false,
+			Stack:         protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
+			Statuses:      []protocol.StatusEntry{},
+			TeamID:        info.TeamID,
+			TypeID:        info.TypeID,
+			UpdateBuilding:false,
+			Vel:           protocol.Vec2{X: 0, Y: 0},
+			X:             info.X,
+			Y:             info.Y,
+		}
+		s.entities[unitID] = u
+	}
+	s.entityMu.Unlock()
+
+	// Basic validation: same team and reasonably close.
+	if info.TeamID != 0 && info.TeamID != 1 {
+		return
+	}
+	dx := float64(info.X - c.snapX)
+	dy := float64(info.Y - c.snapY)
+	if dx*dx+dy*dy > 120*120 {
+		return
+	}
+	if state, ok := u.Controller.(*protocol.ControllerState); ok && state != nil {
+		if state.Type == protocol.ControllerPlayer && state.PlayerID != c.playerID {
+			return
+		}
+	}
+	u.Controller = &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}
 	c.unitID = unitID
+}
+
+func extractUnitID(obj any) int32 {
+	switch v := obj.(type) {
+	case nil:
+		return 0
+	case protocol.UnitBox:
+		return v.ID()
+	case *protocol.EntityBox:
+		if v == nil {
+			return 0
+		}
+		return v.ID()
+	case protocol.UnitSyncEntity:
+		if v == nil {
+			return 0
+		}
+		return v.ID()
+	case *protocol.UnitEntitySync:
+		if v == nil {
+			return 0
+		}
+		return v.ID()
+	default:
+		return 0
+	}
 }
