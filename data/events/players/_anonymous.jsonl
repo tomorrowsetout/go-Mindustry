@@ -10932,3 +10932,7 @@
 {"timestamp":"2026-02-26T06:21:33.2542931Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1006929493,"ip":"127.0.0.1"}
 {"timestamp":"2026-02-26T06:21:33.2548119Z","kind":"tcp_accept","conn_id":1006929493,"ip":"127.0.0.1"}
 {"timestamp":"2026-02-26T06:21:38.2835519Z","kind":"tcp_closed","detail":"EOF","conn_id":1006929493,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-06T05:28:45.4832142Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1681487302,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-06T05:28:45.4848214Z","kind":"tcp_accept","conn_id":1681487302,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-06T05:28:45.4848214Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1681487302,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-06T05:28:45.4923484Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1681487302,"ip":"127.0.0.1"}

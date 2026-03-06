@@ -1,11 +1,15 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"mdt-server/internal/persist"
+	"mdt-server/internal/storage"
 )
 
 // Core1 - Game Loop 核心（主线程）
@@ -26,6 +30,8 @@ type Core2 struct {
 	wg        sync.WaitGroup
 	running   atomic.Bool
 	stats     *Stats
+	serverCore atomic.Value // *ServerCore
+	recorder  storage.Recorder
 }
 
 // Config 是核心配置（简化版，只用于Core2）
@@ -207,34 +213,396 @@ func (c2 *Core2) handleMessage(msg Message) {
 	}
 }
 
-// handlePacketMessage 处理网络包（IO Core）
-func (c2 *Core2) handlePacketMessage(m *PacketMessage) {
-	// 这里处理网络包收发
-}
-
 // handleConnectionMessage 处理连接事件（IO Core）
 func (c2 *Core2) handleConnectionMessage(m *ConnectionMessage) {
-	// 这里处理连接打开/关闭
+	switch {
+	case m.IsOpen:
+		c2.handleConnectionOpen(m)
+	default:
+		c2.handleConnectionClose(m)
+	}
 }
 
-// handlePersistenceMessage 处理存档操作（IO Core）
-func (c2 *Core2) handlePersistenceMessage(m *PersistenceMessage) {
-	// 这里处理存档保存/加载
+// handleConnectionOpen 处理连接打开
+func (c2 *Core2) handleConnectionOpen(m *ConnectionMessage) {
+	// TODO: 实现连接打开逻辑
+	// 例如：记录连接事件、初始化连接状态等
+	fmt.Printf("[Core2 %s] Connection opened: connID=%d, UUID=%s, IP=%s\n", 
+		c2.name, m.ConnID, m.UUID, m.IP)
+}
+
+// handleConnectionClose 处理连接关闭
+func (c2 *Core2) handleConnectionClose(m *ConnectionMessage) {
+	// TODO: 实现连接关闭逻辑
+	// 例如：清理连接资源、记录断开事件等
+	fmt.Printf("[Core2 %s] Connection closed: connID=%d, UUID=%s, IP=%s\n", 
+		c2.name, m.ConnID, m.UUID, m.IP)
 }
 
 // handleModMessage 处理 Mod 操作（IO Core）
 func (c2 *Core2) handleModMessage(m *ModMessage) {
-	// 这里处理 Mod 加载/卸载
+	switch m.Action {
+	case "load":
+		c2.handleModLoad(m)
+	case "unload":
+		c2.handleModUnload(m)
+	case "start":
+		c2.handleModStart(m)
+	case "stop":
+		c2.handleModStop(m)
+	case "reload":
+		c2.handleModReload(m)
+	case "scan":
+		c2.handleModScan(m)
+	default:
+		fmt.Printf("[Core2 %s] Unknown mod action: %s\n", c2.name, m.Action)
+		if m.ResultChan != nil {
+			m.ResultChan <- ModResult{Error: fmt.Errorf("unknown action: %s", m.Action)}
+		}
+	}
 }
 
-// handleStorageMessage 处理 Storage 事件（IO Core）
-func (c2 *Core2) handleStorageMessage(m *StorageMessage) {
-	// 这里处理事件记录
+// handleModLoad 加载 Mod
+func (c2 *Core2) handleModLoad(m *ModMessage) {
+	result := ModResult{}
+
+	// TODO: 实现 Mod 加载逻辑
+	// 根据 ModType (java/js/go/node) 加载不同的 Mod
+	fmt.Printf("[Core2 %s] Loading mod: name=%s, type=%s, path=%s\n", 
+		c2.name, m.Name, m.ModType, m.Path)
+
+	// 模拟加载成功
+	result.ID = m.ID
+	result.Success = true
+	result.Name = m.Name
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleModUnload 卸载 Mod
+func (c2 *Core2) handleModUnload(m *ModMessage) {
+	result := ModResult{}
+
+	// TODO: 实现 Mod 卸载逻辑
+	fmt.Printf("[Core2 %s] Unloading mod: name=%s, type=%s\n", 
+		c2.name, m.Name, m.ModType)
+
+	// 模拟卸载成功
+	result.ID = m.ID
+	result.Success = true
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleModStart 启动 Mod
+func (c2 *Core2) handleModStart(m *ModMessage) {
+	result := ModResult{}
+
+	// TODO: 实现 Mod 启动逻辑
+	fmt.Printf("[Core2 %s] Starting mod: name=%s, type=%s\n", 
+		c2.name, m.Name, m.ModType)
+
+	// 模拟启动成功
+	result.ID = m.ID
+	result.Success = true
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleModStop 停止 Mod
+func (c2 *Core2) handleModStop(m *ModMessage) {
+	result := ModResult{}
+
+	// TODO: 实现 Mod 停止逻辑
+	fmt.Printf("[Core2 %s] Stopping mod: name=%s, type=%s\n", 
+		c2.name, m.Name, m.ModType)
+
+	// 模拟停止成功
+	result.ID = m.ID
+	result.Success = true
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleModReload 重新加载 Mod
+func (c2 *Core2) handleModReload(m *ModMessage) {
+	result := ModResult{}
+
+	// TODO: 实现 Mod 重新加载逻辑
+	fmt.Printf("[Core2 %s] Reloading mod: name=%s, type=%s\n", 
+		c2.name, m.Name, m.ModType)
+
+	// 模拟重新加载成功
+	result.ID = m.ID
+	result.Success = true
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleModScan 扫描 Mod 目录
+func (c2 *Core2) handleModScan(m *ModMessage) {
+	result := ModResult{}
+
+	// TODO: 实现 Mod 扫描逻辑
+	fmt.Printf("[Core2 %s] Scanning mods directory\n", c2.name)
+
+	// 模拟扫描成功
+	result.ID = m.ID
+	result.Success = true
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 // handleWorldStreamMessage 处理 WorldStream 操作（IO Core）
 func (c2 *Core2) handleWorldStreamMessage(m *WorldStreamMessage) {
-	// 这里处理 MSAV 文件读写
+	switch m.Action {
+	case "load_model":
+		c2.handleWorldStreamLoadModel(m)
+	case "save_snapshot":
+		c2.handleWorldStreamSaveSnapshot(m)
+	case "rewrite_player":
+		c2.handleWorldStreamRewritePlayer(m)
+	default:
+		fmt.Printf("[Core2 %s] Unknown worldstream action: %s\n", c2.name, m.Action)
+	}
+}
+
+// handleWorldStreamLoadModel 从 MSAV 加载世界模型
+func (c2 *Core2) handleWorldStreamLoadModel(m *WorldStreamMessage) {
+	// TODO: 实现从 MSAV 加载世界模型
+	// model, err := worldstream.LoadWorldModelFromMSAV(m.Path)
+	// if err != nil {
+	//     result.Error = err
+	// } else {
+	//     result.WorldData = worldstream.BuildWorldStreamFromModel(model)
+	// }
+
+	fmt.Printf("[Core2 %s] Loading world model from: %s\n", c2.name, m.Path)
+
+	// 模拟加载成功
+	// result.WorldData = []byte("mock_world_stream_data")
+}
+
+// handleWorldStreamSaveSnapshot 保存世界快照到 MSAV
+func (c2 *Core2) handleWorldStreamSaveSnapshot(m *WorldStreamMessage) {
+	// TODO: 实现保存世界快照到 MSAV
+	// err := worldstream.SaveWorldModelToMSAV(m.Path, m.ModelData)
+	// if err != nil {
+	//     result.Error = err
+	// }
+
+	fmt.Printf("[Core2 %s] Saving world snapshot to: %s\n", c2.name, m.Path)
+
+	// 模拟保存成功
+}
+
+// handleWorldStreamRewritePlayer 重写玩家数据
+func (c2 *Core2) handleWorldStreamRewritePlayer(m *WorldStreamMessage) {
+	// TODO: 实现重写玩家数据
+	// result.WorldData, result.Error = worldstream.RewritePlayerIDInWorldStream(m.ModelData, m.PlayerID)
+
+	fmt.Printf("[Core2 %s] Rewriting player ID %d in world stream: %s\n",
+		c2.name, m.PlayerID, m.Path)
+
+	// 模拟重写成功
+	// result.WorldData = []byte("mock_world_stream_data_with_new_player_id")
+}
+
+// handlePacketMessage 处理网络包（IO Core）
+func (c2 *Core2) handlePacketMessage(m *PacketMessage) {
+	switch m.Kind {
+	case "incoming":
+		c2.handlePacketIncoming(m)
+	case "outgoing":
+		c2.handlePacketOutgoing(m)
+	default:
+		fmt.Printf("[Core2 %s] Unknown packet kind: %s\n", c2.name, m.Kind)
+	}
+}
+
+// handlePacketIncoming 处理 incoming 包
+func (c2 *Core2) handlePacketIncoming(m *PacketMessage) {
+	// TODO: 实现 incoming 包处理
+	// 例如：解码包、分发到游戏逻辑等
+	fmt.Printf("[Core2 %s] Incoming packet: connID=%d, packet=%T\n", 
+		c2.name, m.ConnID, m.Packet)
+}
+
+// handlePacketOutgoing 处理 outgoing 包
+func (c2 *Core2) handlePacketOutgoing(m *PacketMessage) {
+	// TODO: 实现 outgoing 包处理
+	// 例如：编码包、发送到网络等
+	fmt.Printf("[Core2 %s] Outgoing packet: connID=%d, packet=%T\n", 
+		c2.name, m.ConnID, m.Packet)
+}
+
+// handleStorageMessage 处理 Storage 事件（IO Core）
+func (c2 *Core2) handleStorageMessage(m *StorageMessage) {
+	switch m.Action {
+	case "record_event":
+		c2.handleRecordEvent(m)
+	case "record_player":
+		c2.handleRecordPlayer(m)
+	case "flush":
+		c2.handleFlush(m)
+	case "close":
+		c2.handleClose(m)
+	default:
+		fmt.Printf("[Core2 %s] Unknown storage action: %s\n", c2.name, m.Action)
+	}
+}
+
+// handleRecordEvent 记录事件
+func (c2 *Core2) handleRecordEvent(m *StorageMessage) {
+	if c2.recorder == nil {
+		return
+	}
+
+	// 解析事件数据
+	var ev storage.Event
+	if len(m.EventData) > 0 {
+		_ = json.Unmarshal(m.EventData, &ev)
+	}
+	_ = c2.recorder.Record(ev)
+}
+
+// handleRecordPlayer 记录玩家事件
+func (c2 *Core2) handleRecordPlayer(m *StorageMessage) {
+	if c2.recorder == nil {
+		return
+	}
+
+	// 解析事件数据
+	var ev storage.Event
+	if len(m.EventData) > 0 {
+		_ = json.Unmarshal(m.EventData, &ev)
+	}
+	_ = c2.recorder.Record(ev)
+}
+
+// handleFlush 刷新事件
+func (c2 *Core2) handleFlush(m *StorageMessage) {
+	// TODO: 实现刷新逻辑
+}
+
+// handleClose 关闭记录器
+func (c2 *Core2) handleClose(m *StorageMessage) {
+	if c2.recorder != nil {
+		_ = c2.recorder.Close()
+	}
+}
+
+// handlePersistenceMessage 处理存档操作（IO Core）
+func (c2 *Core2) handlePersistenceMessage(m *PersistenceMessage) {
+	switch m.Action {
+	case "save_state":
+		c2.handleSaveState(m)
+	case "load_state":
+		c2.handleLoadState(m)
+	case "save_world":
+		c2.handleSaveWorld(m)
+	case "load_world":
+		c2.handleLoadWorld(m)
+	default:
+		fmt.Printf("[Core2 %s] Unknown persistence action: %s\n", c2.name, m.Action)
+		if m.ResultChan != nil {
+			m.ResultChan <- PersistenceResult{Error: fmt.Errorf("unknown action: %s", m.Action)}
+		}
+	}
+}
+
+// handleSaveState 保存游戏状态
+func (c2 *Core2) handleSaveState(m *PersistenceMessage) {
+	result := PersistenceResult{}
+
+	// 从 ServerCore 获取配置
+	if sc, ok := c2.serverCore.Load().(*ServerCore); ok {
+		// 保存状态到 JSON
+		err := persist.Save(sc.persistCfg, persist.State{
+			MapPath:  m.Path,
+			WaveTime: 0, // TODO: 从游戏状态获取
+			Wave:     0, // TODO: 从游戏状态获取
+			Tick:     0, // TODO: 从游戏状态获取
+			TimeData: 0, // TODO: 从游戏状态获取
+			Rand0:    0, // TODO: 从游戏状态获取
+			Rand1:    0, // TODO: 从游戏状态获取
+			SavedAt:  time.Now().UTC().Format(time.RFC3339),
+		})
+		if err != nil {
+			result.Error = err
+		}
+	} else {
+		result.Error = fmt.Errorf("server core not initialized")
+	}
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleLoadState 加载游戏状态
+func (c2 *Core2) handleLoadState(m *PersistenceMessage) {
+	result := PersistenceResult{}
+
+	// 从 ServerCore 获取配置
+	if sc, ok := c2.serverCore.Load().(*ServerCore); ok {
+		st, ok, err := persist.Load(sc.persistCfg)
+		if err != nil {
+			result.Error = err
+		} else if ok {
+			result.StateData = []byte(fmt.Sprintf("wave=%d,tick=%d", st.Wave, st.Tick))
+		}
+	} else {
+		result.Error = fmt.Errorf("server core not initialized")
+	}
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleSaveWorld 保存世界数据（MSAV）
+func (c2 *Core2) handleSaveWorld(m *PersistenceMessage) {
+	result := PersistenceResult{}
+
+	// TODO: 从世界模型保存 MSAV
+	// err := worldstream.SaveWorldModelToMSAV(m.Path, m.ModelData)
+	// if err != nil {
+	//     result.Error = err
+	// }
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+// handleLoadWorld 加载世界数据（MSAV）
+func (c2 *Core2) handleLoadWorld(m *PersistenceMessage) {
+	result := PersistenceResult{}
+
+	// TODO: 加载 MSAV 文件
+	// model, err := worldstream.LoadWorldModelFromMSAV(m.Path)
+	// if err != nil {
+	//     result.Error = err
+	// } else {
+	//     result.WorldData = worldstream.BuildWorldStreamFromModel(model)
+	// }
+
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 // Send 发送消息到 IO Core
@@ -255,6 +623,21 @@ func (c2 *Core2) Stop() {
 		close(c2.messages)
 		c2.wg.Wait()
 	}
+}
+
+// SetServerCore 设置 ServerCore 引用
+func (c2 *Core2) SetServerCore(sc *ServerCore) {
+	c2.serverCore.Store(sc)
+}
+
+// SetRecorder 设置事件记录器
+func (c2 *Core2) SetRecorder(rec storage.Recorder) {
+	c2.recorder = rec
+}
+
+// Recorder 获取事件记录器
+func (c2 *Core2) Recorder() storage.Recorder {
+	return c2.recorder
 }
 
 // Stats 获取 IO Core 统计信息

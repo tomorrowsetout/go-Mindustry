@@ -2,19 +2,23 @@ package core
 
 import (
 	"time"
+
+	"mdt-server/internal/config"
 )
 
 // ServerCore 协调两个核心的运行
 type ServerCore struct {
-	Core1 *Core1
-	Core2 *Core2
+	Core1      *Core1
+	Core2      *Core2
+	persistCfg config.PersistConfig
 }
 
 // NewServerCore 创建服务器核心控制器（两核心架构）
-func NewServerCore(gameInterval time.Duration, ioConfig Config) *ServerCore {
+func NewServerCore(gameInterval time.Duration, ioConfig Config, persistCfg config.PersistConfig) *ServerCore {
 	return &ServerCore{
-		Core1: NewCore1("game-loop"),
-		Core2: NewCore2(ioConfig),
+		Core1:      NewCore1("game-loop"),
+		Core2:      NewCore2(ioConfig),
+		persistCfg: persistCfg,
 	}
 }
 
@@ -45,4 +49,9 @@ func (sc *ServerCore) Stats() (core1Running bool, core2Stats [5]int64) {
 	core1Running = sc.Core1.running.Load()
 	core2Stats[0], core2Stats[1], core2Stats[2], core2Stats[3], core2Stats[4] = sc.Core2.Stats()
 	return
+}
+
+// GetPersistConfig 获取持久化配置
+func (sc *ServerCore) GetPersistConfig() config.PersistConfig {
+	return sc.persistCfg
 }

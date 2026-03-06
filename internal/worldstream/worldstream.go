@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf16"
 
 	"mdt-server/internal/protocol"
@@ -381,6 +383,26 @@ func readStringMap(chunk []byte) (map[string]string, error) {
 	return out, nil
 }
 
+func readStringMapInline(r *javaReader) (map[string]string, error) {
+	size, err := r.ReadInt16()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, size)
+	for i := 0; i < int(size); i++ {
+		k, err := r.ReadUTF()
+		if err != nil {
+			return nil, err
+		}
+		v, err := r.ReadUTF()
+		if err != nil {
+			return nil, err
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
 func readContentBlockNames(chunk []byte) (map[int16]string, error) {
 	return readContentNamesOfType(chunk, 1) // ContentType.block
 }
@@ -661,6 +683,170 @@ func writeMinimalPlayer(w *javaWriter) error {
 		return err
 	}
 	return w.WriteBytes(pw.Bytes())
+}
+
+var templateRawOnce sync.Once
+var templateRaw []byte
+var templateRawErr error
+var templatePlayerCacheMu sync.Mutex
+var templatePlayerCache = map[uint64][]byte{}
+
+func writeTemplatePlayerForContent(w *javaWriter, content []byte) error {
+	payload, err := templatePlayerPayloadForContent(content)
+	if err == nil && len(payload) > 0 {
+		return w.WriteBytes(payload)
+	}
+	// Fallback: old minimal payload (may be incompatible with newer clients).
+	return writeMinimalPlayer(w)
+}
+
+func templatePlayerPayloadForContent(content []byte) ([]byte, error) {
+	if len(content) == 0 {
+		return nil, errors.New("empty content header")
+	}
+	key := hash64(content)
+	templatePlayerCacheMu.Lock()
+	if cached, ok := templatePlayerCache[key]; ok {
+		templatePlayerCacheMu.Unlock()
+		return cached, nil
+	}
+	templatePlayerCacheMu.Unlock()
+
+	raw, err := loadTemplateWorldRaw()
+	if err != nil {
+		return nil, err
+	}
+
+	playerStart, err := locatePlayerStart(raw)
+	if err != nil {
+		return nil, err
+	}
+	if playerStart < 0 || playerStart >= len(raw) {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	// Prefer exact content header match: locate the content chunk bytes in template raw.
+	if idx := bytes.Index(raw[playerStart:], content); idx >= 0 {
+		payload := append([]byte(nil), raw[playerStart:playerStart+idx]...)
+		templatePlayerCacheMu.Lock()
+		templatePlayerCache[key] = payload
+		templatePlayerCacheMu.Unlock()
+		return payload, nil
+	}
+
+	// Fallback: heuristic scan when content differs (e.g., mods) or template mismatch.
+	if payload, err := extractPlayerPayloadFromWorldStream(raw); err == nil && len(payload) > 0 {
+		templatePlayerCacheMu.Lock()
+		templatePlayerCache[key] = payload
+		templatePlayerCacheMu.Unlock()
+		return payload, nil
+	}
+	return nil, errors.New("unable to locate player payload in template world stream")
+}
+
+func loadTemplateWorldRaw() ([]byte, error) {
+	templateRawOnce.Do(func() {
+		templateRaw, templateRawErr = readBootstrapWorldRaw()
+	})
+	return templateRaw, templateRawErr
+}
+
+func readBootstrapWorldRaw() ([]byte, error) {
+	candidates := []string{
+		filepath.Join("assets", "bootstrap-world.bin"),
+		filepath.Join("go-server", "assets", "bootstrap-world.bin"),
+	}
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		zr, err := zlib.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		raw, err := io.ReadAll(zr)
+		_ = zr.Close()
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	}
+	return nil, errors.New("template world stream not found")
+}
+
+func extractPlayerPayloadFromWorldStream(raw []byte) ([]byte, error) {
+	playerStart, err := locatePlayerStart(raw)
+	if err != nil {
+		return nil, err
+	}
+	if playerStart >= len(raw) {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	const minPlayerLen = 8
+	const maxScan = 8192
+	limit := maxScan
+	if playerStart+limit > len(raw) {
+		limit = len(raw) - playerStart
+	}
+	for delta := minPlayerLen; delta <= limit; delta++ {
+		rr := newJavaReader(raw[playerStart+delta:])
+		if err := skipContentHeader(rr); err != nil {
+			continue
+		}
+		if err := skipContentPatches(rr); err != nil {
+			continue
+		}
+		if err := skipMapData(rr); err != nil {
+			continue
+		}
+		out := make([]byte, delta)
+		copy(out, raw[playerStart:playerStart+delta])
+		return out, nil
+	}
+	return nil, errors.New("unable to locate content header in template world stream")
+}
+
+func locatePlayerStart(raw []byte) (int, error) {
+	r := newJavaReader(raw)
+	if _, err := r.ReadUTF(); err != nil {
+		return 0, err
+	}
+	if _, err := r.ReadUTF(); err != nil {
+		return 0, err
+	}
+	if _, err := readStringMapInline(r); err != nil {
+		return 0, err
+	}
+	if _, err := r.ReadInt32(); err != nil { // wave
+		return 0, err
+	}
+	if _, err := r.ReadFloat32(); err != nil { // wavetime
+		return 0, err
+	}
+	if _, err := r.ReadFloat64(); err != nil { // tick
+		return 0, err
+	}
+	if _, err := r.ReadInt64(); err != nil { // seed0
+		return 0, err
+	}
+	if _, err := r.ReadInt64(); err != nil { // seed1
+		return 0, err
+	}
+	if _, err := r.ReadInt32(); err != nil { // player id
+		return 0, err
+	}
+	return r.Offset(), nil
+}
+
+func hash64(b []byte) uint64 {
+	var h uint64 = 1469598103934665603
+	for _, c := range b {
+		h ^= uint64(c)
+		h *= 1099511628211
+	}
+	return h
 }
 
 func encodeModifiedUTF8(s string) []byte {

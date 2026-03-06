@@ -37,26 +37,18 @@ type Sound struct {
 	ID int16
 }
 
-// Content type IDs mirror mindustry.ctype.ContentType order exactly.
-// Do not rearrange, ever!
+// Content type IDs mirror mindustry.ctype.ContentType order.
 const (
-	ContentItem        ContentType = 0   // item(Item.class)
-	ContentBlock       ContentType = 1   // block(Block.class)
-	ContentUnit        ContentType = 6   // unit(UnitType.class) - ordinal 6, NOT 2!
-	ContentBullet      ContentType = 3   // bullet(BulletType.class)
-	ContentLiquid      ContentType = 4   // liquid(Liquid.class)
-	ContentStatus      ContentType = 5   // status(StatusEffect.class)
-	ContentWeather     ContentType = 7   // weather(Weather.class)
-	ContentEffect      ContentType = 8   // effect_UNUSED - but used for decoder
-	ContentSector      ContentType = 9   // sector(SectorPreset.class)
-	ContentLoadout     ContentType = 10  // loadout_UNUSED
-	ContentTypeId      ContentType = 11  // typeid_UNUSED
-	ContentError       ContentType = 12  // error(null)
-	ContentPlanet      ContentType = 13  // planet(Planet.class)
-	ContentAmmo        ContentType = 14  // ammo_UNUSED
-	ContentTeam        ContentType = 15  // team(TeamEntry.class)
-	ContentUnitCommand ContentType = 16  // unitCommand(UnitCommand.class)
-	ContentUnitStance  ContentType = 17  // unitStance(UnitStance.class)
+	ContentItem        ContentType = 0
+	ContentBlock       ContentType = 1
+	ContentBullet      ContentType = 3
+	ContentLiquid      ContentType = 4
+	ContentStatus      ContentType = 5
+	ContentUnit        ContentType = 6
+	ContentWeather     ContentType = 7
+	ContentTeam        ContentType = 15
+	ContentUnitCommand ContentType = 16
+	ContentUnitStance  ContentType = 17
 )
 
 type contentBox struct {
@@ -93,19 +85,6 @@ type UnitSyncEntity interface {
 	ReadSync(r *Reader) error
 	SnapSync()
 	Add()
-}
-
-type BuildingSyncEntity interface {
-	ID() int32
-	SetID(id int32)
-	ClassID() byte
-	BeforeWrite()
-	WriteSync(w *Writer) error
-	ReadSync(r *Reader) error
-	SnapSync()
-	Add()
-	Pos() int32
-	Team() Team
 }
 
 type Entity interface {
@@ -193,20 +172,18 @@ func PackPoint2(x, y int32) int32 {
 	return (x&0xFFFF)<<16 | (y & 0xFFFF)
 }
 
-// UnpackPoint2X 获取 X 坐标
-func UnpackPoint2X(v int32) int16 {
-	return int16((v >> 16) & 0xFFFF)
-}
-
-// UnpackPoint2Y 获取 Y 坐标
-func UnpackPoint2Y(v int32) int16 {
-	return int16(v & 0xFFFF)
-}
-
 func UnpackPoint2(v int32) Point2 {
 	x := int16((v >> 16) & 0xFFFF)
 	y := int16(v & 0xFFFF)
 	return Point2{X: int32(x), Y: int32(y)}
+}
+
+func UnpackPoint2X(v int32) int32 {
+	return int32(int16((v >> 16) & 0xFFFF))
+}
+
+func UnpackPoint2Y(v int32) int32 {
+	return int32(int16(v & 0xFFFF))
 }
 
 type Vec2 struct {
@@ -230,18 +207,6 @@ type ItemStack struct {
 type LiquidStack struct {
 	Liquid Liquid
 	Amount float32
-}
-
-// Sector represents a sector preset (unused in server protocol).
-type Sector struct {
-	ID int16
-	Name string
-}
-
-// Planet represents a planet (unused in server protocol).
-type Planet struct {
-	ID int16
-	Name string
 }
 
 type StatusEntry struct {
@@ -483,7 +448,7 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		if err := w.WriteByte(6); err != nil {
 			return err
 		}
-		if err := w.WriteInt32(int32(len(v.Items))); err != nil {  // Java uses writeInt() (4 bytes), not writeShort!
+		if err := w.WriteInt16(int16(len(v.Items))); err != nil {
 			return err
 		}
 		for _, n := range v.Items {
@@ -570,11 +535,6 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 			}
 		}
 		return nil
-	case UnitCommandBox:
-		if err := w.WriteByte(15); err != nil {
-			return err
-		}
-		return w.WriteInt16(v.ID)  // Java might just write ID directly
 	case Unit:
 		if err := w.WriteByte(17); err != nil {
 			return err
@@ -681,7 +641,7 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return contentBox{typ: ContentType(ct), id: id}, nil
 	case 6:
-		l, err := r.ReadInt32()
+		l, err := r.ReadInt16()
 		if err != nil {
 			return nil, err
 		}
@@ -766,11 +726,11 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return r.ReadBytes(int(l))
 	case 15:
-		id, err := r.ReadInt16()  // Java might just read ID directly
+		_, err := r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		return &UnitCommandBox{ID: id}, nil
+		return nil, nil
 	case 16:
 		l, err := r.ReadInt32()
 		if err != nil {

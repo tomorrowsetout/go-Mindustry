@@ -225,3 +225,6 @@ func (m *WorldStreamMessage) Type() MessageType {
 	return MessageWorldStreamLoad
 }
 
+// PersistenceConfigAlias 别名以便在 core 包中使用
+// type PersistenceConfigAlias persist.Config
+
