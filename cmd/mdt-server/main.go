@@ -43,6 +43,200 @@ type worldState struct {
 	current string
 }
 
+type startupStatus int
+
+const (
+	startupOK startupStatus = iota
+	startupWarn
+	startupFail
+	startupInfo
+)
+
+type startupItem struct {
+	status startupStatus
+	label  string
+	detail string
+}
+
+type startupReport struct {
+	items []startupItem
+}
+
+func (r *startupReport) add(status startupStatus, label, detail string) {
+	r.items = append(r.items, startupItem{status: status, label: label, detail: detail})
+}
+
+func (r *startupReport) ok(label, detail string)   { r.add(startupOK, label, detail) }
+func (r *startupReport) warn(label, detail string) { r.add(startupWarn, label, detail) }
+func (r *startupReport) fail(label, detail string) { r.add(startupFail, label, detail) }
+func (r *startupReport) info(label, detail string) { r.add(startupInfo, label, detail) }
+
+func (r *startupReport) print() {
+	const (
+		green = "\x1b[32m"
+		red   = "\x1b[31m"
+		yell  = "\x1b[33m"
+		reset = "\x1b[0m"
+	)
+	fmt.Println("========================================")
+	fmt.Println(" 启动报告")
+	fmt.Println("========================================")
+	for _, it := range r.items {
+		prefix := "[INFO]"
+		color := ""
+		switch it.status {
+		case startupOK:
+			prefix = "[ OK ]"
+			color = green
+		case startupWarn:
+			prefix = "[WARN]"
+			color = yell
+		case startupFail:
+			prefix = "[FAIL]"
+			color = red
+		}
+		if it.detail != "" {
+			fmt.Printf("%s%s%s %s: %s\n", color, prefix, reset, it.label, it.detail)
+		} else {
+			fmt.Printf("%s%s%s %s\n", color, prefix, reset, it.label)
+		}
+	}
+	fmt.Println("========================================")
+}
+
+func printUnitIDList(unitNames map[int16]string) {
+	if len(unitNames) == 0 {
+		return
+	}
+	type pair struct {
+		id   int16
+		name string
+	}
+	items := make([]pair, 0, len(unitNames))
+	for id, name := range unitNames {
+		items = append(items, pair{id: id, name: name})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
+
+	fmt.Println("========================================")
+	fmt.Println(" 单位 ID 列表")
+	fmt.Println("========================================")
+	const perLine = 6
+	for i := 0; i < len(items); i += perLine {
+		end := i + perLine
+		if end > len(items) {
+			end = len(items)
+		}
+		var b strings.Builder
+		for j := i; j < end; j++ {
+			if j > i {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%d(%s)", items[j].id, items[j].name)
+		}
+		fmt.Println(b.String())
+	}
+	fmt.Println("========================================")
+}
+
+type mapLoadStats struct {
+	width         int
+	height        int
+	tiles         int
+	blocks        int
+	builds        int
+	cores         int
+	entities      int
+	units         int
+	blockKinds    int
+	floorKinds    int
+	overlayKinds  int
+	tags          int
+	msavVersion   int32
+	contentBytes  int
+	patchBytes    int
+	rawMapBytes   int
+	rawEntBytes   int
+	markerBytes   int
+	customBytes   int
+	hasRulesTag   bool
+}
+
+func computeMapLoadStats(model *world.WorldModel) mapLoadStats {
+	if model == nil {
+		return mapLoadStats{}
+	}
+	stats := mapLoadStats{
+		width:       model.Width,
+		height:      model.Height,
+		tiles:       len(model.Tiles),
+		entities:    len(model.Entities),
+		units:       len(model.Units),
+		tags:        len(model.Tags),
+		msavVersion: model.MSAVVersion,
+		contentBytes: len(model.Content),
+		patchBytes:   len(model.Patches),
+		rawMapBytes:  len(model.RawMap),
+		rawEntBytes:  len(model.RawEntities),
+		markerBytes:  len(model.Markers),
+		customBytes:  len(model.Custom),
+	}
+	if model.Tags != nil {
+		if v, ok := model.Tags["rules"]; ok && strings.TrimSpace(v) != "" {
+			stats.hasRulesTag = true
+		}
+	}
+	blockKinds := map[int16]struct{}{}
+	floorKinds := map[int16]struct{}{}
+	overlayKinds := map[int16]struct{}{}
+	for i := range model.Tiles {
+		tile := &model.Tiles[i]
+		if tile == nil {
+			continue
+		}
+		if tile.Block > 0 {
+			stats.blocks++
+			blockKinds[int16(tile.Block)] = struct{}{}
+		}
+		if tile.Floor > 0 {
+			floorKinds[int16(tile.Floor)] = struct{}{}
+		}
+		if tile.Overlay > 0 {
+			overlayKinds[int16(tile.Overlay)] = struct{}{}
+		}
+		if tile.Build != nil {
+			stats.builds++
+			name := strings.ToLower(strings.TrimSpace(model.BlockNames[int16(tile.Build.Block)]))
+			if strings.Contains(name, "core") || strings.Contains(name, "foundation") || strings.Contains(name, "nucleus") {
+				stats.cores++
+			}
+		}
+	}
+	stats.blockKinds = len(blockKinds)
+	stats.floorKinds = len(floorKinds)
+	stats.overlayKinds = len(overlayKinds)
+	return stats
+}
+
+func printMapDetails(path string, model *world.WorldModel) {
+	if model == nil {
+		return
+	}
+	stats := computeMapLoadStats(model)
+	fmt.Println("========================================")
+	fmt.Println(" 地图加载详情")
+	fmt.Println("========================================")
+	fmt.Printf("路径: %s\n", path)
+	fmt.Printf("尺寸: %dx%d  Tiles=%d\n", stats.width, stats.height, stats.tiles)
+	fmt.Printf("建筑: blocks=%d builds=%d cores=%d\n", stats.blocks, stats.builds, stats.cores)
+	fmt.Printf("实体: entities=%d units=%d\n", stats.entities, stats.units)
+	fmt.Printf("类型: blockKinds=%d floorKinds=%d overlayKinds=%d\n", stats.blockKinds, stats.floorKinds, stats.overlayKinds)
+	fmt.Printf("MSAV: version=%d tags=%d rulesTag=%v\n", stats.msavVersion, stats.tags, stats.hasRulesTag)
+	fmt.Printf("数据: content=%d patch=%d rawMap=%d rawEntities=%d markers=%d custom=%d\n",
+		stats.contentBytes, stats.patchBytes, stats.rawMapBytes, stats.rawEntBytes, stats.markerBytes, stats.customBytes)
+	fmt.Println("========================================")
+}
+
 func main() {
 	cfgPath := flag.String("config", "config.json", "path to config file")
 	addr := flag.String("addr", "0.0.0.0:6567", "listen address for Mindustry protocol (TCP+UDP)")
@@ -70,6 +264,7 @@ func main() {
 		cfg.Source = *cfgPath
 	}
 
+	startup := &startupReport{}
 	bootstrapResult, err := bootstrap.EnsureWorkspace(cfg.Source, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "初始化工作目录失败: %v\n", err)
@@ -99,20 +294,25 @@ func main() {
 	// 初始化开发者日志
 	devLog := devlog.New(os.Stdout)
 	devLog.SetLevel(devlog.LogLevelDebug)
-	devLog.PrintDebugHeader()
 	if cfg.Runtime.DevLogEnabled {
-		devLog.Info("devlog", "开发者日志已启用")
+		startup.ok("开发者日志", "已启用")
+	} else {
+		startup.info("开发者日志", "未启用")
 	}
 
 	modMgr := java.New(cfg.Mods)
 	if cfg.Mods.Enabled {
 		if err := modMgr.Scan(); err != nil {
 			log.Error("mods scan failed", logging.Field{Key: "error", Value: err.Error()})
+			startup.fail("Mods 扫描", err.Error())
 		} else if err := modMgr.Start(); err != nil {
 			log.Warn("mods start", logging.Field{Key: "error", Value: err.Error()})
+			startup.warn("Mods 启动", err.Error())
 		} else {
-			log.Info("mods loaded", logging.Field{Key: "count", Value: len(modMgr.Mods())})
+			startup.ok("Mods 加载", fmt.Sprintf("count=%d", len(modMgr.Mods())))
 		}
+	} else {
+		startup.info("Mods", "未启用")
 	}
 
 	worldChoice := *worldArg
@@ -121,14 +321,17 @@ func main() {
 	if cfg.Persist.Enabled {
 		if st, ok, err := persist.Load(cfg.Persist); err != nil {
 			log.Warn("persist load failed", logging.Field{Key: "error", Value: err.Error()})
+			startup.warn("持久化加载", err.Error())
 		} else if ok {
 			persisted = st
 			persistedOK = true
 			if worldChoice == "random" && st.MapPath != "" {
 				worldChoice = st.MapPath
-				log.Info("persisted world restored", logging.Field{Key: "map", Value: st.MapPath})
+				startup.ok("持久化地图恢复", st.MapPath)
 			}
 		}
+	} else {
+		startup.info("持久化", "未启用")
 	}
 
 	initialWorld, err := resolveWorldSelection(worldChoice)
@@ -148,26 +351,81 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
+		if c == nil || wld == nil {
+			return 0, 0, false
+		}
+		x := float32(tile.X*8 + 4)
+		y := float32(tile.Y*8 + 4)
+		ent, err := wld.AddEntityWithID(unitType, unitID, x, y, world.TeamID(1))
+		if err != nil {
+			return 0, 0, false
+		}
+		_ = ent
+		return x, y, true
+	}
+	srv.DropUnitFn = func(unitID int32) {
+		if wld == nil {
+			return
+		}
+		wld.RemoveEntity(unitID)
+	}
+	srv.UnitInfoFn = func(unitID int32) (netserver.UnitInfo, bool) {
+		if wld == nil {
+			return netserver.UnitInfo{}, false
+		}
+		ent, ok := wld.GetEntity(unitID)
+		if !ok {
+			return netserver.UnitInfo{}, false
+		}
+		return netserver.UnitInfo{
+			ID:        ent.ID,
+			X:         ent.X,
+			Y:         ent.Y,
+			Health:    ent.Health,
+			MaxHealth: ent.MaxHealth,
+			TeamID:    byte(ent.Team),
+			TypeID:    ent.TypeID,
+		}, true
+	}
+	var unitNamesByID map[int16]string
+	var loadedModel *world.WorldModel
+	var loadedMapPath string
 
 	var playerSpawnTypeID int32 = 1
 	if err := wld.LoadVanillaProfiles(cfg.Runtime.VanillaProfiles); err != nil {
 		log.Warn("vanilla profiles load failed", logging.Field{Key: "path", Value: cfg.Runtime.VanillaProfiles}, logging.Field{Key: "error", Value: err.Error()})
+		startup.warn("原版 profiles", fmt.Sprintf("加载失败: %s", err.Error()))
 	} else if strings.TrimSpace(cfg.Runtime.VanillaProfiles) != "" {
-		log.Info("vanilla profiles loaded", logging.Field{Key: "path", Value: cfg.Runtime.VanillaProfiles})
+		startup.ok("原版 profiles", cfg.Runtime.VanillaProfiles)
 	}
 	loadWorldModel := func(path string) {
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
 			wld.SetModel(nil)
+			loadedModel = nil
+			loadedMapPath = ""
 			return
 		}
 		model, lerr := worldstream.LoadWorldModelFromMSAV(path)
 		if lerr != nil {
 			log.Warn("world model load failed", logging.Field{Key: "path", Value: path}, logging.Field{Key: "error", Value: lerr.Error()})
+			startup.warn("地图模型", fmt.Sprintf("加载失败: %s", lerr.Error()))
+			loadedModel = nil
+			loadedMapPath = ""
 			return
 		}
 		wld.SetModel(model)
-		log.Info("world model loaded", logging.Field{Key: "path", Value: path}, logging.Field{Key: "size", Value: fmt.Sprintf("%dx%d", model.Width, model.Height)})
+		loadedModel = model
+		loadedMapPath = path
+		startup.ok("地图模型", fmt.Sprintf("%s (%dx%d)", path, model.Width, model.Height))
+		if model != nil && len(model.UnitNames) > 0 {
+			unitNamesByID = make(map[int16]string, len(model.UnitNames))
+			for k, v := range model.UnitNames {
+				unitNamesByID[k] = strings.ToLower(strings.TrimSpace(v))
+			}
+			startup.ok("单位 ID 列表", fmt.Sprintf("count=%d", len(unitNamesByID)))
+		}
 		spawnType := int16(1)
 		if alphaID, ok := wld.ResolveUnitTypeID("alpha"); ok {
 			spawnType = alphaID
@@ -188,7 +446,7 @@ func main() {
 			}
 		}
 		atomic.StoreInt32(&playerSpawnTypeID, int32(spawnType))
-		log.Info("player spawn unit resolved", logging.Field{Key: "typeId", Value: spawnType})
+		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
 	if persistedOK {
 		waveTime := persisted.WaveTime
@@ -232,11 +490,12 @@ func main() {
 	}
 	if ops, ok, err := persist.LoadOps(cfg.Admin); err != nil {
 		log.Warn("ops load failed", logging.Field{Key: "error", Value: err.Error()})
+		startup.warn("OP 列表", err.Error())
 	} else if ok {
 		for _, u := range ops {
 			srv.AddOp(u)
 		}
-		log.Info("ops loaded", logging.Field{Key: "count", Value: len(ops)})
+		startup.ok("OP 列表", fmt.Sprintf("count=%d", len(ops)))
 	}
 	saveOps := func() {
 		_ = persist.SaveOps(cfg.Admin, srv.ListOps())
@@ -326,18 +585,17 @@ func main() {
 		if model == nil || len(model.Entities) == 0 {
 			return 0, nil
 		}
+		playerUnits := srv.PlayerUnitIDSet()
 		count := int16(0)
 		for _, e := range model.Entities {
 			if e.TypeID < 0 || e.ID == 0 {
 				continue
 			}
-			// Keep IDs distinct from player IDs to avoid collisions.
-			id := e.ID
-			if id > 0 {
-				id = -id
+			if _, ok := playerUnits[e.ID]; ok {
+				continue
 			}
 			ent := &protocol.UnitEntitySync{
-				IDValue:        id,
+				IDValue:        e.ID,
 				Abilities:      []protocol.Ability{},
 				Ammo:           0,
 				Controller:     nil, // GenericAI in WriteController
@@ -383,6 +641,7 @@ func main() {
 				switch ev.Kind {
 				case world.EntityEventRemoved:
 					broadcastUnitDestroy(srv, ev.Entity.ID)
+					srv.MarkUnitDead(ev.Entity.ID, "world-removed")
 				case world.EntityEventBuildPlaced:
 					broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
 				case world.EntityEventBuildDestroyed:
@@ -822,7 +1081,9 @@ func main() {
 				log.Error("api serve failed", logging.Field{Key: "error", Value: err.Error()})
 			}
 		}()
-		log.Info("api started", logging.Field{Key: "bind", Value: cfg.API.Bind}, logging.Field{Key: "auth", Value: len(cfg.API.Keys) > 0})
+		startup.ok("API", fmt.Sprintf("bind=%s auth=%v", cfg.API.Bind, len(cfg.API.Keys) > 0))
+	} else {
+		startup.info("API", "未启用")
 	}
 	var stopOnce sync.Once
 	stopServer := func(reason string) {
@@ -932,6 +1193,12 @@ func main() {
 	reloadVanillaProfiles := func(path string) error {
 		return wld.LoadVanillaProfiles(path)
 	}
+	startup.ok("服务端启动", "初始化完成")
+	startup.print()
+	if loadedModel != nil {
+		printMapDetails(loadedMapPath, loadedModel)
+	}
+	printUnitIDList(unitNamesByID)
 	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, reloadVanillaProfiles, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
 	if err := srv.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "服务器启动失败: %v\n", err)
