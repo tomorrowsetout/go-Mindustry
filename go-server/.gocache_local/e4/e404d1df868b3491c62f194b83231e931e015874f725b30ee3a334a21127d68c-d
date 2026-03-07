@@ -1,0 +1,3 @@
+./endpoints.go
+./notes.go
+./server.go

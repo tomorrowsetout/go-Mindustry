@@ -54,12 +54,13 @@ type World struct {
 	bullets      []simBullet
 	bulletNextID int32
 
-	blockNamesByID map[int16]string
-	unitNamesByID  map[int16]string
+	blockNamesByID   map[int16]string
+	unitNamesByID    map[int16]string
 	unitTypeDefsByID map[int16]vanilla.UnitTypeDef
-	buildStates    map[int32]buildCombatState
-	unitMountCDs   map[int32][]float32
-	unitTargets    map[int32]targetTrackState
+	buildStates      map[int32]buildCombatState
+	pendingBuilds    map[int32]pendingBuildState
+	unitMountCDs     map[int32][]float32
+	unitTargets      map[int32]targetTrackState
 
 	unitProfilesByType     map[int16]weaponProfile
 	unitProfilesByName     map[string]weaponProfile
@@ -74,6 +75,13 @@ type BuildPlanOp struct {
 	BlockID  int16
 }
 
+type pendingBuildState struct {
+	Team     TeamID
+	BlockID  int16
+	Rotation int8
+	Progress float32
+}
+
 type EntityEventKind string
 
 const (
@@ -85,14 +93,19 @@ const (
 )
 
 type EntityEvent struct {
-	Kind      EntityEventKind
-	Entity    RawEntity
-	BuildPos  int32
-	BuildTeam TeamID
+	Kind       EntityEventKind
+	Entity     RawEntity
+	// BuildPos is packed tile position (Point2), not linear tile index.
+	BuildPos   int32
+	BuildTeam  TeamID
 	BuildBlock int16
-	BuildRot  int8
-	BuildHP   float32
-	Bullet    BulletEvent
+	BuildRot   int8
+	BuildHP    float32
+	Bullet     BulletEvent
+}
+
+func packTilePos(x, y int) int32 {
+	return (int32(x)&0xFFFF)<<16 | (int32(y) & 0xFFFF)
 }
 
 type BulletEvent struct {
@@ -413,6 +426,7 @@ func New(cfg Config) *World {
 		start:                  time.Now(),
 		bulletNextID:           1,
 		buildStates:            map[int32]buildCombatState{},
+		pendingBuilds:          map[int32]pendingBuildState{},
 		unitMountCDs:           map[int32][]float32{},
 		unitTargets:            map[int32]targetTrackState{},
 		unitProfilesByType:     cloneUnitWeaponProfiles(weaponProfilesByType),
@@ -427,29 +441,40 @@ func (w *World) Step(delta time.Duration) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.tick++
-	// Match Mindustry-side expectation: waveTime behaves as countdown, not elapsed-up timer.
 	if dt := float32(delta.Seconds()); dt > 0 {
-		if w.waveTime > 0 {
-			w.waveTime -= dt
-			if w.waveTime < 0 {
-				w.waveTime = 0
+		rules := w.rulesMgr.Get()
+		wavesEnabled := rules == nil || rules.Waves
+		waveTimer := rules == nil || rules.WaveTimer
+		if wavesEnabled && waveTimer {
+			// Countdown-only model: initialize when empty, then decrement.
+			if w.waveTime <= 0 {
+				w.waveTime = w.nextWaveSpacingSec()
 			}
-		} else {
-			//波次倒计时
-			waveManager := w.GetWaveManager()
-			cfg := waveManager.Config()
-			if cfg != nil {
-				w.waveTime -= dt
-				if w.waveTime <= 0 {
-					w.waveTime = 0
-					// 触发波次
-					w.triggerWave(waveManager)
-				}
+			w.waveTime -= dt
+			if w.waveTime <= 0 {
+				w.triggerWave(w.wavesMgr)
+				w.waveTime = w.nextWaveSpacingSec()
 			}
 		}
 	}
 
+	w.stepPendingBuilds(delta)
 	w.stepEntities(delta)
+}
+
+func (w *World) nextWaveSpacingSec() float32 {
+	rules := w.rulesMgr.Get()
+	if rules == nil {
+		return 90
+	}
+	// Before first triggered wave, prefer initial spacing when configured.
+	if w.wave <= 1 && rules.InitialWaveSpacing > 0 {
+		return rules.InitialWaveSpacing
+	}
+	if rules.WaveSpacing > 0 {
+		return rules.WaveSpacing
+	}
+	return 90
 }
 
 func (w *World) Snapshot() Snapshot {
@@ -497,6 +522,7 @@ func (w *World) SetModel(m *WorldModel) {
 	defer w.mu.Unlock()
 	w.model = m
 	w.buildStates = map[int32]buildCombatState{}
+	w.pendingBuilds = map[int32]pendingBuildState{}
 	w.unitMountCDs = map[int32][]float32{}
 	w.unitTargets = map[int32]targetTrackState{}
 	w.blockNamesByID = nil
@@ -529,6 +555,60 @@ func (w *World) SetModel(m *WorldModel) {
 				w.unitTypeDefsByID[id] = def
 			}
 		}
+	}
+}
+
+func (w *World) stepPendingBuilds(delta time.Duration) {
+	if w.model == nil || len(w.pendingBuilds) == 0 {
+		return
+	}
+	dt := float32(delta.Seconds())
+	if dt <= 0 {
+		return
+	}
+	// Keep construction visibly asynchronous without stalling gameplay.
+	progressPerSec := float32(1.0)
+	for pos, st := range w.pendingBuilds {
+		st.Progress += dt * progressPerSec
+		if st.Progress < 1 {
+			w.pendingBuilds[pos] = st
+			continue
+		}
+
+		x := int(pos % int32(w.model.Width))
+		y := int(pos / int32(w.model.Width))
+		if !w.model.InBounds(x, y) {
+			delete(w.pendingBuilds, pos)
+			continue
+		}
+		tile, err := w.model.TileAt(x, y)
+		if err != nil || tile == nil {
+			delete(w.pendingBuilds, pos)
+			continue
+		}
+		tile.Block = BlockID(st.BlockID)
+		tile.Team = st.Team
+		tile.Rotation = st.Rotation
+		tile.Build = &Building{
+			Block:    tile.Block,
+			Team:     st.Team,
+			Rotation: st.Rotation,
+			X:        tile.X,
+			Y:        tile.Y,
+			Health:   1000,
+		}
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:       EntityEventBuildPlaced,
+			BuildPos:   packTilePos(tile.X, tile.Y),
+			BuildTeam:  st.Team,
+			BuildBlock: st.BlockID,
+			BuildRot:   st.Rotation,
+		}, EntityEvent{
+			Kind:     EntityEventBuildHealth,
+			BuildPos: packTilePos(tile.X, tile.Y),
+			BuildHP:  tile.Build.Health,
+		})
+		delete(w.pendingBuilds, pos)
 	}
 }
 
@@ -875,8 +955,12 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		}
 		pos := int32(tile.Y*w.model.Width + tile.X)
 		if op.Breaking {
-			if tile.Build != nil {
-				teamOld := tile.Build.Team
+			delete(w.pendingBuilds, pos)
+			if tile.Build != nil || tile.Block != 0 {
+				teamOld := tile.Team
+				if tile.Build != nil {
+					teamOld = tile.Build.Team
+				}
 				tile.Build = nil
 				tile.Block = 0
 				tile.Team = 0
@@ -884,7 +968,7 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 				delete(w.buildStates, pos)
 				w.entityEvents = append(w.entityEvents, EntityEvent{
 					Kind:      EntityEventBuildDestroyed,
-					BuildPos:  pos,
+					BuildPos:  packTilePos(tile.X, tile.Y),
 					BuildTeam: teamOld,
 				})
 				addChanged(pos)
@@ -894,32 +978,22 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		if op.BlockID <= 0 {
 			continue
 		}
-		tile.Block = BlockID(op.BlockID)
-		tile.Team = team
-		tile.Rotation = op.Rotation
-		health := float32(1000)
-		if tile.Build != nil && tile.Build.Health > 0 {
-			health = tile.Build.Health
+		// Skip idempotent placements to avoid event spam and packet floods.
+		if pending, ok := w.pendingBuilds[pos]; ok &&
+			pending.BlockID == op.BlockID &&
+			pending.Team == team &&
+			pending.Rotation == op.Rotation {
+			continue
 		}
-		tile.Build = &Building{
-			Block:    tile.Block,
+		if tile.Block == BlockID(op.BlockID) && tile.Team == team && tile.Rotation == op.Rotation && tile.Build != nil {
+			continue
+		}
+		w.pendingBuilds[pos] = pendingBuildState{
 			Team:     team,
+			BlockID:  op.BlockID,
 			Rotation: op.Rotation,
-			X:        tile.X,
-			Y:        tile.Y,
-			Health:   health,
+			Progress: 0,
 		}
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:       EntityEventBuildPlaced,
-			BuildPos:   pos,
-			BuildTeam:  team,
-			BuildBlock: op.BlockID,
-			BuildRot:   op.Rotation,
-		}, EntityEvent{
-			Kind:     EntityEventBuildHealth,
-			BuildPos: pos,
-			BuildHP:  tile.Build.Health,
-		})
 		addChanged(pos)
 	}
 	return changed
@@ -1893,7 +1967,7 @@ func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
 	if t.Build.Health > 0 {
 		w.entityEvents = append(w.entityEvents, EntityEvent{
 			Kind:     EntityEventBuildHealth,
-			BuildPos: pos,
+			BuildPos: packTilePos(x, y),
 			BuildHP:  t.Build.Health,
 		})
 		return true
@@ -1904,7 +1978,7 @@ func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
 	delete(w.buildStates, pos)
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind:      EntityEventBuildDestroyed,
-		BuildPos:  pos,
+		BuildPos:  packTilePos(x, y),
 		BuildTeam: team,
 	})
 	return true
@@ -2371,11 +2445,15 @@ func (w *World) GetWaveManager() *WaveManager {
 
 // triggerWave 触发波次生成
 func (w *World) triggerWave(wm *WaveManager) {
+	// Always advance wave counter when wave is triggered.
+	nextWave := w.wave + 1
+	w.wave = nextWave
+
 	if w.model == nil {
 		return
 	}
 
-	plan := wm.GeneratePlan(w.wave + 1)
+	plan := wm.GeneratePlan(nextWave)
 	if plan == nil {
 		return
 	}
@@ -2398,14 +2476,7 @@ func (w *World) triggerWave(wm *WaveManager) {
 			w.addEnemy(enemyType, posX, posY)
 		}
 
-		// 组之间间隔
-		w.waveTime += plan.GroupSpacing
-		if group < int(plan.GroupCount)-1 {
-			w.waveTime += plan.GroupSpacing
-		}
 	}
-
-	w.wave++
 }
 
 // addEnemy 添加敌方单位
@@ -2416,16 +2487,16 @@ func (w *World) addEnemy(unitType int16, x, y float32) {
 
 	// 使用 RawEntity 结构创建敌人
 	unit := RawEntity{
-		TypeID:      unitType,
-		ID:          int32(len(w.model.Entities) + 1),
-		X:           x,
-		Y:           y,
-		Team:        2, // 敌人 team
-		Health:      100,
-		MaxHealth:   100,
+		TypeID:       unitType,
+		ID:           int32(len(w.model.Entities) + 1),
+		X:            x,
+		Y:            y,
+		Team:         2, // 敌人 team
+		Health:       100,
+		MaxHealth:    100,
 		AttackDamage: 10,
-		SlowMul:     1,
-		Rotation:    0,
+		SlowMul:      1,
+		Rotation:     0,
 	}
 	w.model.Entities = append(w.model.Entities, unit)
 }

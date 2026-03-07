@@ -61,12 +61,12 @@ type Server struct {
 	OnEvent      func(NetEvent)
 	playerIDNext int32
 
-	Name        string
-	Description string
+	Name           string
+	Description    string
 	VirtualPlayers int32
-	MapNameFn   func() string
-	OnChat      func(*Conn, string) bool
-	SpawnTileFn func() (protocol.Point2, bool)
+	MapNameFn      func() string
+	OnChat         func(*Conn, string) bool
+	SpawnTileFn    func() (protocol.Point2, bool)
 	// Optional provider for player-respawn unit type id (e.g. alpha).
 	PlayerUnitTypeFn func() int16
 	// Optional hook: apply client build plans from snapshot.
@@ -91,7 +91,7 @@ type Server struct {
 
 	entitySnapshotIntervalNs atomic.Int64
 	stateSnapshotIntervalNs  atomic.Int64
-	infoMu sync.RWMutex
+	infoMu                   sync.RWMutex
 
 	// DevLogger 开发者日志（可选）
 	DevLogger *devlog.DevLogger
@@ -103,28 +103,28 @@ func NewServer(addr string, buildVersion int) *Server {
 	ctx := content.Context()
 	em := storage.NewEventManager()
 	s := &Server{
-		Addr:           addr,
-		Registry:       reg,
-		Serial:         &Serializer{Registry: reg, Ctx: ctx},
-		Content:        content,
-		TypeIO:         ctx,
-		conns:          map[*Conn]struct{}{},
-		pending:        map[int32]*Conn{},
-		byUDP:          map[string]*Conn{},
-		banUUID:        map[string]string{},
-		banIP:          map[string]string{},
-		EventManager:   em,
-		BuildVersion:   buildVersion,
-		WorldDataFn:    defaultWorldData,
-		playerIDNext:   0,
-		Name:           "mdt-server",
-		Description:    "",
-		VirtualPlayers: 0,
-		entities:       map[int32]protocol.UnitSyncEntity{},
-		unitNext:       2000000000,
-		ops:            map[string]struct{}{},
-		UdpRetryCount:  2,
-		UdpRetryDelay:  5 * time.Millisecond,
+		Addr:               addr,
+		Registry:           reg,
+		Serial:             &Serializer{Registry: reg, Ctx: ctx},
+		Content:            content,
+		TypeIO:             ctx,
+		conns:              map[*Conn]struct{}{},
+		pending:            map[int32]*Conn{},
+		byUDP:              map[string]*Conn{},
+		banUUID:            map[string]string{},
+		banIP:              map[string]string{},
+		EventManager:       em,
+		BuildVersion:       buildVersion,
+		WorldDataFn:        defaultWorldData,
+		playerIDNext:       0,
+		Name:               "mdt-server",
+		Description:        "",
+		VirtualPlayers:     0,
+		entities:           map[int32]protocol.UnitSyncEntity{},
+		unitNext:           2000000000,
+		ops:                map[string]struct{}{},
+		UdpRetryCount:      2,
+		UdpRetryDelay:      5 * time.Millisecond,
 		UdpFallbackTCP:     true,
 		RespawnDelayFrames: 60,
 	}
@@ -213,14 +213,14 @@ func (s *Server) Serve() error {
 		}
 		s.addConn(conn)
 		s.addPending(conn)
-		
+
 		// 记录详细连接日志
 		if s.DevLogger != nil {
 			s.DevLogger.LogConnection("tcp accepted", conn.id, c.RemoteAddr().String(), "unknown", "")
 		} else {
 			fmt.Printf("[net] tcp accepted remote=%s id=%d\n", c.RemoteAddr().String(), conn.id)
 		}
-		
+
 		_ = conn.Send(&protocol.RegisterTCP{ConnectionID: conn.id})
 		s.emitEvent(conn, "tcp_accept", "", "")
 		go s.handleConn(conn)
@@ -235,7 +235,7 @@ func (s *Server) handleConn(c *Conn) {
 			s.emitEvent(c, "conn_panic", "", errText)
 		}
 		if c.hasConnected && c.playerID != 0 {
-			s.broadcastPlayerDisconnect(c.playerID)
+			s.broadcastPlayerDisconnect(c.playerID, c)
 		}
 		c.Close()
 		s.removeConn(c)
@@ -297,7 +297,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// Custom client compatibility: some client->server packets are not mapped.
 		// For custom clients, parse known build packet IDs and avoid aggressive respawn fallback.
 		switch v.ID {
-		case 9, 13: // BeginBreakCallPacket (compat ids)
+		case 9, 13, 123: // BeginBreakCallPacket (compat ids)
 			if s.OnBuildPlans != nil {
 				if plan, ok := decodeCompatBeginBreak(v.Payload, s.TypeIO); ok {
 					s.OnBuildPlans(c, []*protocol.BuildPlan{plan})
@@ -309,7 +309,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 					s.OnBuildPlans(c, []*protocol.BuildPlan{plan})
 				}
 			}
-		case 124, 134: // TileTapCallPacket / UnitControlCallPacket
+		case 124, 134: // BeginPlace/TileTapCallPacket / UnitControlCallPacket
 			if v.ID == 134 {
 				// UnitControl in compat mode should not force respawn directly.
 				// Respawn is handled by explicit UnitClear(133). Here we only handle control switch cleanup.
@@ -325,6 +325,13 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 					}
 				}
 				return
+			}
+			// Some clients use compat id=124 for beginPlace; try full beginPlace decode first.
+			if v.ID == 124 && s.OnBuildPlans != nil {
+				if plan, ok := decodeCompatBeginPlace(v.Payload, s.TypeIO); ok {
+					s.OnBuildPlans(c, []*protocol.BuildPlan{plan})
+					return
+				}
 			}
 			// Fallback build handling when client sends tile taps while in build mode.
 			if v.ID == 124 && s.OnBuildPlans != nil && c.building && len(v.Payload) >= 4 {
@@ -344,15 +351,15 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 		}
 		return
-case *CompatUnitClearPacket:
-	// Treat explicit UnitClear as a player respawn request (V/Q flow).
-	// Rate-limited to avoid spam loops from noisy clients.
-	// Ignore if player is already alive with a unit; some clients echo unitClear after spawn.
-	if c != nil && !c.dead && c.unitID != 0 {
+	case *CompatUnitClearPacket:
+		// Treat explicit UnitClear as a player respawn request (V/Q flow).
+		// Rate-limited to avoid spam loops from noisy clients.
+		// Ignore if player is already alive with a unit; some clients echo unitClear after spawn.
+		if c != nil && !c.dead && c.unitID != 0 {
+			return
+		}
+		s.requestRespawn(c, "compat-unitClear")
 		return
-	}
-	s.requestRespawn(c, "compat-unitClear")
-	return
 	case *protocol.ConnectPacket:
 		// 记录详细连接包日志
 		if s.DevLogger != nil {
@@ -364,7 +371,7 @@ case *CompatUnitClearPacket:
 			fmt.Printf("[net] connect packet id=%d name=%q version=%d type=%q mods=%d\n",
 				c.id, v.Name, v.Version, v.VersionType, len(v.Mods))
 		}
-		
+
 		if c.hasBegunConnecting {
 			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonIDInUse})
 			if s.DevLogger != nil {
@@ -409,9 +416,12 @@ case *CompatUnitClearPacket:
 		}
 		c.name = v.Name
 		c.uuid = v.UUID
+		c.versionType = strings.TrimSpace(v.VersionType)
 		c.color = v.Color
-		// Use compat packet IDs (matches working go-Mindustry-main behavior).
-		c.compatIDs = true
+		// This client family consistently decodes compat-style outgoing IDs.
+		// Keep recv/send both in compat mode by default.
+		c.recvCompatIDs = true
+		c.sendCompatIDs = true
 		if c.playerID == 0 {
 			c.playerID = s.nextPlayerID()
 		}
@@ -463,30 +473,48 @@ case *CompatUnitClearPacket:
 		c.boosting = v.Boosting
 		c.typing = v.Chatting
 		prevUnitID := c.unitID
-			if v.Dead {
-				// Only honor client-dead when server agrees the unit is missing or dead.
-				shouldDead := c.unitID == 0
-				if !shouldDead {
-					if s.UnitInfoFn != nil {
-						info, ok := s.UnitInfoFn(c.unitID)
-						if !ok || info.Health <= 0 {
-							shouldDead = true
-						}
-					} else {
-						s.entityMu.Lock()
-						_, ok := s.entities[c.unitID]
-						s.entityMu.Unlock()
-						if !ok {
-							shouldDead = true
+		if v.Dead {
+			// Only honor client-dead when server agrees the unit is missing or dead.
+			shouldDead := c.unitID == 0
+			if !shouldDead {
+				if s.UnitInfoFn != nil {
+					info, ok := s.UnitInfoFn(c.unitID)
+					if !ok || info.Health <= 0 {
+						shouldDead = true
+					}
+				} else {
+					s.entityMu.Lock()
+					_, ok := s.entities[c.unitID]
+					s.entityMu.Unlock()
+					if !ok {
+						shouldDead = true
 					}
 				}
 			}
-				if shouldDead {
-					s.markDead(c, "client-dead")
+			if shouldDead {
+				s.markDead(c, "client-dead")
+			}
+		}
+		if v.UnitID != 0 {
+			// Do not trust arbitrary client-reported unit IDs.
+			// Only adopt when it is already current, or when server entity ownership matches this player.
+			acceptUnitID := v.UnitID == c.unitID
+			if !acceptUnitID {
+				s.entityMu.Lock()
+				ent, exists := s.entities[v.UnitID]
+				s.entityMu.Unlock()
+				if exists {
+					if u, ok := ent.(*protocol.UnitEntitySync); ok {
+						if ctrl, ok := u.Controller.(*protocol.ControllerState); ok && ctrl != nil &&
+							ctrl.Type == protocol.ControllerPlayer && ctrl.PlayerID == c.playerID {
+							acceptUnitID = true
+						}
+					}
 				}
 			}
-		if v.UnitID != 0 {
-			c.unitID = v.UnitID
+			if acceptUnitID {
+				c.unitID = v.UnitID
+			}
 		} else if c.dead {
 			c.unitID = 0
 		}
@@ -505,7 +533,9 @@ case *CompatUnitClearPacket:
 			}
 		}
 	case *protocol.Remote_NetClient_ping_18:
-		_ = c.Send(&protocol.Remote_NetClient_pingResponse_19{Time: v.Time})
+		// Temporary compatibility: some 155 clients misdecode pingResponse call IDs.
+		// Keep connection alive via framework keepalive loop only.
+		_ = v
 	case *protocol.Remote_Units_unitSpawn_48:
 		// Handle unit spawn from server (unit from WorldStream)
 		// This is called when a unit is spawned on the server and needs to be synced to clients
@@ -760,15 +790,15 @@ case *CompatUnitClearPacket:
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 124, "Remote_Build_beginPlace_124", fmt.Sprintf("x=%d y=%d block=%d", v.X, v.Y, blockID))
 		}
-		if s.OnBuildPlans != nil {
-			// TODO: BlockBox 需要定义或使用其他结构
-			// s.OnBuildPlans(c, []*protocol.BuildPlan{{
-			// 	Breaking: false,
-			// 	X:        v.X,
-			// 	Y:        v.Y,
-			// 	Rotation: byte(v.Rotation),
-			// 	Block:    &protocol.BlockBox{id: blockID},
-			// }})
+		if s.OnBuildPlans != nil && blockID > 0 {
+			s.OnBuildPlans(c, []*protocol.BuildPlan{{
+				Breaking: false,
+				X:        v.X,
+				Y:        v.Y,
+				Rotation: byte(v.Rotation) & 0x03,
+				Block:    blockRef{id: blockID},
+				Config:   v.PlaceConfig,
+			}})
 		}
 	case *protocol.Remote_Tile_setFloor_128:
 		// 设置地板
@@ -864,6 +894,13 @@ case *CompatUnitClearPacket:
 				s.unitControl(c, unitID)
 			}
 		}
+	case *protocol.Remote_InputHandler_unitClear_91:
+		// 单位清除（玩家死亡/重生请求）
+		if s.DevLogger != nil {
+			s.DevLogger.LogPacketReceived(c.id, c.playerID, 91, "Remote_InputHandler_unitClear_91", "unit_clear")
+		}
+		// Treat unitClear as a player respawn request
+		s.requestRespawn(c, "unitClear-91")
 	case protocol.FrameworkMessage:
 		switch m := v.(type) {
 		case *protocol.Ping:
@@ -1157,7 +1194,8 @@ func extractBuildPlans(v any) []*protocol.BuildPlan {
 
 func decodeCompatBeginBreak(payload []byte, ctx *protocol.TypeIOContext) (*protocol.BuildPlan, bool) {
 	r := protocol.NewReaderWithContext(payload, ctx)
-	if _, err := protocol.ReadUnit(r, ctx); err != nil {
+	// beginBreak starts with unit object in call payload.
+	if _, err := protocol.ReadObject(r, false, ctx); err != nil {
 		return nil, false
 	}
 	if _, err := protocol.ReadTeam(r, ctx); err != nil {
@@ -1180,7 +1218,8 @@ func decodeCompatBeginBreak(payload []byte, ctx *protocol.TypeIOContext) (*proto
 
 func decodeCompatBeginPlace(payload []byte, ctx *protocol.TypeIOContext) (*protocol.BuildPlan, bool) {
 	r := protocol.NewReaderWithContext(payload, ctx)
-	if _, err := protocol.ReadUnit(r, ctx); err != nil {
+	// beginPlace starts with unit object in call payload.
+	if _, err := protocol.ReadObject(r, false, ctx); err != nil {
 		return nil, false
 	}
 	block, err := protocol.ReadBlock(r, ctx)
@@ -1373,13 +1412,15 @@ type Conn struct {
 	mu                  sync.Mutex
 	id                  int32
 	playerID            int32
-	compatIDs           bool
+	recvCompatIDs       bool
+	sendCompatIDs       bool
 	udpMu               sync.RWMutex
 	udpAddr             *net.UDPAddr
 	hasBegunConnecting  bool
 	hasConnected        bool
 	name                string
 	uuid                string
+	versionType         string
 	color               int32
 	snapX               float32
 	snapY               float32
@@ -1471,9 +1512,27 @@ func (c *Conn) ReadObject() (any, error) {
 			}
 		}
 		r := bytesReader(payload)
-		obj, err := c.serial.ReadObject(r)
+		obj, err := c.serial.ReadObjectMode(r, c.recvCompatIDs)
 		if err != nil {
-			return nil, err
+			// Early auto-fallback: probe opposite decode mode for mixed-ID clients.
+			if !c.hasConnected {
+				if altObj, altErr := c.serial.ReadObjectMode(bytesReader(payload), !c.recvCompatIDs); altErr == nil {
+					c.recvCompatIDs = !c.recvCompatIDs
+					fmt.Printf("[net] rx mode switch id=%d recvCompat=%v packet_id=%d\n", c.id, c.recvCompatIDs, c.lastRecvPacketID)
+					obj = altObj
+				} else {
+					return nil, err
+				}
+			} else {
+				return nil, err
+			}
+		}
+		if ignored, ok := obj.(*CompatIgnoredPacket); ok && !c.hasConnected {
+			if altObj, altErr := c.serial.ReadObjectMode(bytesReader(payload), !c.recvCompatIDs); altErr == nil {
+				c.recvCompatIDs = !c.recvCompatIDs
+				fmt.Printf("[net] rx mode switch(id=ignored) id=%d recvCompat=%v packet_id=%d ignored=%d\n", c.id, c.recvCompatIDs, c.lastRecvPacketID, ignored.ID)
+				obj = altObj
+			}
 		}
 		switch v := obj.(type) {
 		case *protocol.StreamBegin:
@@ -1513,7 +1572,7 @@ func (c *Conn) sendNow(obj any) error {
 	defer c.mu.Unlock()
 
 	buf := newBuffer()
-	if err := c.serial.WriteObjectCompat(buf, obj, c.compatIDs); err != nil {
+	if err := c.serial.WriteObjectCompat(buf, obj, c.sendCompatIDs); err != nil {
 		fmt.Printf("[net] sendNow encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 		return err
 	}
@@ -1529,12 +1588,9 @@ func (c *Conn) sendNow(obj any) error {
 			packetID = int(payload[0])
 		}
 	}
-	// Avoid flooding logs with world stream chunks and other noisy traffic.
-	switch obj.(type) {
-	case *protocol.StreamChunk, *protocol.StreamBegin:
-		// skip
-	default:
-		fmt.Printf("[net] sendNow id=%d packetID=%d obj=%T payloadLen=%d\n", c.id, packetID, obj, len(payload))
+	// Keep per-packet logs off by default to avoid log flood.
+	if packetID >= 0 && c.sendCount.Load() < 40 {
+		fmt.Printf("[net] tx id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 	}
 	if len(payload) > 0xFFFF {
 		return fmt.Errorf("payload too large: %d", len(payload))
@@ -1559,7 +1615,7 @@ func (c *Conn) sendNow(obj any) error {
 
 func (c *Conn) Encode(obj any) ([]byte, int, int, error) {
 	buf := newBuffer()
-	if err := c.serial.WriteObjectCompat(buf, obj, c.compatIDs); err != nil {
+	if err := c.serial.WriteObjectCompat(buf, obj, c.sendCompatIDs); err != nil {
 		return nil, -1, -1, err
 	}
 	payload := buf.Bytes()
@@ -1614,6 +1670,10 @@ func (c *Conn) PlayerID() int32 {
 
 func (c *Conn) UUID() string {
 	return c.uuid
+}
+
+func (c *Conn) VersionType() string {
+	return c.versionType
 }
 
 func (c *Conn) SnapshotPos() (float32, float32) {
@@ -2049,7 +2109,9 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 				fmt.Printf("[net] sendUnreliable encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 				return err
 			}
-			fmt.Printf("[net] sendUnreliable id=%d packetID=%d obj=%T payloadLen=%d\n", c.id, packetID, obj, len(payload))
+			if packetID >= 0 && c.sendCount.Load() < 80 {
+				fmt.Printf("[net] tx-udp id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
+			}
 			retries := s.UdpRetryCount
 			delay := s.UdpRetryDelay
 			if retries < 0 {
@@ -2105,6 +2167,10 @@ func (s *Server) sendPlayerSpawnAt(c *Conn, pos protocol.Point2) bool {
 	if c == nil || c.playerID == 0 {
 		return false
 	}
+	// Temporary: disable explicit playerSpawn call; this call ID is currently
+	// decoded as marker update by target 155 client variant and causes EOF.
+	fmt.Printf("[net] sendPlayerSpawn skipped(temp) id=%d tile=(%d,%d) playerID=%d\n", c.id, pos.X, pos.Y, c.playerID)
+	return true
 	tile := protocol.TileBox{PosValue: protocol.PackPoint2(pos.X, pos.Y)}
 	player := &protocol.EntityBox{IDValue: c.playerID}
 	fmt.Printf("[net] sendPlayerSpawn sending id=%d tile=(%d,%d) playerID=%d\n", c.id, pos.X, pos.Y, c.playerID)
@@ -2320,6 +2386,9 @@ func (s *Server) MarkUnitDead(unitID int32, source string) {
 }
 
 func (s *Server) buildPlayerEntitySnapshot() (int16, []byte, error) {
+	// TypeIO.WriteBytes uses int16 length; keep snapshot data under signed-short limit.
+	const maxEntitySnapshotData = 32000
+
 	s.mu.Lock()
 	players := make([]*Conn, 0, len(s.conns))
 	for c := range s.conns {
@@ -2331,32 +2400,45 @@ func (s *Server) buildPlayerEntitySnapshot() (int16, []byte, error) {
 
 	w := protocol.NewWriterWithContext(s.TypeIO)
 	var total int16
+	appendEntity := func(id int32, classID byte, syncWrite func(*protocol.Writer) error) error {
+		ew := protocol.NewWriterWithContext(s.TypeIO)
+		if err := ew.WriteInt32(id); err != nil {
+			return err
+		}
+		if err := ew.WriteByte(classID); err != nil {
+			return err
+		}
+		if err := syncWrite(ew); err != nil {
+			return err
+		}
+		entry := ew.Bytes()
+		if len(w.Bytes())+len(entry) > maxEntitySnapshotData {
+			return io.EOF
+		}
+		if err := w.WriteBytes(entry); err != nil {
+			return err
+		}
+		total++
+		return nil
+	}
 	for _, p := range players {
 		ent := s.ensurePlayerEntity(p)
 		s.updatePlayerEntity(ent, p)
-		if err := w.WriteInt32(ent.ID()); err != nil {
+		if err := appendEntity(ent.ID(), ent.ClassID(), ent.WriteSync); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
 			return 0, nil, err
 		}
-		if err := w.WriteByte(ent.ClassID()); err != nil {
-			return 0, nil, err
-		}
-		if err := ent.WriteSync(w); err != nil {
-			return 0, nil, err
-		}
-		total++
 		// Send currently controlled player unit entity when available.
 		unit := s.playerUnitEntity(p)
 		if unit != nil {
-			if err := w.WriteInt32(unit.ID()); err != nil {
+			if err := appendEntity(unit.ID(), unit.ClassID(), unit.WriteSync); err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
 				return 0, nil, err
 			}
-			if err := w.WriteByte(unit.ClassID()); err != nil {
-				return 0, nil, err
-			}
-			if err := unit.WriteSync(w); err != nil {
-				return 0, nil, err
-			}
-			total++
 		}
 	}
 	if s.ExtraEntitySnapshotFn != nil {
@@ -2365,6 +2447,9 @@ func (s *Server) buildPlayerEntitySnapshot() (int16, []byte, error) {
 			return 0, nil, err
 		}
 		total += n
+	}
+	if len(w.Bytes()) > maxEntitySnapshotData {
+		return total, w.Bytes()[:maxEntitySnapshotData], nil
 	}
 	return total, w.Bytes(), nil
 }
@@ -2518,28 +2603,28 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		}
 	}
 	u := &protocol.UnitEntitySync{
-		IDValue:       c.unitID,
-		Abilities:     []protocol.Ability{},
-		Ammo:          0,
-		Controller:    &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID},
-		Elevation:     1,
-		Flag:          0,
-		Health:        100,
-		Shooting:      false,
-		MineTile:      nil,
-		Mounts:        []protocol.WeaponMount{},
-		Plans:         []*protocol.BuildPlan{},
-		Rotation:      90,
-		Shield:        0,
-		SpawnedByCore: true,
-		Stack:         protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
-		Statuses:      []protocol.StatusEntry{},
-		TeamID:        1,
-		TypeID:        playerTypeID,
-		UpdateBuilding:false,
-		Vel:           protocol.Vec2{X: 0, Y: 0},
-		X:             c.snapX,
-		Y:             c.snapY,
+		IDValue:        c.unitID,
+		Abilities:      []protocol.Ability{},
+		Ammo:           0,
+		Controller:     &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID},
+		Elevation:      1,
+		Flag:           0,
+		Health:         100,
+		Shooting:       false,
+		MineTile:       nil,
+		Mounts:         []protocol.WeaponMount{},
+		Plans:          []*protocol.BuildPlan{},
+		Rotation:       90,
+		Shield:         0,
+		SpawnedByCore:  true,
+		Stack:          protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
+		Statuses:       []protocol.StatusEntry{},
+		TeamID:         1,
+		TypeID:         playerTypeID,
+		UpdateBuilding: false,
+		Vel:            protocol.Vec2{X: 0, Y: 0},
+		X:              c.snapX,
+		Y:              c.snapY,
 	}
 	s.syncUnitFromWorld(u)
 	s.entities[c.unitID] = u
@@ -2608,10 +2693,13 @@ func (s *Server) dropPlayerUnitEntity(c *Conn, unitID int32) {
 	}
 }
 
-func (s *Server) broadcastPlayerDisconnect(playerID int32) {
+func (s *Server) broadcastPlayerDisconnect(playerID int32, except *Conn) {
 	s.mu.Lock()
 	peers := make([]*Conn, 0, len(s.conns))
 	for c := range s.conns {
+		if c == nil || c == except {
+			continue
+		}
 		peers = append(peers, c)
 	}
 	s.mu.Unlock()
@@ -2633,7 +2721,7 @@ func (s *Server) addEntity(u protocol.Unit) {
 		// This is a simplified approach - in practice, units should already be UnitSyncEntity
 		return
 	}
-	
+
 	s.entityMu.Lock()
 	defer s.entityMu.Unlock()
 	id := syncEnt.ID()
@@ -3033,26 +3121,26 @@ func (s *Server) unitControl(c *Conn, unitID int32) {
 	}
 	if u == nil {
 		u = &protocol.UnitEntitySync{
-			IDValue:       unitID,
-			Abilities:     []protocol.Ability{},
-			Controller:    nil,
-			Elevation:     0,
-			Flag:          0,
-			Health:        info.Health,
-			Shooting:      false,
-			Mounts:        []protocol.WeaponMount{},
-			Plans:         []*protocol.BuildPlan{},
-			Rotation:      0,
-			Shield:        0,
-			SpawnedByCore: false,
-			Stack:         protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
-			Statuses:      []protocol.StatusEntry{},
-			TeamID:        info.TeamID,
-			TypeID:        info.TypeID,
-			UpdateBuilding:false,
-			Vel:           protocol.Vec2{X: 0, Y: 0},
-			X:             info.X,
-			Y:             info.Y,
+			IDValue:        unitID,
+			Abilities:      []protocol.Ability{},
+			Controller:     nil,
+			Elevation:      0,
+			Flag:           0,
+			Health:         info.Health,
+			Shooting:       false,
+			Mounts:         []protocol.WeaponMount{},
+			Plans:          []*protocol.BuildPlan{},
+			Rotation:       0,
+			Shield:         0,
+			SpawnedByCore:  false,
+			Stack:          protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
+			Statuses:       []protocol.StatusEntry{},
+			TeamID:         info.TeamID,
+			TypeID:         info.TypeID,
+			UpdateBuilding: false,
+			Vel:            protocol.Vec2{X: 0, Y: 0},
+			X:              info.X,
+			Y:              info.Y,
 		}
 		s.entities[unitID] = u
 	}

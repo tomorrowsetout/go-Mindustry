@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
+	"regexp"
+	"strconv"
 
 	"github.com/pierrec/lz4/v4"
 
@@ -49,7 +52,10 @@ func compatPacketID(p protocol.Packet) (byte, bool) {
 	case *protocol.Remote_NetClient_playerDisconnect_31:
 		return 67, true
 	case *protocol.Remote_CoreBlock_playerSpawn_140:
-		return 68, true
+		// 68 is interpreted by official 155 clients as UnitSpawnCallPacket,
+		// which crashes when payload is actually CoreBlock.playerSpawn.
+		// Keep this aligned with registry id for build 155.
+		return 144, true
 	case *protocol.Remote_NetClient_sendMessage_15:
 		return 82, true
 	case *protocol.Remote_NetClient_sendMessage_14:
@@ -58,14 +64,51 @@ func compatPacketID(p protocol.Packet) (byte, bool) {
 		return 117, true
 	case *protocol.Remote_Tile_buildHealthUpdate_135:
 		return 13, true
+	case *protocol.Remote_ConstructBlock_deconstructFinish_136:
+		return 136, true
+	case *protocol.Remote_ConstructBlock_constructFinish_137:
+		return 137, true
+	case *protocol.Remote_Tile_removeTile_130:
+		return 130, true
 	case *protocol.Remote_InputHandler_unitClear_91:
 		return 133, true
 	}
 	return 0, false
 }
 
+var reRemoteSuffixID = regexp.MustCompile(`_(\d+)$`)
+
+// officialPacketID maps generated Remote_*_*_NNN packet types to their Java call IDs (NNN).
+// This keeps parity with official clients where remote call IDs are not offset by stream/base packets.
+func officialPacketID(p protocol.Packet) (byte, bool) {
+	if p == nil {
+		return 0, false
+	}
+	t := reflect.TypeOf(p)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	name := t.Name()
+	m := reRemoteSuffixID.FindStringSubmatch(name)
+	if len(m) != 2 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n < 0 || n > 255 {
+		return 0, false
+	}
+	return byte(n), true
+}
+
 // ReadObject reads a single framed object from buf.
 func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
+	return s.ReadObjectMode(buf, true)
+}
+
+// ReadObjectMode reads a single framed object with packet-ID mode.
+// compat=true: custom compat mapping mode.
+// compat=false: official call-id mode.
+func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error) {
 	id, err := buf.ReadByte()
 	if err != nil {
 		return nil, err
@@ -101,47 +144,63 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 		return nil, ErrCompressedUnsupported
 	}
 
-	// Compatibility path: user custom 155.4 client observed IDs.
-	switch id {
-	case 29: // ConnectConfirmCallPacket (custom 155.4)
-		return &protocol.Remote_NetServer_connectConfirm_47{}, nil
-	case 24: // ClientSnapshotCallPacket (custom 155.4)
-		if snap, err := readClientSnapshotCompat(payload, s.Ctx); err == nil {
-			return snap, nil
-		}
-	case 65: // PingCallPacket (custom 155.4, payload is int64 only)
-		if len(payload) >= 8 {
-			t := int64(binary.BigEndian.Uint64(payload[:8]))
-			return &protocol.Remote_NetClient_ping_18{Time: t}, nil
-		}
-	case 81: // SendChatMessageCallPacket(message)
-		if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
-			return msg, nil
-		}
-	case 133: // UnitClearCallPacket (client->server carries no fields)
-		return &CompatUnitClearPacket{}, nil
-	}
-	// For this custom client, many other IDs are currently not aligned with
-	// generated registry order. Ignore them instead of mis-parsing and forcing
-	// disconnects.
-	if id >= 4 {
-		return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-	}
-
-	p, err := s.Registry.NewPacket(id)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.Read(protocol.NewReaderWithContext(payload, s.Ctx), int(length)); err != nil {
-		// Compatibility fallback for older modified mappings.
-		if id == 25 {
-			if snap, ferr := readClientSnapshotCompat(payload, s.Ctx); ferr == nil {
+	if compat {
+		// Compatibility path: user custom 155.4 client observed IDs.
+		switch id {
+		case 29: // ConnectConfirmCallPacket (custom 155.4)
+			return &protocol.Remote_NetServer_connectConfirm_47{}, nil
+		case 24: // ClientSnapshotCallPacket (custom 155.4)
+			if snap, err := readClientSnapshotCompat(payload, s.Ctx); err == nil {
 				return snap, nil
 			}
+		case 65: // PingCallPacket (custom 155.4, payload is int64 only)
+			if len(payload) >= 8 {
+				t := int64(binary.BigEndian.Uint64(payload[:8]))
+				return &protocol.Remote_NetClient_ping_18{Time: t}, nil
+			}
+		case 81: // SendChatMessageCallPacket(message)
+			if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
+				return msg, nil
+			}
+		case 133: // UnitClearCallPacket (client->server carries no fields)
+			return &CompatUnitClearPacket{}, nil
 		}
-		return nil, err
 	}
-	return p, nil
+
+	tryRead := func(pid byte) (any, bool) {
+		p, nerr := s.Registry.NewPacket(pid)
+		if nerr != nil {
+			return nil, false
+		}
+		if rerr := p.Read(protocol.NewReaderWithContext(payload, s.Ctx), int(length)); rerr != nil {
+			return nil, false
+		}
+		return p, true
+	}
+
+	if !compat {
+		// Official call IDs: stream/base packets keep their IDs; remote packets are shifted by +4 in registry.
+		if id >= 4 {
+			if obj, ok := tryRead(id + 4); ok {
+				return obj, nil
+			}
+		}
+		if obj, ok := tryRead(id); ok {
+			return obj, nil
+		}
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	if obj, ok := tryRead(id); ok {
+		return obj, nil
+	}
+	// Compatibility fallback for older modified mappings.
+	if id == 25 {
+		if snap, ferr := readClientSnapshotCompat(payload, s.Ctx); ferr == nil {
+			return snap, nil
+		}
+	}
+	return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
 }
 
 func readClientSnapshotCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_NetServer_clientSnapshot_45, error) {
@@ -242,6 +301,8 @@ func (s *Serializer) writeObject(buf *bytes.Buffer, obj any, compat bool) error 
 		var ok bool
 		if compat {
 			id, ok = compatPacketID(v)
+		} else {
+			id, ok = officialPacketID(v)
 		}
 		if !ok {
 			id, ok = s.Registry.PacketID(v)
