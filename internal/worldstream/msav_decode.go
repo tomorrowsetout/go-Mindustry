@@ -235,15 +235,25 @@ func decodeEntitiesChunk(chunk []byte, model *world.WorldModel) error {
 		if err != nil {
 			return err
 		}
+		// Read maxHealth from MSAV format (added after payload in newer versions)
+		// If we run out of data, use health as maxHealth (fallback for older saves)
+		maxHealth := health
+		// Check if we have at least 4 bytes remaining (float32 size)
+		if r.buf.Len() >= 4 {
+			if mh, err := r.ReadFloat32(); err == nil {
+				maxHealth = mh
+			}
+		}
 		build := &world.Building{
-			Block:    world.BlockID(blockID),
-			Team:     world.TeamID(team),
-			Rotation: int8(rot),
-			X:        t.X,
-			Y:        t.Y,
-			Health:   health,
-			Config:   config,
-			Payload:  payload,
+			Block:     world.BlockID(blockID),
+			Team:      world.TeamID(team),
+			Rotation:  int8(rot),
+			X:         t.X,
+			Y:         t.Y,
+			Health:    health,
+			MaxHealth: maxHealth,
+			Config:    config,
+			Payload:   payload,
 		}
 		t.Build = build
 		t.Block = world.BlockID(blockID)

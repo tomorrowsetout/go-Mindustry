@@ -24,6 +24,7 @@ import (
 	"mdt-server/internal/api"
 	"mdt-server/internal/bootstrap"
 	"mdt-server/internal/buildinfo"
+	"mdt-server/internal/buildsvc"
 	"mdt-server/internal/config"
 	"mdt-server/internal/devlog"
 	"mdt-server/internal/logging"
@@ -140,26 +141,26 @@ func printUnitIDList(unitNames map[int16]string) {
 }
 
 type mapLoadStats struct {
-	width         int
-	height        int
-	tiles         int
-	blocks        int
-	builds        int
-	cores         int
-	entities      int
-	units         int
-	blockKinds    int
-	floorKinds    int
-	overlayKinds  int
-	tags          int
-	msavVersion   int32
-	contentBytes  int
-	patchBytes    int
-	rawMapBytes   int
-	rawEntBytes   int
-	markerBytes   int
-	customBytes   int
-	hasRulesTag   bool
+	width        int
+	height       int
+	tiles        int
+	blocks       int
+	builds       int
+	cores        int
+	entities     int
+	units        int
+	blockKinds   int
+	floorKinds   int
+	overlayKinds int
+	tags         int
+	msavVersion  int32
+	contentBytes int
+	patchBytes   int
+	rawMapBytes  int
+	rawEntBytes  int
+	markerBytes  int
+	customBytes  int
+	hasRulesTag  bool
 }
 
 func computeMapLoadStats(model *world.WorldModel) mapLoadStats {
@@ -167,13 +168,13 @@ func computeMapLoadStats(model *world.WorldModel) mapLoadStats {
 		return mapLoadStats{}
 	}
 	stats := mapLoadStats{
-		width:       model.Width,
-		height:      model.Height,
-		tiles:       len(model.Tiles),
-		entities:    len(model.Entities),
-		units:       len(model.Units),
-		tags:        len(model.Tags),
-		msavVersion: model.MSAVVersion,
+		width:        model.Width,
+		height:       model.Height,
+		tiles:        len(model.Tiles),
+		entities:     len(model.Entities),
+		units:        len(model.Units),
+		tags:         len(model.Tags),
+		msavVersion:  model.MSAVVersion,
 		contentBytes: len(model.Content),
 		patchBytes:   len(model.Patches),
 		rawMapBytes:  len(model.RawMap),
@@ -343,6 +344,13 @@ func main() {
 	fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 
 	srv := netserver.NewServer(*addr, *buildVersion)
+	contentIDsPath := filepath.FromSlash("data/vanilla/content_ids.json")
+	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
+		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
+	} else {
+		count := vanilla.ApplyContentIDs(srv.Content, ids)
+		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
+	}
 	srv.SetServerName(cfg.Runtime.ServerName)
 	srv.SetServerDescription(cfg.Runtime.ServerDesc)
 	srv.SetVirtualPlayers(int32(cfg.Runtime.VirtualPlayers))
@@ -351,6 +359,11 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	buildService := buildsvc.New(wld, buildsvc.Options{
+		MaxQueuedBatches: 256,
+		MaxPlansPerBatch: 20,
+		MaxOpsPerTick:    64,
+	})
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
 			return 0, 0, false
@@ -400,6 +413,7 @@ func main() {
 		startup.ok("原版 profiles", cfg.Runtime.VanillaProfiles)
 	}
 	loadWorldModel := func(path string) {
+		buildService.Reset()
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
 			wld.SetModel(nil)
@@ -539,28 +553,7 @@ func main() {
 		if c == nil || len(plans) == 0 {
 			return
 		}
-		ops := make([]world.BuildPlanOp, 0, len(plans))
-		for _, p := range plans {
-			if p == nil {
-				continue
-			}
-			blockID := int16(0)
-			if p.Block != nil {
-				blockID = p.Block.ID()
-			}
-			ops = append(ops, world.BuildPlanOp{
-				Breaking: p.Breaking,
-				X:        p.X,
-				Y:        p.Y,
-				Rotation: int8(p.Rotation),
-				BlockID:  blockID,
-			})
-		}
-		if len(ops) == 0 {
-			return
-		}
-		changed := wld.ApplyBuildPlans(world.TeamID(1), ops)
-		_ = changed
+		buildService.EnqueuePlans(world.TeamID(1), plans)
 	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
@@ -568,7 +561,8 @@ func main() {
 	srv.StateSnapshotFn = func() *protocol.Remote_NetClient_stateSnapshot_35 {
 		snap := wld.Snapshot()
 		return &protocol.Remote_NetClient_stateSnapshot_35{
-			WaveTime: snap.WaveTime,
+			// Mindustry state.wavetime is in "tick" units (~60 per second).
+			WaveTime: snap.WaveTime * 60,
 			Wave:     snap.Wave,
 			Enemies:  snap.Enemies,
 			Paused:   snap.Paused,
@@ -581,55 +575,10 @@ func main() {
 		}
 	}
 	srv.ExtraEntitySnapshotFn = func(w *protocol.Writer) (int16, error) {
-		model := wld.Model()
-		if model == nil || len(model.Entities) == 0 {
-			return 0, nil
-		}
-		playerUnits := srv.PlayerUnitIDSet()
-		count := int16(0)
-		for _, e := range model.Entities {
-			if e.TypeID < 0 || e.ID == 0 {
-				continue
-			}
-			if _, ok := playerUnits[e.ID]; ok {
-				continue
-			}
-			ent := &protocol.UnitEntitySync{
-				IDValue:        e.ID,
-				Abilities:      []protocol.Ability{},
-				Ammo:           0,
-				Controller:     nil, // GenericAI in WriteController
-				Elevation:      0,
-				Flag:           0,
-				Health:         e.Health,
-				Shooting:       e.AttackCooldown > 0.55*e.AttackInterval,
-				MineTile:       nil,
-				Mounts:         []protocol.WeaponMount{},
-				Plans:          []*protocol.BuildPlan{},
-				Rotation:       e.Rotation,
-				Shield:         0,
-				SpawnedByCore:  false,
-				Stack:          protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
-				Statuses:       []protocol.StatusEntry{},
-				TeamID:         byte(e.Team),
-				TypeID:         e.TypeID,
-				UpdateBuilding: false,
-				Vel:            protocol.Vec2{X: e.VelX, Y: e.VelY},
-				X:              e.X,
-				Y:              e.Y,
-			}
-			if err := w.WriteInt32(ent.ID()); err != nil {
-				return 0, err
-			}
-			if err := w.WriteByte(ent.ClassID()); err != nil {
-				return 0, err
-			}
-			if err := ent.WriteSync(w); err != nil {
-				return 0, err
-			}
-			count++
-		}
-		return count, nil
+		// Disabled for now: full-map entity sync can exceed TypeIO int16 byte-array limits
+		// and corrupt packet decoding on official clients.
+		_ = w
+		return 0, nil
 	}
 	go func() {
 		t := time.NewTicker(100 * time.Millisecond)
@@ -1023,6 +972,7 @@ func main() {
 		})
 		engine.SetWork(func(ctx sim.TickContext, p sim.Partition) {
 			if p.ID == 0 {
+				buildService.Tick()
 				wld.Step(ctx.Delta)
 			}
 		})
@@ -1033,6 +983,7 @@ func main() {
 			t := time.NewTicker(interval)
 			defer t.Stop()
 			for range t.C {
+				buildService.Tick()
 				wld.Step(interval)
 			}
 		}()
@@ -1193,13 +1144,21 @@ func main() {
 	reloadVanillaProfiles := func(path string) error {
 		return wld.LoadVanillaProfiles(path)
 	}
+	reloadVanillaContentIDs := func(path string) error {
+		ids, err := vanilla.LoadContentIDs(path)
+		if err != nil {
+			return err
+		}
+		_ = vanilla.ApplyContentIDs(srv.Content, ids)
+		return nil
+	}
 	startup.ok("服务端启动", "初始化完成")
 	startup.print()
 	if loadedModel != nil {
 		printMapDetails(loadedMapPath, loadedModel)
 	}
 	printUnitIDList(unitNamesByID)
-	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, reloadVanillaProfiles, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
+	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, reloadVanillaProfiles, reloadVanillaContentIDs, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
 	if err := srv.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "服务器启动失败: %v\n", err)
 		os.Exit(1)
@@ -1234,6 +1193,7 @@ func runConsole(
 	saveOps func(),
 	loadWorldModel func(path string),
 	reloadVanillaProfiles func(path string) error,
+	reloadVanillaContentIDs func(path string) error,
 	removeEntityByID func(id int32) bool,
 	setEntityMotion func(id int32, vx, vy, rotVel float32) bool,
 	setEntityPos func(id int32, x, y, rot float32) bool,
@@ -1512,6 +1472,7 @@ func runConsole(
 		case "vanilla":
 			if len(parts) == 1 || strings.EqualFold(parts[1], "status") {
 				fmt.Printf("vanilla profiles: %s\n", cfg.Runtime.VanillaProfiles)
+				fmt.Printf("vanilla content ids: %s\n", filepath.FromSlash("data/vanilla/content_ids.json"))
 				continue
 			}
 			sub := strings.ToLower(parts[1])
@@ -1546,8 +1507,49 @@ func runConsole(
 					continue
 				}
 				fmt.Printf("vanilla profiles 生成并加载完成: units_by_name=%d turrets=%d path=%s\n", units, turrets, out)
+			case "ids":
+				if len(parts) < 3 {
+					fmt.Println("用法: vanilla ids gen [repoRoot] [outPath] | vanilla ids reload [path]")
+					continue
+				}
+				sub2 := strings.ToLower(parts[2])
+				switch sub2 {
+				case "gen":
+					repo := "."
+					out := filepath.FromSlash("data/vanilla/content_ids.json")
+					if len(parts) >= 4 {
+						repo = strings.TrimSpace(parts[3])
+					}
+					if len(parts) >= 5 {
+						out = strings.TrimSpace(strings.Join(parts[4:], " "))
+					}
+					ids, err := vanilla.GenerateContentIDs(repo, out)
+					if err != nil {
+						fmt.Printf("vanilla ids gen 失败: %v\n", err)
+						continue
+					}
+					if err := reloadVanillaContentIDs(out); err != nil {
+						fmt.Printf("vanilla ids 已生成但加载失败: %v\n", err)
+						continue
+					}
+					fmt.Printf("vanilla ids 生成并加载完成: blocks=%d units=%d items=%d liquids=%d statuses=%d weathers=%d bullets=%d effects=%d sounds=%d teams=%d commands=%d stances=%d path=%s\n",
+						len(ids.Blocks), len(ids.Units), len(ids.Items), len(ids.Liquids), len(ids.Statuses), len(ids.Weathers), len(ids.Bullets),
+						len(ids.Effects), len(ids.Sounds), len(ids.Teams), len(ids.Commands), len(ids.Stances), out)
+				case "reload":
+					path := filepath.FromSlash("data/vanilla/content_ids.json")
+					if len(parts) >= 4 {
+						path = strings.TrimSpace(strings.Join(parts[3:], " "))
+					}
+					if err := reloadVanillaContentIDs(path); err != nil {
+						fmt.Printf("vanilla ids reload 失败: %v\n", err)
+						continue
+					}
+					fmt.Printf("vanilla content ids 已加载: %s\n", path)
+				default:
+					fmt.Println("用法: vanilla ids gen [repoRoot] [outPath] | vanilla ids reload [path]")
+				}
 			default:
-				fmt.Println("用法: vanilla status | vanilla reload [path] | vanilla gen [path]")
+				fmt.Println("用法: vanilla status | vanilla reload [path] | vanilla gen [path] | vanilla ids gen [repoRoot] [outPath] | vanilla ids reload [path]")
 			}
 		case "players":
 			sessions := srv.ListSessions()
@@ -2036,6 +2038,8 @@ func printHelpCategory(cfg config.Config, category string) {
 		printHelpCmd("vanilla status", "查看原版参数文件路径")
 		printHelpCmd("vanilla reload [path]", "重载原版参数文件（可选修改路径并写入配置）")
 		printHelpCmd("vanilla gen [path]", "从原版源码自动生成并加载 profiles.json")
+		printHelpCmd("vanilla ids gen [repoRoot] [outPath]", "从原版源码/logicids.dat 生成并加载 content IDs")
+		printHelpCmd("vanilla ids reload [path]", "重载 content IDs 到协议内容注册表")
 		fmt.Printf("  当前文件: %s\n", cfg.Runtime.VanillaProfiles)
 	case "runtime":
 		printHelpCmd("status", "输出服务器资源状态")
@@ -2482,16 +2486,27 @@ func broadcastSummonVisible(srv *netserver.Server, typeID int16, x, y float32, t
 }
 
 func broadcastUnitDestroy(srv *netserver.Server, entityID int32) {
-	_ = srv
-	_ = entityID
-	// Disabled in compatibility mode: packet ID mapping differs in custom clients
-	// and can be decoded as other packet types, causing disconnect/crash.
+	if srv == nil || entityID == 0 {
+		return
+	}
+	srv.Broadcast(&protocol.Remote_Units_unitDestroy_52{Uid: entityID})
 }
 
 func broadcastBuildDestroyed(srv *netserver.Server, buildPos int32) {
-	_ = srv
-	_ = buildPos
-	// Disabled in compatibility mode for now; use buildHealthUpdate path.
+	if srv == nil || buildPos < 0 {
+		return
+	}
+	// Send beginBreak first (client->server request), then deconstructFinish (server->client confirmation)
+	// For server-initiated broadcast, we send deconstructFinish directly
+	srv.Broadcast(&protocol.Remote_ConstructBlock_deconstructFinish_136{
+		Tile:    protocol.TileBox{PosValue: buildPos},
+		Block:   blockRef{id: 0}, // block ID unknown, use 0
+		Builder: protocol.UnitBox{IDValue: 0}, // 0 for server
+	})
+	// Also send removeTile for compatibility
+	srv.Broadcast(&protocol.Remote_Tile_removeTile_130{
+		Tile: protocol.TileBox{PosValue: buildPos},
+	})
 }
 
 func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
@@ -2504,13 +2519,26 @@ func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
 }
 
 func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte) {
-	_ = srv
-	_ = buildPos
-	_ = blockID
-	_ = rot
-	_ = team
-	// Disabled temporarily: some clients decode this path as UnitSpawn and crash (id=141).
-	// buildHealthUpdate still keeps build progress visible.
+	if srv == nil || buildPos < 0 || blockID <= 0 {
+		return
+	}
+	// Compatibility path: avoid constructFinish(137), it still crashes some official clients.
+	// Force clear + set tile directly.
+	srv.Broadcast(&protocol.Remote_Tile_removeTile_130{
+		Tile: protocol.TileBox{PosValue: buildPos},
+	})
+	srv.Broadcast(&protocol.Remote_Tile_setTile_131{
+		Tile:     protocol.TileBox{PosValue: buildPos},
+		Block:    blockRef{id: blockID},
+		Team:     protocol.Team{ID: team},
+		Rotation: int32(rot) & 0x3,
+	})
+	// Force client to refresh construct state -> real building state.
+	srv.Broadcast(&protocol.Remote_Tile_buildHealthUpdate_135{
+		Buildings: protocol.IntSeq{Items: []int32{
+			buildPos, int32(math.Float32bits(1000)),
+		}},
+	})
 }
 
 func broadcastBulletCreate(srv *netserver.Server, b world.BulletEvent) {

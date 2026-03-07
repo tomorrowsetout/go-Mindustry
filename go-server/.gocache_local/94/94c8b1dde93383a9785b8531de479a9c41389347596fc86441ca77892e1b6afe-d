@@ -1,0 +1,6 @@
+# test log
+getenv GOTMPDIR
+open C:\Users\43551\AppData\Local\Temp\TestLoadConfig2316752177\001\config.json
+stat C:\Users\43551\AppData\Local\Temp\TestLoadConfig2316752177\001\config.json
+open C:\Users\43551\AppData\Local\Temp\TestLoadConfig2316752177\001\config.json
+open C:\Users\43551\AppData\Local\Temp
