@@ -7,6 +7,7 @@ type ContentType byte
 type Content interface {
 	ContentType() ContentType
 	ID() int16
+	Name() string
 }
 
 type Block interface{ Content }
@@ -20,21 +21,25 @@ type StatusEffect interface {
 }
 
 type statusEffectBox struct {
-	id int16
+	id   int16
+	name string
 }
 
 func (s statusEffectBox) ContentType() ContentType { return ContentStatus }
 func (s statusEffectBox) ID() int16                { return s.id }
 func (s statusEffectBox) Dynamic() bool            { return false }
+func (s statusEffectBox) Name() string             { return s.name }
 
 type Weather interface{ Content }
 
 type Effect struct {
-	ID int16
+	ID   int16
+	Name string
 }
 
 type Sound struct {
-	ID int16
+	ID   int16
+	Name string
 }
 
 // Content type IDs mirror mindustry.ctype.ContentType order.
@@ -52,12 +57,14 @@ const (
 )
 
 type contentBox struct {
-	typ ContentType
-	id  int16
+	typ  ContentType
+	id   int16
+	name string
 }
 
 func (c contentBox) ContentType() ContentType { return c.typ }
 func (c contentBox) ID() int16                { return c.id }
+func (c contentBox) Name() string             { return c.name }
 
 type ContentMapper interface {
 	Get(t ContentType, id int16) Content
@@ -142,15 +149,18 @@ type CommandTarget struct {
 }
 
 type Team struct {
-	ID byte
+	ID   byte
+	Name string
 }
 
 type UnitCommand struct {
-	ID int16
+	ID   int16
+	Name string
 }
 
 type UnitStance struct {
-	ID int16
+	ID   int16
+	Name string
 }
 
 type LAccess uint16
@@ -167,6 +177,26 @@ type Point2 struct {
 	X int32
 	Y int32
 }
+
+// BlockRef is a lightweight block reference for network packets.
+type BlockRef struct {
+	BlkID   int16
+	BlkName string
+}
+
+func (b BlockRef) ContentType() ContentType { return ContentBlock }
+func (b BlockRef) ID() int16                { return b.BlkID }
+func (b BlockRef) Name() string             { return b.BlkName }
+
+// ItemRef is a lightweight item reference for network packets.
+type ItemRef struct {
+	ItmID   int16
+	ItmName string
+}
+
+func (i ItemRef) ContentType() ContentType { return ContentItem }
+func (i ItemRef) ID() int16                { return i.ItmID }
+func (i ItemRef) Name() string             { return i.ItmName }
 
 func PackPoint2(x, y int32) int32 {
 	return (x&0xFFFF)<<16 | (y & 0xFFFF)

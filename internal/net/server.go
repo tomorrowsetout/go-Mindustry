@@ -345,7 +345,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 					Rotation: byte(c.selectedRotation),
 				}
 				if !breaking {
-					plan.Block = blockRef{id: c.selectedBlockID}
+					plan.Block = protocol.BlockRef{BlkID: c.selectedBlockID, BlkName: ""}
 				}
 				s.OnBuildPlans(c, []*protocol.BuildPlan{plan})
 			}
@@ -418,10 +418,12 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		c.uuid = v.UUID
 		c.versionType = strings.TrimSpace(v.VersionType)
 		c.color = v.Color
-		// This client family consistently decodes compat-style outgoing IDs.
-		// Keep recv/send both in compat mode by default.
-		c.recvCompatIDs = true
-		c.sendCompatIDs = true
+		// Use official call IDs for official clients; keep compat IDs only for
+		// non-official/custom clients.
+		vt := strings.ToLower(strings.TrimSpace(c.versionType))
+		isOfficial := vt == "" || vt == "official" || strings.Contains(vt, "official")
+		c.recvCompatIDs = !isOfficial
+		c.sendCompatIDs = !isOfficial
 		if c.playerID == 0 {
 			c.playerID = s.nextPlayerID()
 		}
@@ -796,7 +798,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				X:        v.X,
 				Y:        v.Y,
 				Rotation: byte(v.Rotation) & 0x03,
-				Block:    blockRef{id: blockID},
+				Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},
 				Config:   v.PlaceConfig,
 			}})
 		}
@@ -1250,23 +1252,9 @@ func decodeCompatBeginPlace(payload []byte, ctx *protocol.TypeIOContext) (*proto
 		X:        x,
 		Y:        y,
 		Rotation: byte(rot),
-		Block:    blockRef{id: block.ID()},
+		Block:    protocol.BlockRef{BlkID: block.ID(), BlkName: ""},
 	}, true
 }
-
-type blockRef struct {
-	id int16
-}
-
-func (b blockRef) ContentType() protocol.ContentType { return protocol.ContentBlock }
-func (b blockRef) ID() int16                         { return b.id }
-
-type itemRef struct {
-	id int16
-}
-
-func (i itemRef) ContentType() protocol.ContentType { return protocol.ContentItem }
-func (i itemRef) ID() int16                         { return i.id }
 
 func sanitizeChatMessage(s string) string {
 	s = strings.ReplaceAll(s, "\n", "")
@@ -2167,10 +2155,6 @@ func (s *Server) sendPlayerSpawnAt(c *Conn, pos protocol.Point2) bool {
 	if c == nil || c.playerID == 0 {
 		return false
 	}
-	// Temporary: disable explicit playerSpawn call; this call ID is currently
-	// decoded as marker update by target 155 client variant and causes EOF.
-	fmt.Printf("[net] sendPlayerSpawn skipped(temp) id=%d tile=(%d,%d) playerID=%d\n", c.id, pos.X, pos.Y, c.playerID)
-	return true
 	tile := protocol.TileBox{PosValue: protocol.PackPoint2(pos.X, pos.Y)}
 	player := &protocol.EntityBox{IDValue: c.playerID}
 	fmt.Printf("[net] sendPlayerSpawn sending id=%d tile=(%d,%d) playerID=%d\n", c.id, pos.X, pos.Y, c.playerID)
@@ -2584,7 +2568,7 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 				u.Statuses = []protocol.StatusEntry{}
 			}
 			if u.Stack.Item == nil {
-				u.Stack.Item = itemRef{id: 0}
+				u.Stack.Item = protocol.ItemRef{ItmID: 0, ItmName: ""}
 				u.Stack.Amount = 0
 			}
 			s.syncUnitFromWorld(u)
@@ -2617,7 +2601,7 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		Rotation:       90,
 		Shield:         0,
 		SpawnedByCore:  true,
-		Stack:          protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
+		Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}, Amount: 0},
 		Statuses:       []protocol.StatusEntry{},
 		TeamID:         1,
 		TypeID:         playerTypeID,
@@ -3133,7 +3117,7 @@ func (s *Server) unitControl(c *Conn, unitID int32) {
 			Rotation:       0,
 			Shield:         0,
 			SpawnedByCore:  false,
-			Stack:          protocol.ItemStack{Item: itemRef{id: 0}, Amount: 0},
+			Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}, Amount: 0},
 			Statuses:       []protocol.StatusEntry{},
 			TeamID:         info.TeamID,
 			TypeID:         info.TypeID,

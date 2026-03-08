@@ -3,12 +3,13 @@ package worldstream
 import (
 	"fmt"
 
+	"mdt-server/internal/protocol"
 	"mdt-server/internal/world"
 )
 
 // LoadWorldModelFromMSAV decodes the map chunk into a WorldModel.
 // It does not deserialize full entities/building state yet.
-func LoadWorldModelFromMSAV(path string) (*world.WorldModel, error) {
+func LoadWorldModelFromMSAV(path string, content *protocol.ContentRegistry) (*world.WorldModel, error) {
 	data, err := readMSAV(path)
 	if err != nil {
 		return nil, err
@@ -25,10 +26,10 @@ func LoadWorldModelFromMSAV(path string) (*world.WorldModel, error) {
 	model.RawEntities = data.RawEntities
 	model.Markers = data.Markers
 	model.Custom = data.Custom
-	if blockNames, err := readContentBlockNames(data.Content); err == nil {
+	if blockNames, err := readContentBlockNames(data.Content, content); err == nil {
 		model.BlockNames = blockNames
 	}
-	if unitNames, err := readContentUnitNames(data.Content); err == nil {
+	if unitNames, err := readContentUnitNames(data.Content, content); err == nil {
 		model.UnitNames = unitNames
 	}
 	_ = decodeEntitiesChunk(data.RawEntities, model)

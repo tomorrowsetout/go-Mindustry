@@ -44,7 +44,9 @@ func compatPacketID(p protocol.Packet) (byte, bool) {
 	case *protocol.Remote_NetClient_hiddenSnapshot_33:
 		return 46, true
 	case *protocol.Remote_NetClient_pingResponse_19:
-		return 66, true
+		// 注意：官方 155 客户端使用 65 作为 ping 响应 ID
+		// 之前错误地映射到 66，导致与某些客户端版本不兼容
+		return 65, true
 	case *protocol.Remote_NetClient_kick_22:
 		return 53, true
 	case *protocol.Remote_NetClient_kick_21:
@@ -78,9 +80,46 @@ func compatPacketID(p protocol.Packet) (byte, bool) {
 
 var reRemoteSuffixID = regexp.MustCompile(`_(\d+)$`)
 
-// officialPacketID maps generated Remote_*_*_NNN packet types to their Java call IDs (NNN).
-// This keeps parity with official clients where remote call IDs are not offset by stream/base packets.
+// officialPacketID maps generated Remote_*_*_NNN packet types to on-wire packet IDs.
+// Wire IDs include 4 base packets registered before Call.registerPackets:
+// StreamBegin, StreamChunk, WorldStream, ConnectPacket.
 func officialPacketID(p protocol.Packet) (byte, bool) {
+	switch p.(type) {
+	case *protocol.Remote_NetClient_entitySnapshot_32:
+		return 43, true
+	case *protocol.Remote_NetClient_hiddenSnapshot_33:
+		return 46, true
+	case *protocol.Remote_NetClient_stateSnapshot_35:
+		return 117, true
+	case *protocol.Remote_NetClient_pingResponse_19:
+		return 66, true
+	case *protocol.Remote_NetClient_kick_22:
+		return 53, true
+	case *protocol.Remote_NetClient_kick_21:
+		return 54, true
+	case *protocol.Remote_NetClient_sendMessage_14:
+		return 83, true
+	case *protocol.Remote_NetClient_sendMessage_15:
+		return 82, true
+	case *protocol.Remote_NetClient_playerDisconnect_31:
+		return 67, true
+	case *protocol.Remote_InputHandler_unitClear_91:
+		return 133, true
+	case *protocol.Remote_CoreBlock_playerSpawn_140:
+		return 68, true
+	case *protocol.Remote_ConstructBlock_deconstructFinish_136:
+		return 36, true
+	case *protocol.Remote_ConstructBlock_constructFinish_137:
+		return 30, true
+	case *protocol.Remote_Tile_removeTile_130:
+		return 71, true
+	case *protocol.Remote_Tile_setTile_131:
+		return 106, true
+	case *protocol.Remote_Tile_buildHealthUpdate_135:
+		return 13, true
+	case *protocol.Remote_Units_unitDestroy_52:
+		return 137, true
+	}
 	if p == nil {
 		return 0, false
 	}
@@ -94,10 +133,10 @@ func officialPacketID(p protocol.Packet) (byte, bool) {
 		return 0, false
 	}
 	n, err := strconv.Atoi(m[1])
-	if err != nil || n < 0 || n > 255 {
+	if err != nil || n < 0 || n > 251 {
 		return 0, false
 	}
-	return byte(n), true
+	return byte(n + 4), true
 }
 
 // ReadObject reads a single framed object from buf.
@@ -179,16 +218,28 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 	}
 
 	if !compat {
-		// Official call IDs: stream/base packets keep their IDs; remote packets are shifted by +4 in registry.
-		if id >= 4 {
-			if obj, ok := tryRead(id + 4); ok {
-				return obj, nil
-			}
-		}
+		// Official wire IDs already include the +4 base-packet offset.
 		if obj, ok := tryRead(id); ok {
 			return obj, nil
 		}
-		return nil, io.ErrUnexpectedEOF
+		// Some 155 official clients still send a few legacy/compat call IDs.
+		// Accept them as fallbacks to avoid noisy EOF loops.
+		if id == 65 {
+			if len(payload) >= 8 {
+				t := int64(binary.BigEndian.Uint64(payload[:8]))
+				return &protocol.Remote_NetClient_ping_18{Time: t}, nil
+			}
+			// Some variants send truncated ping payloads; treat as keepalive.
+			return &protocol.Remote_NetClient_ping_18{Time: 0}, nil
+		}
+		if id == 29 {
+			return &protocol.Remote_NetServer_connectConfirm_47{}, nil
+		}
+		if id == 133 {
+			return &CompatUnitClearPacket{}, nil
+		}
+		// Do not tear down official connections on unknown/misaligned call IDs.
+		return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
 	}
 
 	if obj, ok := tryRead(id); ok {

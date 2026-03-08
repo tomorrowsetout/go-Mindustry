@@ -1,7 +1,9 @@
 package buildsvc
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/world"
@@ -23,7 +25,8 @@ type Service struct {
 	mu    sync.Mutex
 	queue []queuedBatch
 
-	lastByTeam map[world.TeamID][]world.BuildPlanOp
+	lastByTeam   map[world.TeamID][]world.BuildPlanOp
+	lastAtByTeam map[world.TeamID]time.Time
 }
 
 type queuedBatch struct {
@@ -55,6 +58,7 @@ func New(w *world.World, opts Options) *Service {
 		maxOpsPerTick:    maxOpsPerTick,
 		queue:            make([]queuedBatch, 0, 64),
 		lastByTeam:       make(map[world.TeamID][]world.BuildPlanOp),
+		lastAtByTeam:     make(map[world.TeamID]time.Time),
 	}
 }
 
@@ -66,6 +70,7 @@ func (s *Service) Reset() {
 	s.mu.Lock()
 	s.queue = s.queue[:0]
 	clear(s.lastByTeam)
+	clear(s.lastAtByTeam)
 	s.mu.Unlock()
 }
 
@@ -103,9 +108,14 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	}
 
 	s.mu.Lock()
+	// Snapshot packets can resend identical plans every tick.
+	// Suppress only short-interval duplicates to avoid queue spam,
+	// while still allowing later retries for the same coordinates.
 	if prev := s.lastByTeam[team]; sameOps(prev, ops) {
-		s.mu.Unlock()
-		return
+		if lastAt := s.lastAtByTeam[team]; !lastAt.IsZero() && time.Since(lastAt) < 500*time.Millisecond {
+			s.mu.Unlock()
+			return
+		}
 	}
 	if len(s.queue) >= s.maxQueuedBatches {
 		// Keep recent requests when overloaded.
@@ -117,10 +127,10 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 		ops:  ops,
 	})
 	s.lastByTeam[team] = append(s.lastByTeam[team][:0], ops...)
+	s.lastAtByTeam[team] = time.Now()
 	s.mu.Unlock()
 }
 
-// Tick applies queued operations with a bounded per-tick budget.
 func (s *Service) Tick() int {
 	if s == nil || s.w == nil {
 		return 0
@@ -196,10 +206,12 @@ func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan) (world.BuildPl
 		}, true
 	}
 	if p.Block == nil {
+		fmt.Printf("[buildsvc] plan rejected: block is nil at (%d,%d)\n", x, y)
 		return world.BuildPlanOp{}, false
 	}
 	blockID := p.Block.ID()
 	if blockID <= 0 {
+		fmt.Printf("[buildsvc] plan rejected: blockID=%d (<=0) at (%d,%d)\n", blockID, x, y)
 		return world.BuildPlanOp{}, false
 	}
 	return world.BuildPlanOp{

@@ -272,3 +272,23 @@ func (r *ContentRegistry) ensureContent(t ContentType) map[int16]Content {
 	}
 	return m
 }
+
+func (r *ContentRegistry) IterateBlocks(fn func(Block) bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, block := range r.blocks {
+		if !fn(block) {
+			break
+		}
+	}
+}
+
+func (r *ContentRegistry) IterateUnitTypes(fn func(UnitType) bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, unit := range r.unitTypes {
+		if !fn(unit) {
+			break
+		}
+	}
+}
