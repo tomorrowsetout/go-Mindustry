@@ -76,10 +76,13 @@ type BuildPlanOp struct {
 }
 
 type pendingBuildState struct {
-	Team     TeamID
-	BlockID  int16
-	Rotation int8
-	Progress float32
+	Team      TeamID
+	BlockID   int16
+	Rotation  int8
+	Progress  float32
+	LastEmit  float32
+	Breaking  bool
+	MaxHealth float32
 }
 
 type EntityEventKind string
@@ -93,8 +96,8 @@ const (
 )
 
 type EntityEvent struct {
-	Kind       EntityEventKind
-	Entity     RawEntity
+	Kind   EntityEventKind
+	Entity RawEntity
 	// BuildPos is packed tile position (Point2), not linear tile index.
 	BuildPos   int32
 	BuildTeam  TeamID
@@ -566,13 +569,12 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 	if dt <= 0 {
 		return
 	}
-	// Keep construction visibly asynchronous without stalling gameplay.
-	progressPerSec := float32(1.0)
+	// Keep construction/deconstruction visibly progressive and responsive.
+	progressPerSec := float32(2.0)
 	for pos, st := range w.pendingBuilds {
 		st.Progress += dt * progressPerSec
-		if st.Progress < 1 {
-			w.pendingBuilds[pos] = st
-			continue
+		if st.Progress > 1 {
+			st.Progress = 1
 		}
 
 		x := int(pos % int32(w.model.Width))
@@ -586,29 +588,93 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			delete(w.pendingBuilds, pos)
 			continue
 		}
+		if st.MaxHealth <= 1 {
+			st.MaxHealth = 1000
+		}
+
+		shouldEmit := st.Progress >= 1 || st.LastEmit == 0 || st.Progress-st.LastEmit >= 0.12
+		if st.Breaking {
+			if tile.Build == nil || tile.Block == 0 {
+				delete(w.pendingBuilds, pos)
+				continue
+			}
+			nextHP := st.MaxHealth * (1 - st.Progress)
+			if nextHP < 1 {
+				nextHP = 1
+			}
+			tile.Build.Health = nextHP
+			if shouldEmit {
+				w.entityEvents = append(w.entityEvents, EntityEvent{
+					Kind:     EntityEventBuildHealth,
+					BuildPos: packTilePos(tile.X, tile.Y),
+					BuildHP:  tile.Build.Health,
+				})
+				st.LastEmit = st.Progress
+			}
+			if st.Progress >= 1 {
+				teamOld := tile.Team
+				if tile.Build != nil {
+					teamOld = tile.Build.Team
+				}
+				tile.Build = nil
+				tile.Block = 0
+				tile.Team = 0
+				tile.Rotation = 0
+				delete(w.buildStates, pos)
+				w.entityEvents = append(w.entityEvents, EntityEvent{
+					Kind:      EntityEventBuildDestroyed,
+					BuildPos:  packTilePos(tile.X, tile.Y),
+					BuildTeam: teamOld,
+				})
+				delete(w.pendingBuilds, pos)
+				continue
+			}
+			w.pendingBuilds[pos] = st
+			continue
+		}
+
+		// Build flow: tile exists immediately with increasing health for smoother client animation.
 		tile.Block = BlockID(st.BlockID)
 		tile.Team = st.Team
 		tile.Rotation = st.Rotation
-		tile.Build = &Building{
-			Block:    tile.Block,
-			Team:     st.Team,
-			Rotation: st.Rotation,
-			X:        tile.X,
-			Y:        tile.Y,
-			Health:   1000,
+		if tile.Build == nil {
+			maxHP := st.MaxHealth
+			if maxHP <= 1 {
+				maxHP = estimateBuildMaxHealth(st.BlockID, w.model)
+			}
+			tile.Build = &Building{
+				Block:     tile.Block,
+				Team:      st.Team,
+				Rotation:  st.Rotation,
+				X:         tile.X,
+				Y:         tile.Y,
+				Health:    1,
+				MaxHealth: maxHP,
+			}
 		}
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:       EntityEventBuildPlaced,
-			BuildPos:   packTilePos(tile.X, tile.Y),
-			BuildTeam:  st.Team,
-			BuildBlock: st.BlockID,
-			BuildRot:   st.Rotation,
-		}, EntityEvent{
-			Kind:     EntityEventBuildHealth,
-			BuildPos: packTilePos(tile.X, tile.Y),
-			BuildHP:  tile.Build.Health,
-		})
-		delete(w.pendingBuilds, pos)
+		tile.Build.Block = tile.Block
+		tile.Build.Team = st.Team
+		tile.Build.Rotation = st.Rotation
+		tile.Build.X = tile.X
+		tile.Build.Y = tile.Y
+		tile.Build.Health = 1 + st.Progress*(st.MaxHealth-1)
+		if tile.Build.Health > st.MaxHealth {
+			tile.Build.Health = st.MaxHealth
+		}
+		tile.Build.MaxHealth = st.MaxHealth
+		if shouldEmit {
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:     EntityEventBuildHealth,
+				BuildPos: packTilePos(tile.X, tile.Y),
+				BuildHP:  tile.Build.Health,
+			})
+			st.LastEmit = st.Progress
+		}
+		if st.Progress >= 1 {
+			delete(w.pendingBuilds, pos)
+			continue
+		}
+		w.pendingBuilds[pos] = st
 	}
 }
 
@@ -955,21 +1021,42 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		}
 		pos := int32(tile.Y*w.model.Width + tile.X)
 		if op.Breaking {
-			delete(w.pendingBuilds, pos)
 			if tile.Build != nil || tile.Block != 0 {
-				teamOld := tile.Team
-				if tile.Build != nil {
-					teamOld = tile.Build.Team
+				if pending, ok := w.pendingBuilds[pos]; ok && pending.Breaking {
+					continue
 				}
-				tile.Build = nil
-				tile.Block = 0
-				tile.Team = 0
-				tile.Rotation = 0
-				delete(w.buildStates, pos)
+				maxHP := float32(1000)
+				if tile.Build != nil {
+					if tile.Build.MaxHealth > 1 {
+						maxHP = tile.Build.MaxHealth
+					} else if tile.Build.Health > 1 {
+						maxHP = tile.Build.Health
+					}
+				}
+				if tile.Build == nil {
+					tile.Build = &Building{
+						Block:     tile.Block,
+						Team:      tile.Team,
+						Rotation:  tile.Rotation,
+						X:         tile.X,
+						Y:         tile.Y,
+						Health:    maxHP,
+						MaxHealth: maxHP,
+					}
+				}
+				w.pendingBuilds[pos] = pendingBuildState{
+					Team:      tile.Team,
+					BlockID:   int16(tile.Block),
+					Rotation:  tile.Rotation,
+					Progress:  0,
+					LastEmit:  0,
+					Breaking:  true,
+					MaxHealth: maxHP,
+				}
 				w.entityEvents = append(w.entityEvents, EntityEvent{
-					Kind:      EntityEventBuildDestroyed,
-					BuildPos:  packTilePos(tile.X, tile.Y),
-					BuildTeam: teamOld,
+					Kind:     EntityEventBuildHealth,
+					BuildPos: packTilePos(tile.X, tile.Y),
+					BuildHP:  tile.Build.Health,
 				})
 				addChanged(pos)
 			}
@@ -988,15 +1075,92 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		if tile.Block == BlockID(op.BlockID) && tile.Team == team && tile.Rotation == op.Rotation && tile.Build != nil {
 			continue
 		}
+		// Initialize placement immediately to avoid delayed visual popping on clients.
+		maxHP := estimateBuildMaxHealth(op.BlockID, w.model)
+		tile.Block = BlockID(op.BlockID)
+		tile.Team = team
+		tile.Rotation = op.Rotation
+		if tile.Build == nil {
+			tile.Build = &Building{
+				Block:     tile.Block,
+				Team:      team,
+				Rotation:  op.Rotation,
+				X:         tile.X,
+				Y:         tile.Y,
+				Health:    1,
+				MaxHealth: maxHP,
+			}
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildPlaced,
+				BuildPos:   packTilePos(tile.X, tile.Y),
+				BuildTeam:  team,
+				BuildBlock: op.BlockID,
+				BuildRot:   op.Rotation,
+			})
+		} else {
+			tile.Build.Block = tile.Block
+			tile.Build.Team = team
+			tile.Build.Rotation = op.Rotation
+			tile.Build.X = tile.X
+			tile.Build.Y = tile.Y
+			tile.Build.MaxHealth = maxHP
+			if tile.Build.Health < 1 {
+				tile.Build.Health = 1
+			}
+		}
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:     EntityEventBuildHealth,
+			BuildPos: packTilePos(tile.X, tile.Y),
+			BuildHP:  tile.Build.Health,
+		})
 		w.pendingBuilds[pos] = pendingBuildState{
-			Team:     team,
-			BlockID:  op.BlockID,
-			Rotation: op.Rotation,
-			Progress: 0,
+			Team:      team,
+			BlockID:   op.BlockID,
+			Rotation:  op.Rotation,
+			Progress:  0,
+			LastEmit:  0,
+			Breaking:  false,
+			MaxHealth: maxHP,
 		}
 		addChanged(pos)
 	}
 	return changed
+}
+
+func estimateBuildMaxHealth(blockID int16, model *WorldModel) float32 {
+	name := ""
+	if model != nil && model.BlockNames != nil {
+		name = strings.ToLower(strings.TrimSpace(model.BlockNames[blockID]))
+	}
+	if name == "" {
+		return 1000
+	}
+	if strings.Contains(name, "conveyor") || strings.Contains(name, "router") || strings.Contains(name, "junction") || strings.Contains(name, "bridge") {
+		return 80
+	}
+	if strings.Contains(name, "duct") {
+		return 110
+	}
+	if strings.Contains(name, "wall") {
+		hp := float32(400)
+		switch {
+		case strings.Contains(name, "titanium"):
+			hp = 520
+		case strings.Contains(name, "thorium"):
+			hp = 800
+		case strings.Contains(name, "plastanium"):
+			hp = 1000
+		case strings.Contains(name, "phase"):
+			hp = 1200
+		case strings.Contains(name, "surge"):
+			hp = 1500
+		}
+		if strings.Contains(name, "large") {
+			hp *= 4
+		}
+		return hp
+	}
+	return 1000
 }
 
 func (w *World) SetEntityMotion(id int32, vx, vy, rotVel float32) (RawEntity, bool) {

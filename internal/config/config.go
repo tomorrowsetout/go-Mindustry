@@ -17,6 +17,29 @@ type RuntimeConfig struct {
 	DevLogEnabled    bool   `json:"devlog_enabled"`
 }
 
+type LoggingConfig struct {
+	Enabled           bool   `json:"enabled"`
+	ConsoleEnabled    bool   `json:"console_enabled"`
+	FileEnabled       bool   `json:"file_enabled"`
+	Directory         string `json:"directory"`
+	MaxFileMB         int    `json:"max_file_mb"`
+	MaxFiles          int    `json:"max_files"`
+	DevLogEnabled     bool   `json:"devlog_enabled"`
+	NetEnabled        bool   `json:"net_enabled"`
+	NetTxEnabled      bool   `json:"net_tx_enabled"`
+	NetUdpTxEnabled   bool   `json:"net_udp_tx_enabled"`
+	WorldStreamEnable bool   `json:"worldstream_enabled"`
+	BuildSvcEnabled   bool   `json:"buildsvc_enabled"`
+	ScriptEnabled     bool   `json:"script_enabled"`
+	ModsEnabled       bool   `json:"mods_enabled"`
+	FeatureEnabled    bool   `json:"feature_enabled"`
+	SnapshotLogSample int    `json:"snapshot_log_sample"`
+	EventStoreEnabled bool   `json:"event_store_enabled"`
+	EventPacketSend   bool   `json:"event_packet_send"`
+	EventPacketRecv   bool   `json:"event_packet_recv"`
+	EventPacketSample int    `json:"event_packet_sample"`
+}
+
 type APIConfig struct {
 	Enabled bool     `json:"enabled"`
 	Key     string   `json:"key"`
@@ -78,6 +101,7 @@ type AdminConfig struct {
 type Config struct {
 	Source  string        `json:"-"`
 	Runtime RuntimeConfig `json:"runtime"`
+	Logging LoggingConfig `json:"logging"`
 	API     APIConfig     `json:"api"`
 	Storage StorageConfig `json:"storage"`
 	Net     NetConfig     `json:"net"`
@@ -97,6 +121,28 @@ func Default() Config {
 			ServerDesc:       "",
 			VirtualPlayers:   0,
 			DevLogEnabled:    true,
+		},
+		Logging: LoggingConfig{
+			Enabled:           true,
+			ConsoleEnabled:    true,
+			FileEnabled:       true,
+			Directory:         "logs",
+			MaxFileMB:         10,
+			MaxFiles:          100,
+			DevLogEnabled:     true,
+			NetEnabled:        true,
+			NetTxEnabled:      true,
+			NetUdpTxEnabled:   true,
+			WorldStreamEnable: true,
+			BuildSvcEnabled:   true,
+			ScriptEnabled:     true,
+			ModsEnabled:       true,
+			FeatureEnabled:    true,
+			SnapshotLogSample: 20,
+			EventStoreEnabled: true,
+			EventPacketSend:   false,
+			EventPacketRecv:   true,
+			EventPacketSample: 20,
 		},
 		API: APIConfig{
 			Enabled: true,
@@ -181,6 +227,23 @@ func Load(path string) (Config, error) {
 	if cfg.Net.SyncStateMs <= 0 {
 		cfg.Net.SyncStateMs = 250
 	}
+	if strings.TrimSpace(cfg.Logging.Directory) == "" {
+		cfg.Logging.Directory = "logs"
+	}
+	if cfg.Logging.MaxFileMB <= 0 {
+		cfg.Logging.MaxFileMB = 10
+	}
+	if cfg.Logging.MaxFiles <= 0 {
+		cfg.Logging.MaxFiles = 100
+	}
+	if cfg.Logging.SnapshotLogSample <= 0 {
+		cfg.Logging.SnapshotLogSample = 20
+	}
+	if cfg.Logging.EventPacketSample <= 0 {
+		cfg.Logging.EventPacketSample = 20
+	}
+	// Keep compatibility with old runtime.devlog_enabled while centralizing in logging.
+	cfg.Runtime.DevLogEnabled = cfg.Logging.DevLogEnabled
 	return cfg, nil
 }
 

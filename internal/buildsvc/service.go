@@ -27,6 +27,8 @@ type Service struct {
 
 	lastByTeam   map[world.TeamID][]world.BuildPlanOp
 	lastAtByTeam map[world.TeamID]time.Time
+	lastOpByPos  map[world.TeamID]map[int32]world.BuildPlanOp
+	lastOpAtPos  map[world.TeamID]map[int32]time.Time
 }
 
 type queuedBatch struct {
@@ -59,6 +61,8 @@ func New(w *world.World, opts Options) *Service {
 		queue:            make([]queuedBatch, 0, 64),
 		lastByTeam:       make(map[world.TeamID][]world.BuildPlanOp),
 		lastAtByTeam:     make(map[world.TeamID]time.Time),
+		lastOpByPos:      make(map[world.TeamID]map[int32]world.BuildPlanOp),
+		lastOpAtPos:      make(map[world.TeamID]map[int32]time.Time),
 	}
 }
 
@@ -71,6 +75,8 @@ func (s *Service) Reset() {
 	s.queue = s.queue[:0]
 	clear(s.lastByTeam)
 	clear(s.lastAtByTeam)
+	clear(s.lastOpByPos)
+	clear(s.lastOpAtPos)
 	s.mu.Unlock()
 }
 
@@ -108,10 +114,34 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	}
 
 	s.mu.Lock()
+	if s.lastOpByPos[team] == nil {
+		s.lastOpByPos[team] = make(map[int32]world.BuildPlanOp)
+	}
+	if s.lastOpAtPos[team] == nil {
+		s.lastOpAtPos[team] = make(map[int32]time.Time)
+	}
+	filtered := make([]world.BuildPlanOp, 0, len(ops))
+	for _, op := range ops {
+		pos := int32(op.Y)*int32(model.Width) + int32(op.X)
+		prev, ok := s.lastOpByPos[team][pos]
+		if ok && prev == op {
+			if at := s.lastOpAtPos[team][pos]; !at.IsZero() && time.Since(at) < 700*time.Millisecond {
+				continue
+			}
+		}
+		s.lastOpByPos[team][pos] = op
+		s.lastOpAtPos[team][pos] = time.Now()
+		filtered = append(filtered, op)
+	}
+	if len(filtered) == 0 {
+		s.mu.Unlock()
+		return
+	}
+
 	// Snapshot packets can resend identical plans every tick.
 	// Suppress only short-interval duplicates to avoid queue spam,
 	// while still allowing later retries for the same coordinates.
-	if prev := s.lastByTeam[team]; sameOps(prev, ops) {
+	if prev := s.lastByTeam[team]; sameOps(prev, filtered) {
 		if lastAt := s.lastAtByTeam[team]; !lastAt.IsZero() && time.Since(lastAt) < 500*time.Millisecond {
 			s.mu.Unlock()
 			return
@@ -124,9 +154,9 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	}
 	s.queue = append(s.queue, queuedBatch{
 		team: team,
-		ops:  ops,
+		ops:  filtered,
 	})
-	s.lastByTeam[team] = append(s.lastByTeam[team][:0], ops...)
+	s.lastByTeam[team] = append(s.lastByTeam[team][:0], filtered...)
 	s.lastAtByTeam[team] = time.Now()
 	s.mu.Unlock()
 }
