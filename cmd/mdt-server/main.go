@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"math"
 	mathrand "math/rand"
 	"net"
@@ -42,6 +44,345 @@ import (
 type worldState struct {
 	mu      sync.RWMutex
 	current string
+}
+
+type streamMirror struct {
+	prevStdout *os.File
+	prevStderr *os.File
+	stdoutR    *os.File
+	stdoutW    *os.File
+	stderrR    *os.File
+	stderrW    *os.File
+	stdoutLog  *rotatingFileWriter
+	stderrLog  *rotatingFileWriter
+	done       chan struct{}
+}
+
+type logRules struct {
+	netEnabled        bool
+	netTxEnabled      bool
+	netUdpTxEnabled   bool
+	worldStreamEnable bool
+	buildSvcEnabled   bool
+	scriptEnabled     bool
+	modsEnabled       bool
+	featureEnabled    bool
+}
+
+type lineFilterWriter struct {
+	mu   sync.Mutex
+	dst  io.Writer
+	rule logRules
+	buf  []byte
+}
+
+type rotatingFileWriter struct {
+	mu       sync.Mutex
+	dir      string
+	prefix   string
+	maxSize  int64
+	maxFiles int
+	curFile  *os.File
+	curSize  int64
+}
+
+func newRotatingFileWriter(dir, prefix string, maxSize int64, maxFiles int) (*rotatingFileWriter, error) {
+	if maxSize <= 0 {
+		maxSize = 10 * 1024 * 1024
+	}
+	if maxFiles <= 0 {
+		maxFiles = 100
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	w := &rotatingFileWriter{
+		dir:      dir,
+		prefix:   prefix,
+		maxSize:  maxSize,
+		maxFiles: maxFiles,
+	}
+	if err := w.rotateLocked(); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+func newLineFilterWriter(dst io.Writer, rule logRules) *lineFilterWriter {
+	if dst == nil {
+		dst = io.Discard
+	}
+	return &lineFilterWriter{dst: dst, rule: rule, buf: make([]byte, 0, 1024)}
+}
+
+func (w *lineFilterWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		line := string(w.buf[:idx+1])
+		if w.allowLine(line) {
+			_, _ = w.dst.Write([]byte(line))
+		}
+		w.buf = w.buf[idx+1:]
+	}
+	return len(p), nil
+}
+
+func (w *lineFilterWriter) allowLine(line string) bool {
+	switch {
+	case strings.Contains(line, "[net] tx-udp"):
+		return w.rule.netEnabled && w.rule.netTxEnabled && w.rule.netUdpTxEnabled
+	case strings.Contains(line, "[net] tx "):
+		return w.rule.netEnabled && w.rule.netTxEnabled
+	case strings.Contains(line, "[net]"):
+		return w.rule.netEnabled
+	case strings.Contains(line, "[worldstream]"):
+		return w.rule.worldStreamEnable
+	case strings.Contains(line, "[buildsvc]"):
+		return w.rule.buildSvcEnabled
+	case strings.Contains(line, "[script]"):
+		return w.rule.scriptEnabled
+	case strings.Contains(line, "[MOD"):
+		return w.rule.modsEnabled
+	case strings.Contains(line, "[feature]"):
+		return w.rule.featureEnabled
+	default:
+		return true
+	}
+}
+
+func (w *rotatingFileWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.curFile == nil {
+		if err := w.rotateLocked(); err != nil {
+			return 0, err
+		}
+	}
+	if w.curSize+int64(len(p)) > w.maxSize {
+		if err := w.rotateLocked(); err != nil {
+			return 0, err
+		}
+	}
+	n, err := w.curFile.Write(p)
+	w.curSize += int64(n)
+	return n, err
+}
+
+func (w *rotatingFileWriter) CurrentPath() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.curFile == nil {
+		return ""
+	}
+	return w.curFile.Name()
+}
+
+func (w *rotatingFileWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.curFile != nil {
+		err := w.curFile.Close()
+		w.curFile = nil
+		w.curSize = 0
+		return err
+	}
+	return nil
+}
+
+func (w *rotatingFileWriter) rotateLocked() error {
+	if w.curFile != nil {
+		_ = w.curFile.Close()
+		w.curFile = nil
+	}
+	name := fmt.Sprintf("%s-%s.log", w.prefix, time.Now().Format("20060102-150405.000000000"))
+	path := filepath.Join(w.dir, name)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return err
+	}
+	w.curFile = f
+	w.curSize = fi.Size()
+	w.cleanupLocked()
+	return nil
+}
+
+func (w *rotatingFileWriter) cleanupLocked() {
+	pattern := filepath.Join(w.dir, w.prefix+"-*.log")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) <= w.maxFiles {
+		return
+	}
+	type fileInfo struct {
+		path string
+		time time.Time
+	}
+	items := make([]fileInfo, 0, len(matches))
+	for _, m := range matches {
+		st, err := os.Stat(m)
+		if err != nil {
+			continue
+		}
+		items = append(items, fileInfo{path: m, time: st.ModTime()})
+	}
+	if len(items) <= w.maxFiles {
+		return
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].time.Before(items[j].time) })
+	excess := len(items) - w.maxFiles
+	for i := 0; i < excess; i++ {
+		_ = os.Remove(items[i].path)
+	}
+}
+
+func startStreamMirror(cfg config.LoggingConfig) (*streamMirror, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	logDir := strings.TrimSpace(cfg.Directory)
+	if logDir == "" {
+		logDir = "logs"
+	}
+	maxBytes := int64(cfg.MaxFileMB) * 1024 * 1024
+	if maxBytes <= 0 {
+		maxBytes = 10 * 1024 * 1024
+	}
+	maxFiles := cfg.MaxFiles
+	if maxFiles <= 0 {
+		maxFiles = 100
+	}
+	var stdoutLog *rotatingFileWriter
+	var stderrLog *rotatingFileWriter
+	var err error
+	if cfg.FileEnabled {
+		stdoutLog, err = newRotatingFileWriter(logDir, "server-stdout", maxBytes, maxFiles)
+		if err != nil {
+			return nil, err
+		}
+		stderrLog, err = newRotatingFileWriter(logDir, "server-stderr", maxBytes, maxFiles)
+		if err != nil {
+			_ = stdoutLog.Close()
+			return nil, err
+		}
+	}
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		if stdoutLog != nil {
+			_ = stdoutLog.Close()
+		}
+		if stderrLog != nil {
+			_ = stderrLog.Close()
+		}
+		return nil, err
+	}
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		_ = stdoutR.Close()
+		_ = stdoutW.Close()
+		if stdoutLog != nil {
+			_ = stdoutLog.Close()
+		}
+		if stderrLog != nil {
+			_ = stderrLog.Close()
+		}
+		return nil, err
+	}
+
+	m := &streamMirror{
+		prevStdout: os.Stdout,
+		prevStderr: os.Stderr,
+		stdoutR:    stdoutR,
+		stdoutW:    stdoutW,
+		stderrR:    stderrR,
+		stderrW:    stderrW,
+		stdoutLog:  stdoutLog,
+		stderrLog:  stderrLog,
+		done:       make(chan struct{}, 2),
+	}
+
+	os.Stdout = stdoutW
+	os.Stderr = stderrW
+
+	rule := logRules{
+		netEnabled:        cfg.NetEnabled,
+		netTxEnabled:      cfg.NetTxEnabled,
+		netUdpTxEnabled:   cfg.NetUdpTxEnabled,
+		worldStreamEnable: cfg.WorldStreamEnable,
+		buildSvcEnabled:   cfg.BuildSvcEnabled,
+		scriptEnabled:     cfg.ScriptEnabled,
+		modsEnabled:       cfg.ModsEnabled,
+		featureEnabled:    cfg.FeatureEnabled,
+	}
+	outTargets := make([]io.Writer, 0, 2)
+	errTargets := make([]io.Writer, 0, 2)
+	if cfg.ConsoleEnabled {
+		outTargets = append(outTargets, m.prevStdout)
+		errTargets = append(errTargets, m.prevStderr)
+	}
+	if cfg.FileEnabled {
+		outTargets = append(outTargets, m.stdoutLog)
+		errTargets = append(errTargets, m.stderrLog)
+	}
+	if len(outTargets) == 0 {
+		outTargets = append(outTargets, io.Discard)
+	}
+	if len(errTargets) == 0 {
+		errTargets = append(errTargets, io.Discard)
+	}
+	outSink := newLineFilterWriter(io.MultiWriter(outTargets...), rule)
+	errSink := newLineFilterWriter(io.MultiWriter(errTargets...), rule)
+
+	go func() {
+		_, _ = io.Copy(outSink, m.stdoutR)
+		m.done <- struct{}{}
+	}()
+	go func() {
+		_, _ = io.Copy(errSink, m.stderrR)
+		m.done <- struct{}{}
+	}()
+
+	if cfg.FileEnabled {
+		fmt.Fprintf(m.prevStdout, "[log] stdout -> %s (rotate=%dMB maxFiles=%d)\n", stdoutLog.CurrentPath(), cfg.MaxFileMB, maxFiles)
+		fmt.Fprintf(m.prevStdout, "[log] stderr -> %s (rotate=%dMB maxFiles=%d)\n", stderrLog.CurrentPath(), cfg.MaxFileMB, maxFiles)
+	}
+	return m, nil
+}
+
+func (m *streamMirror) Close() {
+	if m == nil {
+		return
+	}
+	os.Stdout = m.prevStdout
+	os.Stderr = m.prevStderr
+	_ = m.stdoutW.Close()
+	_ = m.stderrW.Close()
+	select {
+	case <-m.done:
+	case <-time.After(500 * time.Millisecond):
+	}
+	select {
+	case <-m.done:
+	case <-time.After(500 * time.Millisecond):
+	}
+	_ = m.stdoutR.Close()
+	_ = m.stderrR.Close()
+	if m.stdoutLog != nil {
+		_ = m.stdoutLog.Close()
+	}
+	if m.stderrLog != nil {
+		_ = m.stderrLog.Close()
+	}
 }
 
 type startupStatus int
@@ -238,7 +579,48 @@ func printMapDetails(path string, model *world.WorldModel) {
 	fmt.Println("========================================")
 }
 
+func chdirToExecutableDir() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(exe)
+	if strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	return os.Chdir(dir)
+}
+
+func normalizeWorldPathForExeRoot(path string) string {
+	p := strings.TrimSpace(filepath.Clean(path))
+	if p == "" {
+		return ""
+	}
+	if filepath.IsAbs(p) || strings.HasPrefix(p, ".."+string(filepath.Separator)) || p == ".." {
+		base := filepath.Base(p)
+		if strings.TrimSpace(base) == "" || base == "." || base == string(filepath.Separator) {
+			return ""
+		}
+		return filepath.Join("assets", "worlds", base)
+	}
+	return p
+}
+
+func stableString(s string) string {
+	if s == "" {
+		return ""
+	}
+	b := make([]byte, len(s))
+	copy(b, s)
+	return string(b)
+}
+
 func main() {
+	if err := chdirToExecutableDir(); err != nil {
+		fmt.Fprintf(os.Stderr, "切换到程序目录失败: %v\n", err)
+		os.Exit(1)
+	}
+
 	cfgPath := flag.String("config", "config.json", "path to config file")
 	addr := flag.String("addr", "0.0.0.0:6567", "listen address for Mindustry protocol (TCP+UDP)")
 	buildVersion := flag.Int("build", 155, "Mindustry build version for strict check; must match client build")
@@ -263,6 +645,13 @@ func main() {
 	} else {
 		cfg = loaded
 		cfg.Source = *cfgPath
+	}
+
+	streamLog, err := startStreamMirror(cfg.Logging)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "初始化日志镜像失败: %v\n", err)
+	} else {
+		defer streamLog.Close()
 	}
 
 	startup := &startupReport{}
@@ -295,7 +684,7 @@ func main() {
 	// 初始化开发者日志
 	devLog := devlog.New(os.Stdout)
 	devLog.SetLevel(devlog.LogLevelDebug)
-	if cfg.Runtime.DevLogEnabled {
+	if cfg.Logging.DevLogEnabled {
 		startup.ok("开发者日志", "已启用")
 	} else {
 		startup.info("开发者日志", "未启用")
@@ -327,8 +716,8 @@ func main() {
 			persisted = st
 			persistedOK = true
 			if worldChoice == "random" && st.MapPath != "" {
-				worldChoice = st.MapPath
-				startup.ok("持久化地图恢复", st.MapPath)
+				worldChoice = normalizeWorldPathForExeRoot(st.MapPath)
+				startup.ok("持久化地图恢复", worldChoice)
 			}
 		}
 	} else {
@@ -344,6 +733,7 @@ func main() {
 	fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 
 	srv := netserver.NewServer(*addr, *buildVersion)
+	srv.SetSnapshotLogSample(cfg.Logging.SnapshotLogSample)
 	contentIDsPath := filepath.FromSlash("data/vanilla/content_ids.json")
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
@@ -360,9 +750,9 @@ func main() {
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
 	buildService := buildsvc.New(wld, buildsvc.Options{
-		MaxQueuedBatches: 256,
-		MaxPlansPerBatch: 20,
-		MaxOpsPerTick:    64,
+		MaxQueuedBatches: 4096,
+		MaxPlansPerBatch: 256,
+		MaxOpsPerTick:    1024,
 	})
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
@@ -400,6 +790,13 @@ func main() {
 			TeamID:    byte(ent.Team),
 			TypeID:    ent.TypeID,
 		}, true
+	}
+	srv.SyncUnitStateFn = func(unitID int32, x, y, rotation, vx, vy float32) {
+		if wld == nil || unitID == 0 {
+			return
+		}
+		_, _ = wld.SetEntityPosition(unitID, x, y, rotation)
+		_, _ = wld.SetEntityMotion(unitID, vx, vy, 0)
 	}
 	var unitNamesByID map[int16]string
 	var loadedModel *world.WorldModel
@@ -490,16 +887,36 @@ func main() {
 		fmt.Fprintf(os.Stderr, "事件存储初始化失败: %v\n", rerr)
 		os.Exit(1)
 	}
+	var eventPacketCounter atomic.Int64
 	srv.OnEvent = func(ev netserver.NetEvent) {
+		if !cfg.Logging.EventStoreEnabled {
+			return
+		}
+		if ev.Kind == "packet_send" && !cfg.Logging.EventPacketSend {
+			return
+		}
+		if ev.Kind == "packet_recv" && !cfg.Logging.EventPacketRecv {
+			return
+		}
+		if ev.Kind == "packet_send" || ev.Kind == "packet_recv" {
+			n := eventPacketCounter.Add(1)
+			sample := cfg.Logging.EventPacketSample
+			if sample <= 1 {
+				sample = 1
+			}
+			if n%int64(sample) != 1 {
+				return
+			}
+		}
 		_ = recorder.Record(storage.Event{
 			Timestamp: ev.Timestamp,
-			Kind:      ev.Kind,
-			Packet:    ev.Packet,
-			Detail:    ev.Detail,
+			Kind:      stableString(ev.Kind),
+			Packet:    stableString(ev.Packet),
+			Detail:    stableString(ev.Detail),
 			ConnID:    ev.ConnID,
-			UUID:      ev.UUID,
-			IP:        ev.IP,
-			Name:      ev.Name,
+			UUID:      stableString(ev.UUID),
+			IP:        stableString(ev.IP),
+			Name:      stableString(ev.Name),
 		})
 	}
 	if ops, ok, err := persist.LoadOps(cfg.Admin); err != nil {
@@ -552,6 +969,30 @@ func main() {
 	srv.OnBuildPlans = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
 		if c == nil || len(plans) == 0 {
 			return
+		}
+		if model := wld.Model(); model != nil && len(model.BlockNames) > 0 {
+			for _, p := range plans {
+				if p == nil || p.Breaking || p.Block == nil {
+					continue
+				}
+				blockID := p.Block.ID()
+				blockName := strings.ToLower(strings.TrimSpace(model.BlockNames[blockID]))
+				if blockName == "" {
+					continue
+				}
+				if strings.Contains(blockName, "bridge-conveyor") || strings.Contains(blockName, "sorter") || strings.Contains(blockName, "unloader") {
+					srv.WarnFeatureOnce(
+						"logistics-"+strconv.Itoa(int(blockID)),
+						fmt.Sprintf("[feature] logistics behavior not fully simulated yet: block=%d name=%s (multi-player desync possible)", blockID, blockName),
+					)
+				}
+				if strings.Contains(blockName, "core") {
+					srv.WarnFeatureOnce(
+						"core-item-io",
+						"[feature] core item I/O is not fully simulated yet (setTileItems/requestItem packets may be dropped)",
+					)
+				}
+			}
 		}
 		buildService.EnqueuePlans(world.TeamID(1), plans)
 	}
@@ -2501,7 +2942,7 @@ func broadcastBuildDestroyed(srv *netserver.Server, buildPos int32) {
 	srv.Broadcast(&protocol.Remote_ConstructBlock_deconstructFinish_136{
 		Tile:    protocol.TileBox{PosValue: buildPos},
 		Block:   protocol.BlockRef{BlkID: 0, BlkName: "air"}, // block ID unknown, use 0
-		Builder: protocol.UnitBox{IDValue: 0}, // 0 for server
+		Builder: protocol.UnitBox{IDValue: 0},                // 0 for server
 	})
 	// Also send removeTile for compatibility
 	srv.Broadcast(&protocol.Remote_Tile_removeTile_130{
@@ -2523,10 +2964,7 @@ func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int
 		return
 	}
 	// Compatibility path: avoid constructFinish(137), it still crashes some official clients.
-	// Force clear + set tile directly.
-	srv.Broadcast(&protocol.Remote_Tile_removeTile_130{
-		Tile: protocol.TileBox{PosValue: buildPos},
-	})
+	// Use setTile directly; sending remove+set for each completion can cause visible flicker.
 	srv.Broadcast(&protocol.Remote_Tile_setTile_131{
 		Tile:     protocol.TileBox{PosValue: buildPos},
 		Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},

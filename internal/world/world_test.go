@@ -35,19 +35,28 @@ func TestApplyBuildPlansIsAsync(t *testing.T) {
 	if err != nil || tile == nil {
 		t.Fatalf("tile lookup failed: %v", err)
 	}
-	if tile.Block != 0 || tile.Build != nil {
-		t.Fatalf("expected no immediate placement, got block=%d build=%v", tile.Block, tile.Build != nil)
+	if tile.Block != 45 || tile.Build == nil {
+		t.Fatalf("expected immediate preview placement, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if tile.Build.Health <= 0 || tile.Build.Health >= 1000 {
+		t.Fatalf("expected low initial build health, got=%.2f", tile.Build.Health)
 	}
 
-	w.Step(500 * time.Millisecond)
+	w.Step(300 * time.Millisecond)
 	tile, _ = w.Model().TileAt(2, 3)
-	if tile.Block != 0 || tile.Build != nil {
-		t.Fatalf("expected still pending build at 0.5s, got block=%d build=%v", tile.Block, tile.Build != nil)
+	if tile.Block != 45 || tile.Build == nil {
+		t.Fatalf("expected pending build at 0.3s, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if tile.Build.Health <= 1 || tile.Build.Health >= 1000 {
+		t.Fatalf("expected intermediate build health at 0.3s, got=%.2f", tile.Build.Health)
 	}
 
-	w.Step(600 * time.Millisecond)
+	w.Step(400 * time.Millisecond)
 	tile, _ = w.Model().TileAt(2, 3)
 	if tile.Block != 45 || tile.Build == nil {
 		t.Fatalf("expected placed block after progress, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if tile.Build.Health < 999 {
+		t.Fatalf("expected completed build health, got=%.2f", tile.Build.Health)
 	}
 }

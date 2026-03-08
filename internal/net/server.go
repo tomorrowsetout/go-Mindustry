@@ -79,6 +79,8 @@ type Server struct {
 	DropUnitFn func(unitID int32)
 	// Optional hook: query unit info from world/state.
 	UnitInfoFn func(unitID int32) (UnitInfo, bool)
+	// Optional hook: sync player-controlled unit pose to world/state from client snapshots.
+	SyncUnitStateFn func(unitID int32, x, y, rotation, vx, vy float32)
 
 	StateSnapshotFn func() *protocol.Remote_NetClient_stateSnapshot_35
 	// Appends additional entities into entity snapshot stream.
@@ -91,10 +93,14 @@ type Server struct {
 
 	entitySnapshotIntervalNs atomic.Int64
 	stateSnapshotIntervalNs  atomic.Int64
+	snapshotLogSampleN       atomic.Int64
 	infoMu                   sync.RWMutex
 
 	// DevLogger 开发者日志（可选）
 	DevLogger *devlog.DevLogger
+
+	featureWarnMu sync.Mutex
+	featureWarned map[string]struct{}
 }
 
 func NewServer(addr string, buildVersion int) *Server {
@@ -127,8 +133,10 @@ func NewServer(addr string, buildVersion int) *Server {
 		UdpRetryDelay:      5 * time.Millisecond,
 		UdpFallbackTCP:     true,
 		RespawnDelayFrames: 60,
+		featureWarned:      map[string]struct{}{},
 	}
 	s.SetSnapshotIntervals(100, 250)
+	s.SetSnapshotLogSample(20)
 	return s
 }
 
@@ -162,6 +170,35 @@ func (s *Server) SnapshotIntervalsMs() (entityMs int, stateMs int) {
 		state = 250 * time.Millisecond
 	}
 	return int(entity / time.Millisecond), int(state / time.Millisecond)
+}
+
+func (s *Server) SetSnapshotLogSample(n int) {
+	if n <= 0 {
+		n = 20
+	}
+	s.snapshotLogSampleN.Store(int64(n))
+}
+
+func (s *Server) SnapshotLogSample() int {
+	n := int(s.snapshotLogSampleN.Load())
+	if n <= 0 {
+		return 20
+	}
+	return n
+}
+
+func (s *Server) WarnFeatureOnce(key string, message string) {
+	if s == nil || strings.TrimSpace(key) == "" || strings.TrimSpace(message) == "" {
+		return
+	}
+	s.featureWarnMu.Lock()
+	if _, ok := s.featureWarned[key]; ok {
+		s.featureWarnMu.Unlock()
+		return
+	}
+	s.featureWarned[key] = struct{}{}
+	s.featureWarnMu.Unlock()
+	fmt.Println(message)
 }
 
 // KillSelfUnit clears current controlled unit for a player connection.
@@ -201,6 +238,7 @@ func (s *Server) Serve() error {
 		}
 		conn := NewConn(c, s.Serial)
 		conn.id = s.nextID()
+		conn.snapshotLogSampleN.Store(int64(s.SnapshotLogSample()))
 		conn.onSend = func(obj any, packetID int, frameworkID int, size int) {
 			detail := fmt.Sprintf("size=%d", size)
 			if packetID >= 0 {
@@ -474,6 +512,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		c.shooting = v.Shooting
 		c.boosting = v.Boosting
 		c.typing = v.Chatting
+		c.snapRotation = v.Rotation
+		c.snapVelX = v.XVelocity
+		c.snapVelY = v.YVelocity
 		prevUnitID := c.unitID
 		if v.Dead {
 			// Only honor client-dead when server agrees the unit is missing or dead.
@@ -534,6 +575,22 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				s.OnBuildPlans(c, plans)
 			}
 		}
+		if s.SyncUnitStateFn != nil && c.unitID != 0 {
+			s.SyncUnitStateFn(c.unitID, c.snapX, c.snapY, v.Rotation, v.XVelocity, v.YVelocity)
+		}
+	case *protocol.Remote_NetClient_sendChatMessage_16:
+		msg := sanitizeChatMessage(v.Message)
+		if msg == "" {
+			return
+		}
+		if s.OnChat != nil && s.OnChat(c, msg) {
+			return
+		}
+		name := c.name
+		if strings.TrimSpace(name) == "" {
+			name = "player"
+		}
+		s.BroadcastChat(fmt.Sprintf("[accent]%s[]: %s", name, msg))
 	case *protocol.Remote_NetClient_ping_18:
 		// Temporary compatibility: some 155 clients misdecode pingResponse call IDs.
 		// Keep connection alive via framework keepalive loop only.
@@ -653,6 +710,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 62, "Remote_InputHandler_setTileItems_62", "set_tile_items")
 		}
+		s.WarnFeatureOnce("packet-set-tile-items", "[feature] setTileItems received: server-side item network simulation is incomplete")
 	case *protocol.Remote_InputHandler_clearItems_63:
 		// 清空物品
 		if s.DevLogger != nil {
@@ -673,6 +731,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 66, "Remote_InputHandler_setTileLiquids_66", "set_tile_liquids")
 		}
+		s.WarnFeatureOnce("packet-set-tile-liquids", "[feature] setTileLiquids received: server-side liquid network simulation is incomplete")
 	case *protocol.Remote_InputHandler_clearLiquids_67:
 		// 清空液体
 		if s.DevLogger != nil {
@@ -683,6 +742,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 68, "Remote_InputHandler_transferItemTo_68", "transfer_item_to")
 		}
+		s.WarnFeatureOnce("packet-transfer-item-to", "[feature] transferItemTo received: logistics/core item IO may desync")
 	case *protocol.Remote_InputHandler_deletePlans_69:
 		// 删除建造计划
 		if s.DevLogger != nil {
@@ -758,6 +818,12 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 83, "Remote_InputHandler_unitEnteredPayload_83", "unit_entered_payload")
 		}
+	case *protocol.Remote_InputHandler_tileConfig_86:
+		// 建筑配置（逻辑处理器/显示屏/分类器等）
+		if s.DevLogger != nil {
+			s.DevLogger.LogPacketReceived(c.id, c.playerID, 86, "Remote_InputHandler_tileConfig_86", "tile_config")
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_dropItem_84:
 		// 投放物品
 		if s.DevLogger != nil {
@@ -783,6 +849,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				Rotation: 0,
 			}})
 		}
+		s.BroadcastExcept(c, v)
 	case *protocol.Remote_Build_beginPlace_124:
 		// 客户端请求开始放置建筑
 		blockID := int16(0)
@@ -802,6 +869,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				Config:   v.PlaceConfig,
 			}})
 		}
+		s.BroadcastExcept(c, v)
 	case *protocol.Remote_Tile_setFloor_128:
 		// 设置地板
 		if s.DevLogger != nil {
@@ -1326,6 +1394,24 @@ func (s *Server) Broadcast(obj any) {
 	}
 }
 
+func (s *Server) BroadcastExcept(skip *Conn, obj any) {
+	if obj == nil {
+		return
+	}
+	s.mu.Lock()
+	peers := make([]*Conn, 0, len(s.conns))
+	for c := range s.conns {
+		if c == nil || c == skip {
+			continue
+		}
+		peers = append(peers, c)
+	}
+	s.mu.Unlock()
+	for _, peer := range peers {
+		_ = peer.SendAsync(obj)
+	}
+}
+
 func (s *Server) SendStatusTo(c *Conn) {
 	if c == nil {
 		return
@@ -1338,17 +1424,25 @@ func (s *Server) emitEvent(c *Conn, kind, packet, detail string) {
 	if s.OnEvent == nil {
 		return
 	}
+	stable := func(v string) string {
+		if v == "" {
+			return ""
+		}
+		b := make([]byte, len(v))
+		copy(b, v)
+		return string(b)
+	}
 	ev := NetEvent{
 		Timestamp: time.Now().UTC(),
-		Kind:      kind,
-		Packet:    packet,
-		Detail:    detail,
+		Kind:      stable(kind),
+		Packet:    stable(packet),
+		Detail:    stable(detail),
 	}
 	if c != nil {
 		ev.ConnID = c.id
-		ev.UUID = c.uuid
-		ev.IP = c.remoteIP()
-		ev.Name = c.name
+		ev.UUID = stable(c.uuid)
+		ev.IP = stable(c.remoteIP())
+		ev.Name = stable(c.name)
 	}
 	s.OnEvent(ev)
 
@@ -1426,6 +1520,9 @@ type Conn struct {
 	building            bool
 	selectedBlockID     int16
 	selectedRotation    int32
+	snapRotation        float32
+	snapVelX            float32
+	snapVelY            float32
 	lastRecvPacketID    int
 	lastRecvFrameworkID int
 	closed              chan struct{}
@@ -1444,6 +1541,12 @@ type Conn struct {
 	bytesSent           atomic.Int64
 	udpSent             atomic.Int64
 	udpErrors           atomic.Int64
+	tcpStateLogCount    atomic.Int64
+	tcpBuildHealthCount atomic.Int64
+	tcpSetTileLogCount  atomic.Int64
+	tcpRemoveTileCount  atomic.Int64
+	udpEntityLogCount   atomic.Int64
+	snapshotLogSampleN  atomic.Int64
 	statsMu             sync.Mutex
 	byTypeSent          map[string]int64
 	byTypeBytes         map[string]int64
@@ -1576,8 +1679,7 @@ func (c *Conn) sendNow(obj any) error {
 			packetID = int(payload[0])
 		}
 	}
-	// Keep per-packet logs off by default to avoid log flood.
-	if packetID >= 0 && c.sendCount.Load() < 40 {
+	if packetID >= 0 && c.shouldLogPacket(packetID, false) {
 		fmt.Printf("[net] tx id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 	}
 	if len(payload) > 0xFFFF {
@@ -1763,6 +1865,36 @@ func priorityOf(obj any) int {
 		return p.Priority()
 	}
 	return protocol.PriorityNormal
+}
+
+func (c *Conn) shouldLogPacket(packetID int, udp bool) bool {
+	// packet 117 (state snapshot) and 43 (entity snapshot) are high-frequency by design.
+	// Sample them to reduce log I/O pressure while keeping observability.
+	nSample := int(c.snapshotLogSampleN.Load())
+	if nSample <= 0 {
+		nSample = 20
+	}
+	if !udp && packetID == 117 {
+		n := c.tcpStateLogCount.Add(1)
+		return n%int64(nSample) == 1
+	}
+	if !udp && packetID == 13 {
+		n := c.tcpBuildHealthCount.Add(1)
+		return n%int64(nSample) == 1
+	}
+	if !udp && packetID == 106 {
+		n := c.tcpSetTileLogCount.Add(1)
+		return n%int64(nSample) == 1
+	}
+	if !udp && packetID == 71 {
+		n := c.tcpRemoveTileCount.Add(1)
+		return n%int64(nSample) == 1
+	}
+	if udp && packetID == 43 {
+		n := c.udpEntityLogCount.Add(1)
+		return n%int64(nSample) == 1
+	}
+	return true
 }
 
 func (c *Conn) remoteIP() string {
@@ -2030,7 +2162,9 @@ func (s *Server) postConnectLoop(c *Conn) {
 		case <-stateTicker.C:
 			s.maybeRespawn(c)
 			state := buildStateSnapshot(s, c)
-			if err := s.sendUnreliable(c, state); err != nil {
+			// State snapshot is sent reliably to avoid UDP reordering jitter
+			// (e.g. wavetime jumping backward on client).
+			if err := c.SendAsync(state); err != nil {
 				fmt.Printf("[net] state snapshot send failed id=%d err=%v\n", c.id, err)
 				s.emitEvent(c, "state_snapshot_send_failed", "*protocol.Remote_NetClient_stateSnapshot_35", err.Error())
 				return
@@ -2097,7 +2231,7 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 				fmt.Printf("[net] sendUnreliable encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 				return err
 			}
-			if packetID >= 0 && c.sendCount.Load() < 80 {
+			if packetID >= 0 && c.shouldLogPacket(packetID, true) {
 				fmt.Printf("[net] tx-udp id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 			}
 			retries := s.UdpRetryCount
@@ -2202,6 +2336,11 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 	if c == nil || c.playerID == 0 {
 		return
 	}
+	select {
+	case <-c.closed:
+		return
+	default:
+	}
 	if s.SpawnTileFn == nil {
 		return
 	}
@@ -2242,6 +2381,11 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 func (s *Server) requestRespawn(c *Conn, source string) {
 	if c == nil || c.playerID == 0 {
 		return
+	}
+	select {
+	case <-c.closed:
+		return
+	default:
 	}
 	now := time.Now()
 	cooldown := 600 * time.Millisecond
@@ -2576,7 +2720,9 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 				u.X = c.snapX
 				u.Y = c.snapY
 			}
-			u.Rotation = 90
+			u.Rotation = c.snapRotation
+			u.Shooting = c.shooting
+			u.Vel = protocol.Vec2{X: c.snapVelX, Y: c.snapVelY}
 			u.TeamID = 1
 			u.TypeID = playerTypeID
 			u.Elevation = 1
@@ -2594,11 +2740,11 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		Elevation:      1,
 		Flag:           0,
 		Health:         100,
-		Shooting:       false,
+		Shooting:       c.shooting,
 		MineTile:       nil,
 		Mounts:         []protocol.WeaponMount{},
 		Plans:          []*protocol.BuildPlan{},
-		Rotation:       90,
+		Rotation:       c.snapRotation,
 		Shield:         0,
 		SpawnedByCore:  true,
 		Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}, Amount: 0},
@@ -2606,7 +2752,7 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		TeamID:         1,
 		TypeID:         playerTypeID,
 		UpdateBuilding: false,
-		Vel:            protocol.Vec2{X: 0, Y: 0},
+		Vel:            protocol.Vec2{X: c.snapVelX, Y: c.snapVelY},
 		X:              c.snapX,
 		Y:              c.snapY,
 	}
@@ -2629,6 +2775,9 @@ func (s *Server) playerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 				u.X = c.snapX
 				u.Y = c.snapY
 			}
+			u.Rotation = c.snapRotation
+			u.Shooting = c.shooting
+			u.Vel = protocol.Vec2{X: c.snapVelX, Y: c.snapVelY}
 			return u
 		}
 	}

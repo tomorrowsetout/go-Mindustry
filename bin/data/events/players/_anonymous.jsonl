@@ -222,3 +222,145 @@
 {"timestamp":"2026-03-08T10:01:48.6662724Z","kind":"tcp_accept","conn_id":908924683,"ip":"10.147.17.101"}
 {"timestamp":"2026-03-08T10:01:48.6931906Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":908924683,"ip":"10.147.17.101"}
 {"timestamp":"2026-03-08T10:01:48.7100492Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":908924683,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:08:56.1007325Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":664746840,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:08:56.1017401Z","kind":"tcp_accept","conn_id":664746840,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:08:56.1017401Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":664746840,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:08:56.1128965Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":664746840,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:24:28.5234897Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":331732408,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:24:28.5245523Z","kind":"tcp_accept","conn_id":331732408,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:24:28.5245523Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":331732408,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:24:28.5359003Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":331732408,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:00.0641063Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":208005792,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:00.0651116Z","kind":"tcp_accept","conn_id":208005792,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:00.0651116Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":208005792,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:00.0763775Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":208005792,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:14.6917226Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":515903328,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:14.6933801Z","kind":"tcp_accept","conn_id":515903328,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:14.6933801Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":515903328,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:14.7040422Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":515903328,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:53.6733915Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1001309528,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:53.6740017Z","kind":"tcp_accept","conn_id":1001309528,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:53.6740017Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1001309528,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:28:53.6858478Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1001309528,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T11:31:43.1998692Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":728613320,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:31:43.2013868Z","kind":"tcp_accept","conn_id":728613320,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:31:48.2304867Z","kind":"tcp_closed","detail":"EOF","conn_id":728613320,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:00.6499343Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:00.6499343Z","kind":"tcp_accept","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.1501616Z","kind":"packet_send","packet":"*protocol.Remote_Tile_buildHealthUpdate_135","detail":"size=24 packet_id=13","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.7989497Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8005503Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8021622Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8040834Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8069088Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8085203Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8106824Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8120251Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8131097Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8161478Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8177925Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T11:32:01.8184625Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":468718063,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:03:04.814569Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":620906529,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:04.814569Z","kind":"tcp_accept","conn_id":620906529,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:04.814569Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":620906529,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:04.8257027Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":620906529,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:11.780327Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":760739374,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:11.7814561Z","kind":"tcp_accept","conn_id":760739374,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:11.7814561Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":760739374,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:03:11.7957439Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":760739374,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:04:58.2254969Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":605585533,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:04:58.2260036Z","kind":"tcp_accept","conn_id":605585533,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:05:03.24954Z","kind":"tcp_closed","detail":"EOF","conn_id":605585533,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:09:04.1472794Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":66108041,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:09:04.1478745Z","kind":"tcp_accept","conn_id":66108041,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:09:04.1484243Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":66108041,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:09:04.1619135Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":66108041,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:09:07.5034732Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":238746710,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:09:07.5045881Z","kind":"tcp_accept","conn_id":238746710,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:09:07.5045881Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":238746710,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:09:07.5289582Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":238746710,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:16.3848306Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":750538658,"ip":"192.168.0.101"}
+{"timestamp":"2026-03-08T12:13:16.3858374Z","kind":"tcp_accept","conn_id":750538658,"ip":"192.168.0.101"}
+{"timestamp":"2026-03-08T12:13:18.0956754Z","kind":"tcp_closed","detail":"EOF","conn_id":750538658,"ip":"192.168.0.101"}
+{"timestamp":"2026-03-08T12:13:18.7688902Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:18.769889Z","kind":"tcp_accept","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3544865Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3580287Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3595503Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3605621Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3620776Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3646411Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:20.3661554Z","kind":"packet_send","packet":"*protocol.Remote_Tile_buildHealthUpdate_135","detail":"size=146 packet_id=13","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4621965Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4672777Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4683182Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4703688Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4713822Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4739223Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4749341Z","kind":"packet_send","packet":"*protocol.Remote_ConstructBlock_deconstructFinish_136","detail":"size=15 packet_id=36","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.476935Z","kind":"packet_send","packet":"*protocol.Remote_Tile_removeTile_130","detail":"size=8 packet_id=71","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:22.4789296Z","kind":"packet_send","packet":"*protocol.Remote_Tile_buildHealthUpdate_135","detail":"size=96 packet_id=13","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:13:23.79389Z","kind":"tcp_closed","detail":"EOF","conn_id":1834997241,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:14:42.4169759Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1237892195,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:14:42.4175383Z","kind":"tcp_accept","conn_id":1237892195,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:14:42.4175383Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1237892195,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:14:42.4284477Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1237892195,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T12:16:42.774409Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":930853364,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:42.7749886Z","kind":"tcp_accept","conn_id":930853364,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:42.7754959Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":930853364,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:42.7875453Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":930853364,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:48.0797531Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1743030595,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:48.0802798Z","kind":"tcp_accept","conn_id":1743030595,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:48.080831Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1743030595,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:16:48.1025007Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1743030595,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:03.6534687Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":129506427,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:03.6544641Z","kind":"tcp_accept","conn_id":129506427,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:03.6544641Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":129506427,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:03.6720621Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":129506427,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:06.6528855Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1574857101,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:06.6539345Z","kind":"tcp_accept","conn_id":1574857101,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:06.6539345Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1574857101,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:27:06.6657331Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1574857101,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:34.0475024Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1181477534,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:34.0495026Z","kind":"tcp_accept","conn_id":1181477534,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:34.0495026Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1181477534,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:34.0718293Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1181477534,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:37.3092742Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1483493105,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:37.3103604Z","kind":"tcp_accept","conn_id":1483493105,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:37.3103604Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1483493105,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:47:37.3227929Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1483493105,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:48:42.5556139Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":51277099,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:48:42.5567148Z","kind":"tcp_accept","conn_id":51277099,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:48:42.5567148Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":51277099,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:48:42.569791Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":51277099,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:49:06.5603657Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":776189412,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:49:06.5619752Z","kind":"tcp_accept","conn_id":776189412,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:49:06.5619752Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":776189412,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:49:06.5708971Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":776189412,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:32.7521137Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1554128607,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:32.7531236Z","kind":"tcp_accept","conn_id":1554128607,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:32.7531236Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1554128607,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:32.770923Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1554128607,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:49.4224848Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1921469238,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:49.4241376Z","kind":"tcp_accept","conn_id":1921469238,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:49.4241898Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1921469238,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:51:49.4322378Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1921469238,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:10.9828503Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":619749318,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:10.9828503Z","kind":"tcp_accept","conn_id":619749318,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:10.9843126Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":619749318,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:11.0014316Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":619749318,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:13.4398244Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":647332497,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:13.4408865Z","kind":"tcp_accept","conn_id":647332497,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:13.4408865Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":647332497,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T12:58:13.4499988Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":647332497,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:58.2625292Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":20977036,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:58.2636036Z","kind":"tcp_accept","conn_id":20977036,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:58.2636036Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":20977036,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:58.2691749Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":20977036,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:59.9733542Z","kind":"packet_send","packet":"*protocol.RegisterTCP","detail":"size=6 framework_id=4","conn_id":1651722446,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:59.9743953Z","kind":"tcp_accept","conn_id":1651722446,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:59.9743953Z","kind":"packet_send","packet":"*protocol.RegisterUDP","detail":"size=6 framework_id=3","conn_id":1651722446,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:06:59.9892464Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1651722446,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-08T13:24:04.0602726Z","kind":"tcp_accept","conn_id":1626767947,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T13:24:04.078718Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":1626767947,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-08T13:24:05.3421223Z","kind":"tcp_accept","conn_id":1721814369,"ip":"10.147.17.101"}

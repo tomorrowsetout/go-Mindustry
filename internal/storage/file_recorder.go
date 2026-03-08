@@ -7,11 +7,18 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 type FileRecorder struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	baseDir string
+	queue   chan Event
+	wg      sync.WaitGroup
+	closed  bool
+	dropped atomic.Int64
+	written atomic.Int64
+	lastErr atomic.Value
 }
 
 func NewFileRecorder(baseDir string) (*FileRecorder, error) {
@@ -21,13 +28,30 @@ func NewFileRecorder(baseDir string) (*FileRecorder, error) {
 	if err := os.MkdirAll(filepath.Join(baseDir, "players"), 0o755); err != nil {
 		return nil, err
 	}
-	return &FileRecorder{baseDir: baseDir}, nil
+	r := &FileRecorder{
+		baseDir: baseDir,
+		queue:   make(chan Event, 8192),
+	}
+	r.wg.Add(1)
+	go r.loop()
+	return r, nil
 }
 
 func (r *FileRecorder) Record(e Event) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return os.ErrClosed
+	}
+	select {
+	case r.queue <- e:
+	default:
+		r.dropped.Add(1)
+	}
+	return nil
+}
 
+func (r *FileRecorder) recordSync(e Event) error {
 	line, err := json.Marshal(e)
 	if err != nil {
 		return err
@@ -47,12 +71,37 @@ func (r *FileRecorder) Record(e Event) error {
 	return appendFile(playerPath, line)
 }
 
+func (r *FileRecorder) loop() {
+	defer r.wg.Done()
+	for e := range r.queue {
+		if err := r.recordSync(e); err != nil {
+			r.lastErr.Store(err)
+			continue
+		}
+		r.written.Add(1)
+	}
+}
+
 func (r *FileRecorder) Close() error {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil
+	}
+	r.closed = true
+	close(r.queue)
+	r.mu.Unlock()
+	r.wg.Wait()
+	if v := r.lastErr.Load(); v != nil {
+		if err, ok := v.(error); ok {
+			return err
+		}
+	}
 	return nil
 }
 
 func (r *FileRecorder) Status() string {
-	return fmt.Sprintf("file:%s", r.baseDir)
+	return fmt.Sprintf("file:%s queued=%d written=%d dropped=%d", r.baseDir, len(r.queue), r.written.Load(), r.dropped.Load())
 }
 
 func appendFile(path string, data []byte) error {
@@ -76,4 +125,3 @@ func sanitizeFilename(s string) string {
 	}
 	return out
 }
-
