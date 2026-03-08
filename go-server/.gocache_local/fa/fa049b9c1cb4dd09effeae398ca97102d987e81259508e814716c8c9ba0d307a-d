@@ -1,8 +1,0 @@
-./model.go
-./rules.go
-./waves.go
-./world.go
-./world_complete.go
-./rules_test.go
-./waves_test.go
-./world_test.go

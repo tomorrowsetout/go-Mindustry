@@ -281,7 +281,8 @@ func FindCoreTilesFromMSAV(path string) ([]protocol.Point2, error) {
 	if err != nil {
 		return nil, err
 	}
-	blockNames, err := readContentBlockNames(data.Content)
+	// 使用 nil registry，fallback 到索引
+	blockNames, err := readContentBlockNames(data.Content, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -289,6 +290,24 @@ func FindCoreTilesFromMSAV(path string) ([]protocol.Point2, error) {
 	for id, name := range blockNames {
 		if isCoreBlockName(name) {
 			coreIDs[id] = struct{}{}
+		}
+	}
+	// 调试日志：输出找到的核心 ID
+	if len(coreIDs) > 0 {
+		fmt.Printf("[worldstream] found cores in content: ")
+		for id := range coreIDs {
+			fmt.Printf("%d(%s) ", id, blockNames[id])
+		}
+		fmt.Println()
+	} else {
+		fmt.Printf("[worldstream] no cores found in content, blockNames count=%d\n", len(blockNames))
+		// 输出所有块名称用于调试
+		count := 0
+		for id, name := range blockNames {
+			if count < 10 {
+				fmt.Printf("[worldstream] block %d: %s\n", id, name)
+				count++
+			}
 		}
 	}
 	if len(coreIDs) == 0 {
@@ -403,15 +422,35 @@ func readStringMapInline(r *javaReader) (map[string]string, error) {
 	return out, nil
 }
 
-func readContentBlockNames(chunk []byte) (map[int16]string, error) {
-	return readContentNamesOfType(chunk, 1) // ContentType.block
+func readContentBlockNames(chunk []byte, registry *protocol.ContentRegistry) (map[int16]string, error) {
+	return readContentNamesOfType(chunk, 1, registry) // ContentType.block
 }
 
-func readContentUnitNames(chunk []byte) (map[int16]string, error) {
-	return readContentNamesOfType(chunk, 6) // ContentType.unit
+func readContentUnitNames(chunk []byte, registry *protocol.ContentRegistry) (map[int16]string, error) {
+	return readContentNamesOfType(chunk, 6, registry) // ContentType.unit
 }
 
-func readContentNamesOfType(chunk []byte, typeID byte) (map[int16]string, error) {
+func readContentNamesOfType(chunk []byte, typeID byte, registry *protocol.ContentRegistry) (map[int16]string, error) {
+	// 优先使用 content registry 中的映射，忽略 MSAV 文件中的 content chunk
+	// 因为 MSAV 文件的 content chunk 可能使用旧版 Mindustry 的 content 顺序
+	if registry != nil {
+		out := map[int16]string{}
+		switch typeID {
+		case 1: // ContentType.block
+			registry.IterateBlocks(func(b protocol.Block) bool {
+				out[b.ID()] = strings.ToLower(strings.TrimSpace(b.Name()))
+				return true
+			})
+		case 6: // ContentType.unit
+			registry.IterateUnitTypes(func(u protocol.UnitType) bool {
+				out[u.ID()] = strings.ToLower(strings.TrimSpace(u.Name()))
+				return true
+			})
+		}
+		return out, nil
+	}
+
+	// 如果没有 registry，使用 MSAV 文件中的 content chunk（向后兼容）
 	r := newJavaReader(chunk)
 	mapped, err := r.ReadByte()
 	if err != nil {

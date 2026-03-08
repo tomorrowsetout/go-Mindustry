@@ -4,8 +4,19 @@ import (
 	"math"
 )
 
-// BlockCore 核心块ID
-const BlockCore BlockID = 1
+// 核心方块 ID - 使用内容注册表中的实际 ID
+const (
+	BlockCoreShard     BlockID = 316 // core-shard - 最小核心
+	BlockCoreFoundation BlockID = 317 // core-foundation - 中等核心
+	BlockCoreNucleus   BlockID = 318 // core-nucleus - 最大核心
+	BlockCoreBastion   BlockID = 319 // core-bastion - 艾里克尔最小核心
+	BlockCoreCitadel   BlockID = 320 // core-citadel - 艾里克尔中等核心
+	BlockCoreAcropolis BlockID = 321 // core-acropolis - 艾里克尔最大核心
+)
+
+// BlockCore 是旧的向后兼容常量，已弃用
+// 请使用具体的核心常量（如 BlockCoreShard, BlockCoreFoundation 等）
+const BlockCore BlockID = BlockCoreShard
 
 // RaycastResult 射线投射结果
 type RaycastResult struct {

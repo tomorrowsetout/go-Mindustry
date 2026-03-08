@@ -1,4 +1,0 @@
-./executor.go
-./instructions.go
-./lexer.go
-./parser.go

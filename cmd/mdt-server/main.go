@@ -421,7 +421,7 @@ func main() {
 			loadedMapPath = ""
 			return
 		}
-		model, lerr := worldstream.LoadWorldModelFromMSAV(path)
+		model, lerr := worldstream.LoadWorldModelFromMSAV(path, srv.Content)
 		if lerr != nil {
 			log.Warn("world model load failed", logging.Field{Key: "path", Value: path}, logging.Field{Key: "error", Value: lerr.Error()})
 			startup.warn("地图模型", fmt.Sprintf("加载失败: %s", lerr.Error()))
@@ -2500,7 +2500,7 @@ func broadcastBuildDestroyed(srv *netserver.Server, buildPos int32) {
 	// For server-initiated broadcast, we send deconstructFinish directly
 	srv.Broadcast(&protocol.Remote_ConstructBlock_deconstructFinish_136{
 		Tile:    protocol.TileBox{PosValue: buildPos},
-		Block:   blockRef{id: 0}, // block ID unknown, use 0
+		Block:   protocol.BlockRef{BlkID: 0, BlkName: "air"}, // block ID unknown, use 0
 		Builder: protocol.UnitBox{IDValue: 0}, // 0 for server
 	})
 	// Also send removeTile for compatibility
@@ -2529,7 +2529,7 @@ func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int
 	})
 	srv.Broadcast(&protocol.Remote_Tile_setTile_131{
 		Tile:     protocol.TileBox{PosValue: buildPos},
-		Block:    blockRef{id: blockID},
+		Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},
 		Team:     protocol.Team{ID: team},
 		Rotation: int32(rot) & 0x3,
 	})

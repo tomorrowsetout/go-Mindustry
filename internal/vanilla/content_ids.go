@@ -144,19 +144,19 @@ func ApplyContentIDs(reg *protocol.ContentRegistry, ids *ContentIDsFile) int {
 	}
 	total := 0
 	for _, e := range ids.Items {
-		reg.RegisterItem(namedContent{typ: protocol.ContentItem, id: e.ID})
+		reg.RegisterItem(namedContent{typ: protocol.ContentItem, id: e.ID, name: e.Name})
 		total++
 	}
 	for _, e := range ids.Liquids {
-		reg.RegisterLiquid(namedContent{typ: protocol.ContentLiquid, id: e.ID})
+		reg.RegisterLiquid(namedContent{typ: protocol.ContentLiquid, id: e.ID, name: e.Name})
 		total++
 	}
 	for _, e := range ids.Blocks {
-		reg.RegisterBlock(namedContent{typ: protocol.ContentBlock, id: e.ID})
+		reg.RegisterBlock(namedContent{typ: protocol.ContentBlock, id: e.ID, name: e.Name})
 		total++
 	}
 	for _, e := range ids.Units {
-		reg.RegisterUnitType(namedContent{typ: protocol.ContentUnit, id: e.ID})
+		reg.RegisterUnitType(namedContent{typ: protocol.ContentUnit, id: e.ID, name: e.Name})
 		total++
 	}
 	for _, e := range ids.Statuses {
@@ -164,11 +164,11 @@ func ApplyContentIDs(reg *protocol.ContentRegistry, ids *ContentIDsFile) int {
 		total++
 	}
 	for _, e := range ids.Weathers {
-		reg.RegisterWeather(namedContent{typ: protocol.ContentWeather, id: e.ID})
+		reg.RegisterWeather(namedContent{typ: protocol.ContentWeather, id: e.ID, name: e.Name})
 		total++
 	}
 	for _, e := range ids.Bullets {
-		reg.RegisterBulletType(namedContent{typ: protocol.ContentBullet, id: e.ID})
+		reg.RegisterBulletType(namedContent{typ: protocol.ContentBullet, id: e.ID, name: e.Name})
 		total++
 	}
 	for _, e := range ids.Effects {
@@ -197,18 +197,22 @@ func ApplyContentIDs(reg *protocol.ContentRegistry, ids *ContentIDsFile) int {
 type namedContent struct {
 	typ protocol.ContentType
 	id  int16
+	name string
 }
 
 func (n namedContent) ContentType() protocol.ContentType { return n.typ }
 func (n namedContent) ID() int16                         { return n.id }
+func (n namedContent) Name() string                      { return n.name }
 
 type namedStatus struct {
-	id int16
+	id   int16
+	name string
 }
 
 func (s namedStatus) ContentType() protocol.ContentType { return protocol.ContentStatus }
 func (s namedStatus) ID() int16                         { return s.id }
 func (s namedStatus) Dynamic() bool                     { return false }
+func (s namedStatus) Name() string                      { return s.name }
 
 func parseNamedNewEntries(path string, ctorPattern string) ([]ContentIDEntry, error) {
 	src, err := os.ReadFile(path)
