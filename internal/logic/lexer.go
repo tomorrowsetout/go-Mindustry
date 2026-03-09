@@ -231,7 +231,7 @@ func (t Token) String() string {
 	case True, False:
 		return fmt.Sprintf("BOOL(%s)", t.Literal)
 	default:
-		return fmt.Sprintf("%s(%s)", t.Type, t.Literal)
+		return fmt.Sprintf("%v(%s)", t.Type, t.Literal)
 	}
 }
 

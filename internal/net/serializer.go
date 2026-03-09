@@ -228,8 +228,14 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 		// ordering differs from the target client build.
 		switch id {
 		case 9, 13: // BeginBreak call packet variants
+			if msg, err := readBeginBreakCompat(payload, s.Ctx); err == nil {
+				return msg, nil
+			}
 			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
 		case 10, 14: // BeginPlace call packet variants
+			if msg, err := readBeginPlaceCompat(payload, s.Ctx); err == nil {
+				return msg, nil
+			}
 			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
 		case 24: // ClientSnapshotCallPacket (official 155)
 			if snap, err := readClientSnapshotCompat(payload, s.Ctx); err == nil {
@@ -446,6 +452,24 @@ func tryReadChatPayload(payload []byte, ctx *protocol.TypeIOContext) (*protocol.
 	}
 	// Commands and plain chat are both accepted.
 	return out, true
+}
+
+func readBeginBreakCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_Build_beginBreak_123, error) {
+	r := protocol.NewReaderWithContext(payload, ctx)
+	out := &protocol.Remote_Build_beginBreak_123{}
+	if err := out.Read(r, len(payload)); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func readBeginPlaceCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_Build_beginPlace_124, error) {
+	r := protocol.NewReaderWithContext(payload, ctx)
+	out := &protocol.Remote_Build_beginPlace_124{}
+	if err := out.Read(r, len(payload)); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func readFramework(buf *bytes.Reader) (protocol.FrameworkMessage, error) {

@@ -13,12 +13,17 @@ import (
 type FileRecorder struct {
 	mu      sync.RWMutex
 	baseDir string
-	queue   chan Event
+	queue   chan queueItem
 	wg      sync.WaitGroup
 	closed  bool
 	dropped atomic.Int64
 	written atomic.Int64
 	lastErr atomic.Value
+}
+
+type queueItem struct {
+	event Event
+	flush chan struct{}
 }
 
 func NewFileRecorder(baseDir string) (*FileRecorder, error) {
@@ -30,7 +35,7 @@ func NewFileRecorder(baseDir string) (*FileRecorder, error) {
 	}
 	r := &FileRecorder{
 		baseDir: baseDir,
-		queue:   make(chan Event, 8192),
+		queue:   make(chan queueItem, 8192),
 	}
 	r.wg.Add(1)
 	go r.loop()
@@ -44,9 +49,28 @@ func (r *FileRecorder) Record(e Event) error {
 		return os.ErrClosed
 	}
 	select {
-	case r.queue <- e:
+	case r.queue <- queueItem{event: e}:
 	default:
 		r.dropped.Add(1)
+	}
+	return nil
+}
+
+// Flush waits until all queued events before this call are persisted.
+func (r *FileRecorder) Flush() error {
+	r.mu.RLock()
+	if r.closed {
+		r.mu.RUnlock()
+		return os.ErrClosed
+	}
+	done := make(chan struct{})
+	r.queue <- queueItem{flush: done}
+	r.mu.RUnlock()
+	<-done
+	if v := r.lastErr.Load(); v != nil {
+		if err, ok := v.(error); ok {
+			return err
+		}
 	}
 	return nil
 }
@@ -73,8 +97,12 @@ func (r *FileRecorder) recordSync(e Event) error {
 
 func (r *FileRecorder) loop() {
 	defer r.wg.Done()
-	for e := range r.queue {
-		if err := r.recordSync(e); err != nil {
+	for item := range r.queue {
+		if item.flush != nil {
+			close(item.flush)
+			continue
+		}
+		if err := r.recordSync(item.event); err != nil {
 			r.lastErr.Store(err)
 			continue
 		}

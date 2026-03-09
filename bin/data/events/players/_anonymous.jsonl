@@ -401,3 +401,7 @@
 {"timestamp":"2026-03-09T06:53:09.9280783Z","kind":"tcp_accept","conn_id":217868850,"ip":"10.147.17.101"}
 {"timestamp":"2026-03-09T06:53:09.9391626Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":217868850,"ip":"10.147.17.101"}
 {"timestamp":"2026-03-09T06:53:25.4266026Z","kind":"tcp_accept","conn_id":655680330,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-09T12:04:53.3386646Z","kind":"tcp_accept","conn_id":2036437492,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-09T12:04:53.3588333Z","kind":"packet_recv","packet":"*protocol.ConnectPacket","detail":"packet_id=3","conn_id":2036437492,"ip":"127.0.0.1"}
+{"timestamp":"2026-03-09T12:05:16.4545045Z","kind":"tcp_accept","conn_id":1260264972,"ip":"10.147.17.101"}
+{"timestamp":"2026-03-09T12:05:29.1166239Z","kind":"tcp_accept","conn_id":1003077588,"ip":"10.147.17.101"}
