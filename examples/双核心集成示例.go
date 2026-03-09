@@ -99,7 +99,7 @@ func exampleAsyncResult() {
 		WorkerCount: 4,
 	}
 
-	persistCfg := persist.Config{
+	persistCfg := config.PersistConfig{
 		Enabled:   true,
 		Directory: "data/state",
 		File:      "server-state.json",
@@ -144,7 +144,7 @@ func exampleMonitorCore2() {
 		WorkerCount: 4,
 	}
 
-	persistCfg := persist.Config{
+	persistCfg := config.PersistConfig{
 		Enabled:   true,
 		Directory: "data/state",
 		File:      "server-state.json",
@@ -198,7 +198,7 @@ func exampleIntegration() {
 		WorkerCount: 4,
 	}
 
-	persistCfg := persist.Config{
+	persistCfg := config.PersistConfig{
 		Enabled:     true,
 		Directory:   "data/state",
 		File:        "server-state.json",

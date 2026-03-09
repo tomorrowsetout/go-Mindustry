@@ -3,11 +3,11 @@ package mods
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
+	"strings"
 
 	"mdt-server/internal/config"
-	"mdt-server/internal/mods/go"
+	gomod "mdt-server/internal/mods/go"
 	"mdt-server/internal/mods/java"
 	"mdt-server/internal/mods/js"
 	"mdt-server/internal/mods/node"
@@ -53,7 +53,7 @@ func (ml *ModLoader) Load(path string) error {
 	}
 
 	// Check mod type and load accordingly
-	ext := filepath.Ext(path)
+	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".jar":
 		manager, exists := ml.managers["java"]
@@ -89,7 +89,7 @@ func (ml *ModLoader) Load(path string) error {
 	case ".go":
 		manager, exists := ml.managers["go"]
 		if !exists {
-			manager = go.NewGoModManager()
+			manager = gomod.NewGoModManager()
 			ml.managers["go"] = manager
 		}
 
@@ -101,6 +101,21 @@ func (ml *ModLoader) Load(path string) error {
 		ml.loadedMods[mod.Name] = mod
 		return nil
 
+	case ".node":
+		manager, exists := ml.managers["node"]
+		if !exists {
+			manager = node.NewNodeModManager()
+			ml.managers["node"] = manager
+		}
+
+		mod := &LoadedMod{
+			Name:     filepath.Base(path),
+			Path:     path,
+			DataType: "node",
+		}
+		ml.loadedMods[mod.Name] = mod
+		return nil
+
 	default:
 		return fmt.Errorf("mod loader: mod type not supported: %s", ext)
 	}
@@ -108,7 +123,7 @@ func (ml *ModLoader) Load(path string) error {
 
 // Unload unloads a mod by name
 func (ml *ModLoader) Unload(name string) error {
-	if mod, exists := ml.loadedMods[name]; exists {
+	if _, exists := ml.loadedMods[name]; exists {
 		delete(ml.loadedMods, name)
 		return nil
 	}
@@ -180,30 +195,30 @@ func (ml *ModLoader) SetConfig(cfg config.ModsConfig) {
 // MarshalJSON implements json.Marshaler
 func (ml *ModLoader) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Enabled      bool
-		LoadedMods   []string
-		JavaHome     string
-		JSDir        string
-		GoDir        string
-		NodeDir      string
+		Enabled    bool
+		LoadedMods []string
+		JavaHome   string
+		JSDir      string
+		GoDir      string
+		NodeDir    string
 	}{
-		Enabled:      ml.cfg.Enabled,
-		LoadedMods:   ml.ListMods(),
-		JavaHome:     ml.cfg.JavaHome,
-		JSDir:        ml.cfg.JSDir,
-		GoDir:        ml.cfg.GoDir,
-		NodeDir:      ml.cfg.NodeDir,
+		Enabled:    ml.cfg.Enabled,
+		LoadedMods: ml.ListMods(),
+		JavaHome:   ml.cfg.JavaHome,
+		JSDir:      ml.cfg.JSDir,
+		GoDir:      ml.cfg.GoDir,
+		NodeDir:    ml.cfg.NodeDir,
 	})
 }
 
 // UnmarshalJSON implements json.Unmarshaler
 func (ml *ModLoader) UnmarshalJSON(data []byte) error {
 	var cfg struct {
-		Enabled      bool   `json:"enabled"`
-		JavaHome     string `json:"java_home"`
-		JSDir        string `json:"js_dir"`
-		GoDir        string `json:"go_dir"`
-		NodeDir      string `json:"node_dir"`
+		Enabled  bool   `json:"enabled"`
+		JavaHome string `json:"java_home"`
+		JSDir    string `json:"js_dir"`
+		GoDir    string `json:"go_dir"`
+		NodeDir  string `json:"node_dir"`
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return err
