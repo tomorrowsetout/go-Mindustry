@@ -104,6 +104,7 @@ type EntityEvent struct {
 	BuildBlock int16
 	BuildRot   int8
 	BuildHP    float32
+	BuildItems []ItemStack
 	Bullet     BulletEvent
 }
 
@@ -561,6 +562,41 @@ func (w *World) SetModel(m *WorldModel) {
 	}
 }
 
+// ResetRuntimeFromTags reinitializes wave/timer/tick runtime state from map tags.
+// It should be called when switching to a different map to avoid carrying over
+// runtime progression from the previous map.
+func (w *World) ResetRuntimeFromTags(tags map[string]string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.wave = 1
+	w.waveTime = w.nextWaveSpacingSec()
+	w.tick = 0
+	w.start = time.Now()
+
+	if tags == nil {
+		return
+	}
+	if v := strings.TrimSpace(tags["wave"]); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil && n > 0 {
+			w.wave = int32(n)
+		}
+	}
+	if v := strings.TrimSpace(tags["wavetime"]); v != "" {
+		if n, err := strconv.ParseFloat(v, 32); err == nil {
+			w.waveTime = float32(n)
+			if w.waveTime < 0 {
+				w.waveTime = 0
+			}
+		}
+	}
+	if v := strings.TrimSpace(tags["tick"]); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+			w.tick = n
+		}
+	}
+}
+
 func (w *World) stepPendingBuilds(delta time.Duration) {
 	if w.model == nil || len(w.pendingBuilds) == 0 {
 		return
@@ -569,8 +605,8 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 	if dt <= 0 {
 		return
 	}
-	// Keep construction/deconstruction visibly progressive and responsive.
-	progressPerSec := float32(2.0)
+	// Keep construction/deconstruction visibly progressive and smooth.
+	progressPerSec := float32(1.25)
 	for pos, st := range w.pendingBuilds {
 		st.Progress += dt * progressPerSec
 		if st.Progress > 1 {
@@ -592,7 +628,7 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			st.MaxHealth = 1000
 		}
 
-		shouldEmit := st.Progress >= 1 || st.LastEmit == 0 || st.Progress-st.LastEmit >= 0.12
+		shouldEmit := st.Progress >= 1 || st.LastEmit == 0 || st.Progress-st.LastEmit >= 0.03
 		if st.Breaking {
 			if tile.Build == nil || tile.Block == 0 {
 				delete(w.pendingBuilds, pos)
@@ -604,17 +640,21 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			}
 			tile.Build.Health = nextHP
 			if shouldEmit {
+				st.LastEmit = st.Progress
 				w.entityEvents = append(w.entityEvents, EntityEvent{
 					Kind:     EntityEventBuildHealth,
 					BuildPos: packTilePos(tile.X, tile.Y),
 					BuildHP:  tile.Build.Health,
 				})
-				st.LastEmit = st.Progress
 			}
 			if st.Progress >= 1 {
 				teamOld := tile.Team
+				var dropped []ItemStack
 				if tile.Build != nil {
 					teamOld = tile.Build.Team
+					if len(tile.Build.Items) > 0 {
+						dropped = append([]ItemStack(nil), tile.Build.Items...)
+					}
 				}
 				tile.Build = nil
 				tile.Block = 0
@@ -622,9 +662,10 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 				tile.Rotation = 0
 				delete(w.buildStates, pos)
 				w.entityEvents = append(w.entityEvents, EntityEvent{
-					Kind:      EntityEventBuildDestroyed,
-					BuildPos:  packTilePos(tile.X, tile.Y),
-					BuildTeam: teamOld,
+					Kind:       EntityEventBuildDestroyed,
+					BuildPos:   packTilePos(tile.X, tile.Y),
+					BuildTeam:  teamOld,
+					BuildItems: dropped,
 				})
 				delete(w.pendingBuilds, pos)
 				continue
@@ -663,14 +704,22 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 		}
 		tile.Build.MaxHealth = st.MaxHealth
 		if shouldEmit {
+			st.LastEmit = st.Progress
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
 				BuildPos: packTilePos(tile.X, tile.Y),
 				BuildHP:  tile.Build.Health,
 			})
-			st.LastEmit = st.Progress
 		}
 		if st.Progress >= 1 {
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildPlaced,
+				BuildPos:   packTilePos(tile.X, tile.Y),
+				BuildTeam:  tile.Team,
+				BuildBlock: int16(tile.Block),
+				BuildRot:   tile.Rotation,
+				BuildHP:    tile.Build.Health,
+			})
 			delete(w.pendingBuilds, pos)
 			continue
 		}
@@ -1075,7 +1124,8 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		if tile.Block == BlockID(op.BlockID) && tile.Team == team && tile.Rotation == op.Rotation && tile.Build != nil {
 			continue
 		}
-		// Initialize placement immediately to avoid delayed visual popping on clients.
+		// Initialize placement in world state, but do not emit "placed" event yet.
+		// Final placement event is emitted when pending progress reaches 100%.
 		maxHP := estimateBuildMaxHealth(op.BlockID, w.model)
 		tile.Block = BlockID(op.BlockID)
 		tile.Team = team
@@ -1090,13 +1140,6 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 				Health:    1,
 				MaxHealth: maxHP,
 			}
-			w.entityEvents = append(w.entityEvents, EntityEvent{
-				Kind:       EntityEventBuildPlaced,
-				BuildPos:   packTilePos(tile.X, tile.Y),
-				BuildTeam:  team,
-				BuildBlock: op.BlockID,
-				BuildRot:   op.Rotation,
-			})
 		} else {
 			tile.Build.Block = tile.Block
 			tile.Build.Team = team
@@ -1108,11 +1151,6 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 				tile.Build.Health = 1
 			}
 		}
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:     EntityEventBuildHealth,
-			BuildPos: packTilePos(tile.X, tile.Y),
-			BuildHP:  tile.Build.Health,
-		})
 		w.pendingBuilds[pos] = pendingBuildState{
 			Team:      team,
 			BlockID:   op.BlockID,
@@ -1125,6 +1163,277 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		addChanged(pos)
 	}
 	return changed
+}
+
+func unpackPos(pos int32) (int, int) {
+	x := int((pos >> 16) & 0xFFFF)
+	y := int(pos & 0xFFFF)
+	return x, y
+}
+
+func (w *World) tileForPosLocked(pos int32) (*Tile, bool) {
+	if w.model == nil {
+		return nil, false
+	}
+	x, y := unpackPos(pos)
+	if w.model.InBounds(x, y) {
+		t, err := w.model.TileAt(x, y)
+		return t, err == nil && t != nil
+	}
+	linear := int(pos)
+	if linear >= 0 && linear < w.model.Width*w.model.Height {
+		x = linear % w.model.Width
+		y = linear / w.model.Width
+		t, err := w.model.TileAt(x, y)
+		return t, err == nil && t != nil
+	}
+	return nil, false
+}
+
+func (w *World) ensureBuildLocked(t *Tile) *Building {
+	if t == nil || t.Block == 0 {
+		return nil
+	}
+	if t.Build == nil {
+		maxHP := estimateBuildMaxHealth(int16(t.Block), w.model)
+		t.Build = &Building{
+			Block:     t.Block,
+			Team:      t.Team,
+			Rotation:  t.Rotation,
+			X:         t.X,
+			Y:         t.Y,
+			Health:    maxHP,
+			MaxHealth: maxHP,
+		}
+	}
+	return t.Build
+}
+
+func (w *World) SetBuildingItem(buildPos int32, itemID int16, amount int32) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok {
+		return false
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return false
+	}
+	it := ItemID(itemID)
+	for i := range b.Items {
+		if b.Items[i].Item == it {
+			if amount <= 0 {
+				b.Items = append(b.Items[:i], b.Items[i+1:]...)
+			} else {
+				b.Items[i].Amount = amount
+			}
+			return true
+		}
+	}
+	if amount > 0 {
+		b.Items = append(b.Items, ItemStack{Item: it, Amount: amount})
+	}
+	return true
+}
+
+func (w *World) SetBuildingItems(buildPos int32, items []ItemStack) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok {
+		return false
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return false
+	}
+	if len(items) == 0 {
+		b.Items = nil
+		return true
+	}
+	out := make([]ItemStack, 0, len(items))
+	for _, s := range items {
+		if s.Amount > 0 {
+			out = append(out, s)
+		}
+	}
+	b.Items = out
+	return true
+}
+
+func (w *World) SetTileItems(positions []int32, itemID int16, amount int32) int {
+	if len(positions) == 0 {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	updated := 0
+	for _, pos := range positions {
+		t, ok := w.tileForPosLocked(pos)
+		if !ok {
+			continue
+		}
+		b := w.ensureBuildLocked(t)
+		if b == nil {
+			continue
+		}
+		it := ItemID(itemID)
+		found := false
+		for i := range b.Items {
+			if b.Items[i].Item != it {
+				continue
+			}
+			found = true
+			if amount <= 0 {
+				b.Items = append(b.Items[:i], b.Items[i+1:]...)
+			} else {
+				b.Items[i].Amount = amount
+			}
+			break
+		}
+		if !found && amount > 0 {
+			b.Items = append(b.Items, ItemStack{Item: it, Amount: amount})
+		}
+		updated++
+	}
+	return updated
+}
+
+func (w *World) AddBuildingItem(buildPos int32, itemID int16, amount int32) bool {
+	if amount <= 0 {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok {
+		return false
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return false
+	}
+	b.AddItem(ItemID(itemID), amount)
+	return true
+}
+
+func (w *World) RemoveBuildingItem(buildPos int32, itemID int16, amount int32) int32 {
+	if amount <= 0 {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok || t.Build == nil {
+		return 0
+	}
+	for i := range t.Build.Items {
+		if t.Build.Items[i].Item != ItemID(itemID) {
+			continue
+		}
+		cur := t.Build.Items[i].Amount
+		if cur <= 0 {
+			return 0
+		}
+		take := amount
+		if cur < take {
+			take = cur
+		}
+		t.Build.Items[i].Amount -= take
+		if t.Build.Items[i].Amount <= 0 {
+			t.Build.Items = append(t.Build.Items[:i], t.Build.Items[i+1:]...)
+		}
+		return take
+	}
+	return 0
+}
+
+func (w *World) ClearBuildingItems(buildPos int32) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok || t.Build == nil {
+		return false
+	}
+	t.Build.Items = nil
+	return true
+}
+
+func (w *World) SetBuildingConfigRaw(buildPos int32, raw []byte) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok {
+		return false
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return false
+	}
+	if len(raw) == 0 {
+		b.Config = nil
+		return true
+	}
+	b.Config = append([]byte(nil), raw...)
+	return true
+}
+
+func (w *World) SnapshotBuildingItems() map[int32][]ItemStack {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	out := make(map[int32][]ItemStack)
+	if w.model == nil {
+		return out
+	}
+	for i := range w.model.Tiles {
+		t := &w.model.Tiles[i]
+		if t == nil || t.Build == nil || len(t.Build.Items) == 0 {
+			continue
+		}
+		pos := packTilePos(t.X, t.Y)
+		items := append([]ItemStack(nil), t.Build.Items...)
+		out[pos] = items
+	}
+	return out
+}
+
+func (w *World) RefundToTeamCore(team TeamID, items []ItemStack) bool {
+	if len(items) == 0 {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil {
+		return false
+	}
+	var core *Building
+	for i := range w.model.Tiles {
+		t := &w.model.Tiles[i]
+		if t == nil || t.Block == 0 || t.Team != team {
+			continue
+		}
+		name := ""
+		if w.blockNamesByID != nil {
+			name = w.blockNamesByID[int16(t.Block)]
+		}
+		if strings.HasPrefix(name, "core-") || t.Block == 78 || (t.Block >= 339 && t.Block <= 344) {
+			core = w.ensureBuildLocked(t)
+			if core != nil {
+				break
+			}
+		}
+	}
+	if core == nil {
+		return false
+	}
+	for _, it := range items {
+		if it.Amount <= 0 {
+			continue
+		}
+		core.AddItem(it.Item, it.Amount)
+	}
+	return true
 }
 
 func estimateBuildMaxHealth(blockID int16, model *WorldModel) float32 {

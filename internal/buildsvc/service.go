@@ -161,6 +161,43 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	s.mu.Unlock()
 }
 
+// ApplyPlansNow validates and applies plans immediately, bypassing batch queue.
+// This matches the original server's responsive build/deconstruct handling better.
+func (s *Service) ApplyPlansNow(team world.TeamID, plans []*protocol.BuildPlan) int {
+	if s == nil || s.w == nil || len(plans) == 0 {
+		return 0
+	}
+	model := s.w.Model()
+	if model == nil || model.Width <= 0 || model.Height <= 0 {
+		return 0
+	}
+
+	ops := make([]world.BuildPlanOp, 0, minInt(len(plans), s.maxOpsPerTick))
+	seen := make(map[world.BuildPlanOp]struct{}, minInt(len(plans), s.maxOpsPerTick))
+	for _, p := range plans {
+		if p == nil {
+			continue
+		}
+		op, ok := sanitizePlan(model, p)
+		if !ok {
+			continue
+		}
+		if _, ok := seen[op]; ok {
+			continue
+		}
+		seen[op] = struct{}{}
+		ops = append(ops, op)
+		if len(ops) >= s.maxOpsPerTick {
+			break
+		}
+	}
+	if len(ops) == 0 {
+		return 0
+	}
+	_ = s.w.ApplyBuildPlans(team, ops)
+	return len(ops)
+}
+
 func (s *Service) Tick() int {
 	if s == nil || s.w == nil {
 		return 0

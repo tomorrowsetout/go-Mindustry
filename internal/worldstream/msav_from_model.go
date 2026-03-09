@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"compress/zlib"
 	"os"
+	"strconv"
 
 	"mdt-server/internal/world"
 )
 
 // WriteMSAVFromModel writes a .msav using data stored in the model.
-// If model.RawMap is present, it is used verbatim; otherwise a minimal map chunk is encoded.
+// Map chunk is always encoded from current model tiles so runtime build/remove changes
+// are persisted and reloaded correctly.
 func WriteMSAVFromModel(dstPath string, model *world.WorldModel, updates map[string]string) error {
 	if model == nil {
 		return ErrInvalidMSAV
@@ -28,13 +30,9 @@ func WriteMSAVFromModel(dstPath string, model *world.WorldModel, updates map[str
 		return err
 	}
 
-	mapChunk := model.RawMap
-	if len(mapChunk) == 0 {
-		encoded, err := encodeMapChunkMinimal(model)
-		if err != nil {
-			return err
-		}
-		mapChunk = encoded
+	mapChunk, err := encodeMapChunkMinimal(model)
+	if err != nil {
+		return err
 	}
 
 	var raw bytes.Buffer
@@ -86,6 +84,129 @@ func WriteMSAVFromModel(dstPath string, model *world.WorldModel, updates map[str
 		return err
 	}
 	return os.WriteFile(dstPath, out.Bytes(), 0644)
+}
+
+// BuildWorldStreamFromModel builds handshake world stream payload from the current runtime model.
+// Unlike MSAV-based path, this always encodes map chunk from model tiles so late-joiners
+// can see buildings placed before they connected.
+func BuildWorldStreamFromModel(model *world.WorldModel) ([]byte, error) {
+	if model == nil {
+		return nil, ErrInvalidMSAV
+	}
+
+	var out bytes.Buffer
+	w := &javaWriter{buf: &out}
+
+	rules := "{}"
+	if model.Tags != nil {
+		if v := model.Tags["rules"]; v != "" {
+			rules = v
+		}
+	}
+	locales := "{}"
+	if model.Tags != nil {
+		if v := model.Tags["locales"]; v != "" {
+			locales = v
+		}
+	}
+	if err := w.WriteUTF(rules); err != nil {
+		return nil, err
+	}
+	if err := w.WriteUTF(locales); err != nil {
+		return nil, err
+	}
+
+	tags := make(map[string]string, len(model.Tags))
+	for k, v := range model.Tags {
+		tags[k] = v
+	}
+	if err := w.WriteStringMap(tags); err != nil {
+		return nil, err
+	}
+
+	wave := int32(1)
+	if v, ok := tags["wave"]; ok {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			wave = int32(parsed)
+		}
+	}
+	if err := w.WriteInt32(wave); err != nil {
+		return nil, err
+	}
+
+	wavetime := float32(0)
+	if v, ok := tags["wavetime"]; ok {
+		if parsed, err := strconv.ParseFloat(v, 32); err == nil {
+			wavetime = float32(parsed)
+		}
+	}
+	if err := w.WriteFloat32(wavetime); err != nil {
+		return nil, err
+	}
+
+	tick := float64(0)
+	if v, ok := tags["tick"]; ok {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			tick = parsed
+		}
+	}
+	if err := w.WriteFloat64(tick); err != nil {
+		return nil, err
+	}
+
+	if err := w.WriteInt64(0); err != nil {
+		return nil, err
+	}
+	if err := w.WriteInt64(0); err != nil {
+		return nil, err
+	}
+
+	if err := w.WriteInt32(1); err != nil {
+		return nil, err
+	}
+	if err := writeMinimalPlayer(w); err != nil {
+		return nil, err
+	}
+
+	if err := w.WriteBytes(model.Content); err != nil {
+		return nil, err
+	}
+	if err := w.WriteByte(0); err != nil {
+		return nil, err
+	}
+
+	mapChunk, err := encodeMapChunkMinimal(model)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.WriteBytes(mapChunk); err != nil {
+		return nil, err
+	}
+	if err := writeMinimalTeamBlocks(w); err != nil {
+		return nil, err
+	}
+
+	markers := model.Markers
+	if len(markers) == 0 {
+		markers = []byte{0x7B, 0x7D}
+	}
+	if err := w.WriteBytes(markers); err != nil {
+		return nil, err
+	}
+	if err := writeMinimalCustomChunks(w); err != nil {
+		return nil, err
+	}
+
+	var compressed bytes.Buffer
+	zw := zlib.NewWriter(&compressed)
+	if _, err := zw.Write(out.Bytes()); err != nil {
+		_ = zw.Close()
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return compressed.Bytes(), nil
 }
 
 func encodeMapChunkMinimal(model *world.WorldModel) ([]byte, error) {
@@ -231,6 +352,9 @@ func writeEntitiesChunkFromModel(model *world.WorldModel) ([]byte, error) {
 			if err := w.WriteBytes(b.Payload); err != nil {
 				return nil, err
 			}
+		}
+		if err := w.WriteFloat32(b.MaxHealth); err != nil {
+			return nil, err
 		}
 	}
 	return out.Bytes(), nil

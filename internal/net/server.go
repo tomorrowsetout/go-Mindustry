@@ -56,10 +56,11 @@ type Server struct {
 	// EventManager 事件管理器
 	EventManager *storage.EventManager
 
-	BuildVersion int
-	WorldDataFn  func(*Conn, *protocol.ConnectPacket) ([]byte, error)
-	OnEvent      func(NetEvent)
-	playerIDNext int32
+	BuildVersion  int
+	WorldDataFn   func(*Conn, *protocol.ConnectPacket) ([]byte, error)
+	OnEvent       func(NetEvent)
+	OnPostConnect func(*Conn)
+	playerIDNext  int32
 
 	Name           string
 	Description    string
@@ -71,6 +72,14 @@ type Server struct {
 	PlayerUnitTypeFn func() int16
 	// Optional hook: apply client build plans from snapshot.
 	OnBuildPlans func(*Conn, []*protocol.BuildPlan)
+	// Optional hooks: keep building inventories/config synced with world model.
+	OnSetItem        func(buildPos int32, itemID int16, amount int32)
+	OnSetItems       func(buildPos int32, items []protocol.ItemStack)
+	OnSetTileItems   func(itemID int16, amount int32, positions []int32)
+	OnClearItems     func(buildPos int32)
+	OnTransferItemTo func(buildPos int32, itemID int16, amount int32)
+	OnRequestItem    func(buildPos int32, itemID int16, amount int32)
+	OnTileConfig     func(buildPos int32, value any)
 	// Respawn delay in "frames" (Mindustry Time.delta units). Defaults to 60 if zero.
 	RespawnDelayFrames float32
 	// Optional hook: spawn player unit in world/state. Uses provided unitID, returns world coords.
@@ -99,8 +108,11 @@ type Server struct {
 	// DevLogger 开发者日志（可选）
 	DevLogger *devlog.DevLogger
 
-	featureWarnMu sync.Mutex
-	featureWarned map[string]struct{}
+	featureWarnMu         sync.Mutex
+	featureWarned         map[string]struct{}
+	tileConfigMu          sync.RWMutex
+	tileConfigs           map[int32]any
+	tileConfigForwardSync atomic.Bool
 }
 
 func NewServer(addr string, buildVersion int) *Server {
@@ -134,10 +146,19 @@ func NewServer(addr string, buildVersion int) *Server {
 		UdpFallbackTCP:     true,
 		RespawnDelayFrames: 60,
 		featureWarned:      map[string]struct{}{},
+		tileConfigs:        map[int32]any{},
 	}
 	s.SetSnapshotIntervals(100, 250)
 	s.SetSnapshotLogSample(20)
+	s.SetTileConfigForwardMode("async")
 	return s
+}
+
+func (s *Server) SetTileConfigForwardMode(mode string) {
+	if s == nil {
+		return
+	}
+	s.tileConfigForwardSync.Store(strings.EqualFold(strings.TrimSpace(mode), "sync"))
 }
 
 func normalizeSyncInterval(ms int, def int) time.Duration {
@@ -700,22 +721,41 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 60, "Remote_InputHandler_setItem_60", "set_item")
 		}
+		if v.Build != nil && v.Item != nil && s.OnSetItem != nil {
+			s.OnSetItem(v.Build.Pos(), v.Item.ID(), v.Amount)
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setItems_61:
 		// 批量设置物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 61, "Remote_InputHandler_setItems_61", "set_items")
 		}
+		if v.Build != nil && s.OnSetItems != nil {
+			items := make([]protocol.ItemStack, 0, len(v.Items))
+			for _, it := range v.Items {
+				items = append(items, it)
+			}
+			s.OnSetItems(v.Build.Pos(), items)
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setTileItems_62:
 		// 设置地砖物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 62, "Remote_InputHandler_setTileItems_62", "set_tile_items")
 		}
-		s.WarnFeatureOnce("packet-set-tile-items", "[feature] setTileItems received: server-side item network simulation is incomplete")
+		if v.Item != nil && s.OnSetTileItems != nil {
+			s.OnSetTileItems(v.Item.ID(), v.Amount, append([]int32(nil), v.Positions...))
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_clearItems_63:
 		// 清空物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 63, "Remote_InputHandler_clearItems_63", "clear_items")
 		}
+		if v.Build != nil && s.OnClearItems != nil {
+			s.OnClearItems(v.Build.Pos())
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setLiquid_64:
 		// 设置单个液体槽位
 		if s.DevLogger != nil {
@@ -742,7 +782,10 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 68, "Remote_InputHandler_transferItemTo_68", "transfer_item_to")
 		}
-		s.WarnFeatureOnce("packet-transfer-item-to", "[feature] transferItemTo received: logistics/core item IO may desync")
+		if v.Build != nil && v.Item != nil && s.OnTransferItemTo != nil {
+			s.OnTransferItemTo(v.Build.Pos(), v.Item.ID(), v.Amount)
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_deletePlans_69:
 		// 删除建造计划
 		if s.DevLogger != nil {
@@ -773,6 +816,10 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 74, "Remote_InputHandler_requestItem_74", "request_item")
 		}
+		if v.Build != nil && v.Item != nil && s.OnRequestItem != nil {
+			s.OnRequestItem(v.Build.Pos(), v.Item.ID(), v.Amount)
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_transferInventory_75:
 		// 转移库存
 		if s.DevLogger != nil {
@@ -823,7 +870,21 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 86, "Remote_InputHandler_tileConfig_86", "tile_config")
 		}
-		s.Broadcast(v)
+		if v.Build != nil {
+			pos := v.Build.Pos()
+			val := normalizeTileConfigValue(v.Value)
+			fmt.Printf("[net] tileConfig recv id=%d pos=%d valueType=%T\n", c.id, pos, val)
+			s.SetTileConfig(pos, val)
+			if s.OnTileConfig != nil {
+				s.OnTileConfig(pos, val)
+			}
+			// Official-like behavior: forward original tileConfig call to peers.
+			if s.tileConfigForwardSync.Load() {
+				s.BroadcastExceptSync(c, v)
+			} else {
+				s.BroadcastExcept(c, v)
+			}
+		}
 	case *protocol.Remote_InputHandler_dropItem_84:
 		// 投放物品
 		if s.DevLogger != nil {
@@ -910,6 +971,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				devlog.Int32Fld("tile_x", x),
 				devlog.Int32Fld("tile_y", y))
 		}
+		if v.Tile != nil {
+			s.ClearTileConfig(v.Tile.Pos())
+		}
 	case *protocol.Remote_Tile_setTile_131:
 		// 设置 Tile（_block）
 		if s.DevLogger != nil {
@@ -948,6 +1012,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			s.DevLogger.LogBuild(x, y, 0, "none", "buildDestroyed",
 				devlog.Int32Fld("tile_pos", pos))
+		}
+		if v.Build != nil {
+			s.ClearTileConfig(v.Build.Pos())
 		}
 	case *protocol.Remote_Tile_buildHealthUpdate_135:
 		// 建筑生命值更新 - 简化处理（数据包结构需要进一步分析）
@@ -1412,6 +1479,24 @@ func (s *Server) BroadcastExcept(skip *Conn, obj any) {
 	}
 }
 
+func (s *Server) BroadcastExceptSync(skip *Conn, obj any) {
+	if obj == nil {
+		return
+	}
+	s.mu.Lock()
+	peers := make([]*Conn, 0, len(s.conns))
+	for c := range s.conns {
+		if c == nil || c == skip {
+			continue
+		}
+		peers = append(peers, c)
+	}
+	s.mu.Unlock()
+	for _, peer := range peers {
+		_ = peer.Send(obj)
+	}
+}
+
 func (s *Server) SendStatusTo(c *Conn) {
 	if c == nil {
 		return
@@ -1515,6 +1600,7 @@ type Conn struct {
 	deathTimer          float32
 	lastRespawnCheck    time.Time
 	lastSpawnAt         time.Time
+	unitInvalidSince    time.Time
 	unitID              int32
 	lastRespawnReq      time.Time
 	building            bool
@@ -1545,7 +1631,9 @@ type Conn struct {
 	tcpBuildHealthCount atomic.Int64
 	tcpSetTileLogCount  atomic.Int64
 	tcpRemoveTileCount  atomic.Int64
+	tcpGeneralLogCount  atomic.Int64
 	udpEntityLogCount   atomic.Int64
+	udpGeneralLogCount  atomic.Int64
 	snapshotLogSampleN  atomic.Int64
 	statsMu             sync.Mutex
 	byTypeSent          map[string]int64
@@ -1868,33 +1956,57 @@ func priorityOf(obj any) int {
 }
 
 func (c *Conn) shouldLogPacket(packetID int, udp bool) bool {
-	// packet 117 (state snapshot) and 43 (entity snapshot) are high-frequency by design.
-	// Sample them to reduce log I/O pressure while keeping observability.
 	nSample := int(c.snapshotLogSampleN.Load())
 	if nSample <= 0 {
 		nSample = 20
 	}
-	if !udp && packetID == 117 {
+
+	// Keep handshake/control packets visible.
+	switch packetID {
+	case 0, 2, 17, 21, 22, 28, 31, 47:
+		return true
+	}
+
+	if udp {
+		// packet 43 (entity snapshot) is the hottest path; sample aggressively.
+		if packetID == 43 {
+			n := c.udpEntityLogCount.Add(1)
+			return n%int64(maxInt(nSample*4, 40)) == 1
+		}
+		// Other UDP packets are still frequent under load.
+		n := c.udpGeneralLogCount.Add(1)
+		return n%int64(maxInt(nSample*6, 60)) == 1
+	}
+
+	switch packetID {
+	// High-frequency world sync packets.
+	case 1:
+		n := c.tcpGeneralLogCount.Add(1)
+		return n%int64(maxInt(nSample*2, 20)) == 1
+	case 117:
 		n := c.tcpStateLogCount.Add(1)
-		return n%int64(nSample) == 1
-	}
-	if !udp && packetID == 13 {
+		return n%int64(maxInt(nSample*3, 30)) == 1
+	case 13:
 		n := c.tcpBuildHealthCount.Add(1)
-		return n%int64(nSample) == 1
-	}
-	if !udp && packetID == 106 {
+		return n%int64(maxInt(nSample*3, 30)) == 1
+	case 106:
 		n := c.tcpSetTileLogCount.Add(1)
-		return n%int64(nSample) == 1
-	}
-	if !udp && packetID == 71 {
+		return n%int64(maxInt(nSample*3, 30)) == 1
+	case 71, 36:
 		n := c.tcpRemoveTileCount.Add(1)
-		return n%int64(nSample) == 1
+		return n%int64(maxInt(nSample*3, 30)) == 1
+	default:
+		// Non-critical TCP packets: keep sparse sampling to avoid log storms.
+		n := c.tcpGeneralLogCount.Add(1)
+		return n%int64(maxInt(nSample*4, 40)) == 1
 	}
-	if udp && packetID == 43 {
-		n := c.udpEntityLogCount.Add(1)
-		return n%int64(nSample) == 1
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
 	}
-	return true
+	return b
 }
 
 func (c *Conn) remoteIP() string {
@@ -2138,6 +2250,9 @@ func (s *Server) ensurePostConnectStarted(c *Conn) {
 	}
 	c.postOnce.Do(func() {
 		s.spawnPlayerInitial(c)
+		if s.OnPostConnect != nil {
+			s.OnPostConnect(c)
+		}
 		go s.postConnectLoop(c)
 	})
 }
@@ -2371,6 +2486,7 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 		c.dead = false
 		c.deathTimer = 0
 		c.lastRespawnCheck = time.Time{}
+		c.unitInvalidSince = time.Time{}
 		c.lastRespawnReq = time.Now()
 		fmt.Printf("[net] respawn sent conn=%d source=%s\n", c.id, source)
 	} else {
@@ -2420,6 +2536,7 @@ func (s *Server) markDead(c *Conn, source string) {
 		c.deathTimer = 0
 		c.lastRespawnCheck = time.Now()
 		c.lastSpawnAt = time.Time{}
+		c.unitInvalidSince = time.Time{}
 	}
 	if s.DevLogger != nil {
 		s.DevLogger.LogConnection("player_dead", c.id, c.remoteIP(), c.name, c.uuid,
@@ -2436,34 +2553,44 @@ func (s *Server) maybeRespawn(c *Conn) {
 			s.markDead(c, "unit-missing")
 			return
 		}
-		// Avoid immediate false-death right after spawn.
-		if !c.lastSpawnAt.IsZero() && time.Since(c.lastSpawnAt) < 1500*time.Millisecond {
+		// Avoid false-death around spawn/map-reload handover.
+		if !c.lastSpawnAt.IsZero() && time.Since(c.lastSpawnAt) < 6*time.Second {
+			c.unitInvalidSince = time.Time{}
 			return
 		}
+		badState := false
 		s.entityMu.Lock()
 		ent, ok := s.entities[c.unitID]
 		s.entityMu.Unlock()
 		if !ok {
-			s.markDead(c, "unit-entity-missing")
-			return
+			badState = true
 		}
 		if s.UnitInfoFn != nil {
 			info, ok := s.UnitInfoFn(c.unitID)
 			if !ok {
-				s.markDead(c, "unit-state-missing")
-				return
-			}
-			if info.Health <= 0 {
-				s.markDead(c, "unit-health")
-				return
+				badState = true
+			} else if info.Health <= 0 {
+				badState = true
 			}
 		}
-		if u, ok := ent.(*protocol.UnitEntitySync); ok {
+		if u, ok := ent.(*protocol.UnitEntitySync); ok && u != nil {
 			if u.Health <= 0 {
+				badState = true
+			}
+		}
+		if badState {
+			now := time.Now()
+			if c.unitInvalidSince.IsZero() {
+				c.unitInvalidSince = now
+				return
+			}
+			if now.Sub(c.unitInvalidSince) >= 2*time.Second {
 				s.markDead(c, "unit-health")
 				return
 			}
+			return
 		}
+		c.unitInvalidSince = time.Time{}
 		c.deathTimer = 0
 		c.lastRespawnCheck = time.Now()
 		return
@@ -3041,6 +3168,73 @@ func (s *Server) ListSessions() []SessionInfo {
 		})
 	}
 	return out
+}
+
+func (s *Server) SetTileConfig(pos int32, value any) {
+	if s == nil || pos < 0 {
+		return
+	}
+	s.tileConfigMu.Lock()
+	s.tileConfigs[pos] = value
+	s.tileConfigMu.Unlock()
+}
+
+func (s *Server) ClearTileConfig(pos int32) {
+	if s == nil || pos < 0 {
+		return
+	}
+	s.tileConfigMu.Lock()
+	delete(s.tileConfigs, pos)
+	s.tileConfigMu.Unlock()
+}
+
+func (s *Server) SnapshotTileConfigs() map[int32]any {
+	out := map[int32]any{}
+	if s == nil {
+		return out
+	}
+	s.tileConfigMu.RLock()
+	defer s.tileConfigMu.RUnlock()
+	for k, v := range s.tileConfigs {
+		out[k] = v
+	}
+	return out
+}
+
+func (s *Server) ClearTileConfigs() {
+	if s == nil {
+		return
+	}
+	s.tileConfigMu.Lock()
+	clear(s.tileConfigs)
+	s.tileConfigMu.Unlock()
+}
+
+func normalizeTileConfigValue(v any) any {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case int:
+		return int32(x)
+	case int8:
+		return int32(x)
+	case int16:
+		return int32(x)
+	case int64:
+		return int32(x)
+	case uint:
+		return int32(x)
+	case uint8:
+		return int32(x)
+	case uint16:
+		return int32(x)
+	case uint32:
+		return int32(x)
+	case uint64:
+		return int32(x)
+	default:
+		return v
+	}
 }
 
 func (s *Server) KickByID(id int32, reason string) bool {

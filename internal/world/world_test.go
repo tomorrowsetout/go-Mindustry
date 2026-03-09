@@ -51,7 +51,7 @@ func TestApplyBuildPlansIsAsync(t *testing.T) {
 		t.Fatalf("expected intermediate build health at 0.3s, got=%.2f", tile.Build.Health)
 	}
 
-	w.Step(400 * time.Millisecond)
+	w.Step(600 * time.Millisecond)
 	tile, _ = w.Model().TileAt(2, 3)
 	if tile.Block != 45 || tile.Build == nil {
 		t.Fatalf("expected placed block after progress, got block=%d build=%v", tile.Block, tile.Build != nil)
