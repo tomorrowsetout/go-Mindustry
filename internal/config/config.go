@@ -60,6 +60,10 @@ type NetConfig struct {
 	UdpFallbackTCP  bool `json:"udp_fallback_tcp"`
 	SyncEntityMs    int  `json:"sync_entity_ms"`
 	SyncStateMs     int  `json:"sync_state_ms"`
+	WorldDataPreload      bool   `json:"world_data_preload"`
+	WorldDataPreloadMaxMB int    `json:"world_data_preload_max_mb"`
+	PostConnectReplayMode string `json:"post_connect_replay_mode"` // async | sync
+	TileConfigForwardMode string `json:"tile_config_forward_mode"`  // async | sync
 }
 
 type PersistConfig struct {
@@ -162,6 +166,10 @@ func Default() Config {
 			UdpFallbackTCP:  true,
 			SyncEntityMs:    100,
 			SyncStateMs:     250,
+			WorldDataPreload:      true,
+			WorldDataPreloadMaxMB: 30,
+			PostConnectReplayMode: "async",
+			TileConfigForwardMode: "async",
 		},
 		Persist: PersistConfig{
 			Enabled:     true,
@@ -227,6 +235,19 @@ func Load(path string) (Config, error) {
 	if cfg.Net.SyncStateMs <= 0 {
 		cfg.Net.SyncStateMs = 250
 	}
+	if cfg.Net.WorldDataPreloadMaxMB <= 0 {
+		cfg.Net.WorldDataPreloadMaxMB = 30
+	}
+	mode := strings.ToLower(strings.TrimSpace(cfg.Net.PostConnectReplayMode))
+	if mode != "sync" {
+		mode = "async"
+	}
+	cfg.Net.PostConnectReplayMode = mode
+	mode = strings.ToLower(strings.TrimSpace(cfg.Net.TileConfigForwardMode))
+	if mode != "sync" {
+		mode = "async"
+	}
+	cfg.Net.TileConfigForwardMode = mode
 	if strings.TrimSpace(cfg.Logging.Directory) == "" {
 		cfg.Logging.Directory = "logs"
 	}

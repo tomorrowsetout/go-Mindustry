@@ -504,6 +504,13 @@ type mapLoadStats struct {
 	hasRulesTag  bool
 }
 
+type runtimeTileSyncState struct {
+	BlockID int16
+	Team    byte
+	Rot     int8
+	Health  float32
+}
+
 func computeMapLoadStats(model *world.WorldModel) mapLoadStats {
 	if model == nil {
 		return mapLoadStats{}
@@ -577,6 +584,22 @@ func printMapDetails(path string, model *world.WorldModel) {
 	fmt.Printf("数据: content=%d patch=%d rawMap=%d rawEntities=%d markers=%d custom=%d\n",
 		stats.contentBytes, stats.patchBytes, stats.rawMapBytes, stats.rawEntBytes, stats.markerBytes, stats.customBytes)
 	fmt.Println("========================================")
+}
+
+func mapModeSummary(r *world.Rules) string {
+	if r == nil {
+		return "unknown"
+	}
+	mode := "survival"
+	switch {
+	case r.Editor || r.InfiniteResources:
+		mode = "sandbox"
+	case r.Pvp:
+		mode = "pvp"
+	case r.AttackMode:
+		mode = "attack"
+	}
+	return fmt.Sprintf("mode=%s waves=%v waveTimer=%v waveSpacing=%.1fs initialWave=%.1fs", mode, r.Waves, r.WaveTimer, r.WaveSpacing, r.InitialWaveSpacing)
 }
 
 func chdirToExecutableDir() error {
@@ -708,6 +731,7 @@ func main() {
 	worldChoice := *worldArg
 	var persisted persist.State
 	var persistedOK bool
+	recoveredMapFromPersist := false
 	if cfg.Persist.Enabled {
 		if st, ok, err := persist.Load(cfg.Persist); err != nil {
 			log.Warn("persist load failed", logging.Field{Key: "error", Value: err.Error()})
@@ -717,6 +741,7 @@ func main() {
 			persistedOK = true
 			if worldChoice == "random" && st.MapPath != "" {
 				worldChoice = normalizeWorldPathForExeRoot(st.MapPath)
+				recoveredMapFromPersist = true
 				startup.ok("持久化地图恢复", worldChoice)
 			}
 		}
@@ -734,6 +759,7 @@ func main() {
 
 	srv := netserver.NewServer(*addr, *buildVersion)
 	srv.SetSnapshotLogSample(cfg.Logging.SnapshotLogSample)
+	srv.SetTileConfigForwardMode(cfg.Net.TileConfigForwardMode)
 	contentIDsPath := filepath.FromSlash("data/vanilla/content_ids.json")
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
@@ -751,9 +777,11 @@ func main() {
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
 	buildService := buildsvc.New(wld, buildsvc.Options{
 		MaxQueuedBatches: 4096,
-		MaxPlansPerBatch: 256,
-		MaxOpsPerTick:    1024,
+		MaxPlansPerBatch: 64,
+		MaxOpsPerTick:    128,
 	})
+	var runtimeTileMu sync.RWMutex
+	runtimeTiles := make(map[int32]runtimeTileSyncState)
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
 			return 0, 0, false
@@ -811,6 +839,10 @@ func main() {
 	}
 	loadWorldModel := func(path string) {
 		buildService.Reset()
+		runtimeTileMu.Lock()
+		clear(runtimeTiles)
+		runtimeTileMu.Unlock()
+		srv.ClearTileConfigs()
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
 			wld.SetModel(nil)
@@ -827,6 +859,8 @@ func main() {
 			return
 		}
 		wld.SetModel(model)
+		wld.ResetRuntimeFromTags(model.Tags)
+		startup.ok("地图规则", mapModeSummary(wld.GetRulesManager().Get()))
 		loadedModel = model
 		loadedMapPath = path
 		startup.ok("地图模型", fmt.Sprintf("%s (%dx%d)", path, model.Width, model.Height))
@@ -859,7 +893,8 @@ func main() {
 		atomic.StoreInt32(&playerSpawnTypeID, int32(spawnType))
 		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
-	if persistedOK {
+	loadWorldModel(initialWorld)
+	if persistedOK && recoveredMapFromPersist {
 		waveTime := persisted.WaveTime
 		if waveTime < 0 || waveTime > 3600 {
 			waveTime = 600
@@ -874,7 +909,6 @@ func main() {
 			Tick:     persisted.Tick,
 		})
 	}
-	loadWorldModel(initialWorld)
 	srv.MapNameFn = func() string {
 		path := state.get()
 		if path == "" {
@@ -942,8 +976,24 @@ func main() {
 	scriptCtl.ScheduleStartupTasks(cfg.Script.StartupTasks)
 	scriptCtl.SetDailyGC(cfg.Script.DailyGCTime)
 
-	cache := &worldCache{}
+	cache := &worldCache{
+		preloadEnabled: cfg.Net.WorldDataPreload,
+		maxBytes:       int64(cfg.Net.WorldDataPreloadMaxMB) * 1024 * 1024,
+	}
+	if err := cache.preload(state.get()); err != nil {
+		startup.warn("WorldData 预载入", err.Error())
+	} else if cache.preloadEnabled {
+		if cache.maxBytes > 0 {
+			startup.ok("WorldData 预载入", fmt.Sprintf("enabled=true max=%dMB", cfg.Net.WorldDataPreloadMaxMB))
+		} else {
+			startup.ok("WorldData 预载入", "enabled=true max=unlimited")
+		}
+	} else {
+		startup.info("WorldData 预载入", "enabled=false")
+	}
 	srv.WorldDataFn = func(conn *netserver.Conn, _ *protocol.ConnectPacket) ([]byte, error) {
+		// Keep handshake payload strictly compatible with official client parser.
+		// Runtime build/config deltas are replayed after connect via OnPostConnect.
 		path := state.get()
 		base, err := cache.get(path)
 		if err != nil {
@@ -952,8 +1002,6 @@ func main() {
 		if conn != nil && conn.PlayerID() != 0 {
 			if patched, perr := worldstream.RewritePlayerIDInWorldStream(base, conn.PlayerID()); perr == nil {
 				return patched, nil
-			} else {
-				return nil, perr
 			}
 		}
 		return base, nil
@@ -965,6 +1013,93 @@ func main() {
 		}
 		// Fallback for maps where core tile cannot be parsed from msav metadata.
 		return fallbackSpawnPosFromModel(wld.Model())
+	}
+	srv.OnPostConnect = func(c *netserver.Conn) {
+		if c == nil {
+			return
+		}
+		replaySync := strings.EqualFold(cfg.Net.PostConnectReplayMode, "sync")
+		sendReplay := func(obj any) {
+			if replaySync {
+				_ = c.Send(obj)
+			} else {
+				_ = c.SendAsync(obj)
+			}
+		}
+		// Replay runtime build/destroy deltas for late joiners.
+		runtimeTileMu.RLock()
+		pending := make([]struct {
+			pos int32
+			st  runtimeTileSyncState
+		}, 0, len(runtimeTiles))
+		for pos, st := range runtimeTiles {
+			pending = append(pending, struct {
+				pos int32
+				st  runtimeTileSyncState
+			}{pos: pos, st: st})
+		}
+		runtimeTileMu.RUnlock()
+		sort.Slice(pending, func(i, j int) bool { return pending[i].pos < pending[j].pos })
+		for _, it := range pending {
+			sendReplay(&protocol.Remote_Tile_setTile_131{
+				Tile:     protocol.TileBox{PosValue: it.pos},
+				Block:    protocol.BlockRef{BlkID: it.st.BlockID, BlkName: ""},
+				Team:     protocol.Team{ID: it.st.Team},
+				Rotation: int32(it.st.Rot) & 0x3,
+			})
+			sendReplay(&protocol.Remote_Tile_buildHealthUpdate_135{
+				Buildings: protocol.IntSeq{Items: []int32{
+					it.pos, int32(math.Float32bits(it.st.Health)),
+				}},
+			})
+		}
+
+		// Replay inventory state for late joiners (e.g. core/sorter/unloader items).
+		itemsByPos := wld.SnapshotBuildingItems()
+		if len(itemsByPos) > 0 {
+			posList := make([]int32, 0, len(itemsByPos))
+			for pos := range itemsByPos {
+				posList = append(posList, pos)
+			}
+			sort.Slice(posList, func(i, j int) bool { return posList[i] < posList[j] })
+			for _, pos := range posList {
+				src := itemsByPos[pos]
+				items := make([]protocol.ItemStack, 0, len(src))
+				for _, st := range src {
+					if st.Amount <= 0 {
+						continue
+					}
+					items = append(items, protocol.ItemStack{
+						Item:   itemRef{id: int16(st.Item)},
+						Amount: st.Amount,
+					})
+				}
+				if len(items) == 0 {
+					continue
+				}
+				sendReplay(&protocol.Remote_InputHandler_setItems_61{
+					Build: protocol.BuildingBox{PosValue: pos},
+					Items: items,
+				})
+			}
+		}
+
+		// Replay per-tile configs (sorter/bridge/logic/etc.) after tile state is present.
+		configs := srv.SnapshotTileConfigs()
+		if len(configs) == 0 {
+			return
+		}
+		posList := make([]int32, 0, len(configs))
+		for pos := range configs {
+			posList = append(posList, pos)
+		}
+		sort.Slice(posList, func(i, j int) bool { return posList[i] < posList[j] })
+		for _, pos := range posList {
+			sendReplay(&protocol.Remote_InputHandler_tileConfig_86{
+				Build: protocol.BuildingBox{PosValue: pos},
+				Value: configs[pos],
+			})
+		}
 	}
 	srv.OnBuildPlans = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
 		if c == nil || len(plans) == 0 {
@@ -986,15 +1121,44 @@ func main() {
 						fmt.Sprintf("[feature] logistics behavior not fully simulated yet: block=%d name=%s (multi-player desync possible)", blockID, blockName),
 					)
 				}
-				if strings.Contains(blockName, "core") {
-					srv.WarnFeatureOnce(
-						"core-item-io",
-						"[feature] core item I/O is not fully simulated yet (setTileItems/requestItem packets may be dropped)",
-					)
-				}
 			}
 		}
-		buildService.EnqueuePlans(world.TeamID(1), plans)
+		_ = buildService.ApplyPlansNow(world.TeamID(1), plans)
+	}
+	srv.OnSetItem = func(buildPos int32, itemID int16, amount int32) {
+		_ = wld.SetBuildingItem(buildPos, itemID, amount)
+	}
+	srv.OnSetItems = func(buildPos int32, items []protocol.ItemStack) {
+		out := make([]world.ItemStack, 0, len(items))
+		for _, st := range items {
+			if st.Item == nil || st.Amount <= 0 {
+				continue
+			}
+			out = append(out, world.ItemStack{
+				Item:   world.ItemID(st.Item.ID()),
+				Amount: st.Amount,
+			})
+		}
+		_ = wld.SetBuildingItems(buildPos, out)
+	}
+	srv.OnSetTileItems = func(itemID int16, amount int32, positions []int32) {
+		_ = wld.SetTileItems(positions, itemID, amount)
+	}
+	srv.OnClearItems = func(buildPos int32) {
+		_ = wld.ClearBuildingItems(buildPos)
+	}
+	srv.OnTransferItemTo = func(buildPos int32, itemID int16, amount int32) {
+		_ = wld.AddBuildingItem(buildPos, itemID, amount)
+	}
+	srv.OnRequestItem = func(buildPos int32, itemID int16, amount int32) {
+		_ = wld.RemoveBuildingItem(buildPos, itemID, amount)
+	}
+	srv.OnTileConfig = func(buildPos int32, value any) {
+		raw, err := encodeTileConfigRaw(value, srv.TypeIO)
+		if err != nil {
+			return
+		}
+		_ = wld.SetBuildingConfigRaw(buildPos, raw)
 	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
@@ -1022,7 +1186,7 @@ func main() {
 		return 0, nil
 	}
 	go func() {
-		t := time.NewTicker(100 * time.Millisecond)
+		t := time.NewTicker(33 * time.Millisecond)
 		defer t.Stop()
 		for range t.C {
 			evs := wld.DrainEntityEvents()
@@ -1033,10 +1197,31 @@ func main() {
 					broadcastUnitDestroy(srv, ev.Entity.ID)
 					srv.MarkUnitDead(ev.Entity.ID, "world-removed")
 				case world.EntityEventBuildPlaced:
+					runtimeTileMu.Lock()
+					runtimeTiles[ev.BuildPos] = runtimeTileSyncState{
+						BlockID: ev.BuildBlock,
+						Team:    byte(ev.BuildTeam),
+						Rot:     ev.BuildRot,
+						Health:  maxf32(ev.BuildHP, 1),
+					}
+					runtimeTileMu.Unlock()
 					broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
 				case world.EntityEventBuildDestroyed:
+					runtimeTileMu.Lock()
+					delete(runtimeTiles, ev.BuildPos)
+					runtimeTileMu.Unlock()
+					srv.ClearTileConfig(ev.BuildPos)
+					if len(ev.BuildItems) > 0 {
+						_ = wld.RefundToTeamCore(ev.BuildTeam, ev.BuildItems)
+					}
 					broadcastBuildDestroyed(srv, ev.BuildPos)
 				case world.EntityEventBuildHealth:
+					runtimeTileMu.Lock()
+					if st, ok := runtimeTiles[ev.BuildPos]; ok {
+						st.Health = ev.BuildHP
+						runtimeTiles[ev.BuildPos] = st
+					}
+					runtimeTileMu.Unlock()
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
@@ -2892,6 +3077,7 @@ type unitTypeRef struct {
 
 func (u unitTypeRef) ContentType() protocol.ContentType { return protocol.ContentUnit }
 func (u unitTypeRef) ID() int16                         { return u.id }
+func (u unitTypeRef) Name() string                      { return "" }
 
 type bulletTypeRef struct {
 	id int16
@@ -2899,6 +3085,7 @@ type bulletTypeRef struct {
 
 func (b bulletTypeRef) ContentType() protocol.ContentType { return protocol.ContentBullet }
 func (b bulletTypeRef) ID() int16                         { return b.id }
+func (b bulletTypeRef) Name() string                      { return "" }
 
 type itemRef struct {
 	id int16
@@ -2906,6 +3093,7 @@ type itemRef struct {
 
 func (i itemRef) ContentType() protocol.ContentType { return protocol.ContentItem }
 func (i itemRef) ID() int16                         { return i.id }
+func (i itemRef) Name() string                      { return "" }
 
 type blockRef struct {
 	id int16
@@ -2913,6 +3101,31 @@ type blockRef struct {
 
 func (b blockRef) ContentType() protocol.ContentType { return protocol.ContentBlock }
 func (b blockRef) ID() int16                         { return b.id }
+func (b blockRef) Name() string                      { return "" }
+
+func maxf32(a, b float32) float32 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func encodeTileConfigRaw(v any, ctx *protocol.TypeIOContext) ([]byte, error) {
+	if v == nil {
+		return nil, nil
+	}
+	w := protocol.NewWriterWithContext(ctx)
+	if err := protocol.WriteObject(w, v, ctx); err != nil {
+		return nil, err
+	}
+	raw := w.Bytes()
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	return out, nil
+}
 
 func broadcastSummonVisible(srv *netserver.Server, typeID int16, x, y float32, team byte) {
 	if srv == nil {
@@ -2970,12 +3183,6 @@ func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int
 		Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},
 		Team:     protocol.Team{ID: team},
 		Rotation: int32(rot) & 0x3,
-	})
-	// Force client to refresh construct state -> real building state.
-	srv.Broadcast(&protocol.Remote_Tile_buildHealthUpdate_135{
-		Buildings: protocol.IntSeq{Items: []int32{
-			buildPos, int32(math.Float32bits(1000)),
-		}},
 	})
 }
 
@@ -3587,12 +3794,14 @@ func spawnPosFromCache(cache *worldCache, path string) (protocol.Point2, bool, e
 }
 
 type worldCache struct {
-	mu        sync.Mutex
-	path      string
-	modTime   time.Time
-	data      []byte
-	corePos   protocol.Point2
-	corePosOK bool
+	mu             sync.Mutex
+	path           string
+	modTime        time.Time
+	data           []byte
+	corePos        protocol.Point2
+	corePosOK      bool
+	preloadEnabled bool
+	maxBytes       int64
 }
 
 func (c *worldCache) get(path string) ([]byte, error) {
@@ -3611,9 +3820,19 @@ func (c *worldCache) get(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.path = path
-	c.modTime = info.ModTime()
-	c.data = data
+	cacheable := len(data) > 0
+	if c.maxBytes > 0 && int64(len(data)) > c.maxBytes {
+		cacheable = false
+	}
+	if cacheable {
+		c.path = path
+		c.modTime = info.ModTime()
+		c.data = data
+	} else {
+		c.path = ""
+		c.modTime = time.Time{}
+		c.data = nil
+	}
 	c.corePosOK = false
 	if strings.HasSuffix(strings.ToLower(path), ".msav") || strings.HasSuffix(strings.ToLower(path), ".msav.msav") {
 		if pos, ok, err := worldstream.FindCoreTileFromMSAV(path); err == nil {
@@ -3622,6 +3841,14 @@ func (c *worldCache) get(path string) ([]byte, error) {
 		}
 	}
 	return data, nil
+}
+
+func (c *worldCache) preload(path string) error {
+	if c == nil || !c.preloadEnabled {
+		return nil
+	}
+	_, err := c.get(path)
+	return err
 }
 
 func (c *worldCache) spawnPos(path string) (protocol.Point2, bool, error) {

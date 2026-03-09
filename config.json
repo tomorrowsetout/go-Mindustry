@@ -25,7 +25,11 @@
     "udp_retry_delay_ms": 5,
     "udp_fallback_tcp": true,
     "sync_entity_ms": 100,
-    "sync_state_ms": 250
+    "sync_state_ms": 250,
+    "world_data_preload": true,
+    "world_data_preload_max_mb": 30,
+    "post_connect_replay_mode": "async",
+    "tile_config_forward_mode": "async"
   },
   "persist": {
     "enabled": true,
@@ -61,8 +65,8 @@
     "max_files": 100,
     "devlog_enabled": true,
     "net_enabled": true,
-    "net_tx_enabled": true,
-    "net_udp_tx_enabled": true,
+    "net_tx_enabled": false,
+    "net_udp_tx_enabled": false,
     "worldstream_enabled": true,
     "buildsvc_enabled": true,
     "script_enabled": true,
