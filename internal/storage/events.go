@@ -359,6 +359,11 @@ type Recorder interface {
 	Status() string
 }
 
+// Flusher is an optional capability for forcing buffered events to disk.
+type Flusher interface {
+	Flush() error
+}
+
 // 存储的事件列表
 type storageEvents struct {
 	mu     sync.RWMutex

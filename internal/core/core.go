@@ -494,12 +494,22 @@ func (c2 *Core2) handleRecordPlayer(m *StorageMessage) {
 
 // handleFlush 刷新事件
 func (c2 *Core2) handleFlush(m *StorageMessage) {
-	// TODO: 实现刷新逻辑
+	_ = m
+	if c2.recorder == nil {
+		return
+	}
+	if f, ok := c2.recorder.(storage.Flusher); ok {
+		_ = f.Flush()
+	}
 }
 
 // handleClose 关闭记录器
 func (c2 *Core2) handleClose(m *StorageMessage) {
+	_ = m
 	if c2.recorder != nil {
+		if f, ok := c2.recorder.(storage.Flusher); ok {
+			_ = f.Flush()
+		}
 		_ = c2.recorder.Close()
 	}
 }

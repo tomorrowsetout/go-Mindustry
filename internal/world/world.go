@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"mdt-server/internal/protocol"
 	"mdt-server/internal/vanilla"
 )
 
@@ -65,6 +66,9 @@ type World struct {
 	unitProfilesByType     map[int16]weaponProfile
 	unitProfilesByName     map[string]weaponProfile
 	buildingProfilesByName map[string]buildingWeaponProfile
+	tileConfigValues       map[int32]any
+	sorterRouteBits        map[int32]byte
+	unloaderRotations      map[int32]int16
 }
 
 type BuildPlanOp struct {
@@ -92,6 +96,7 @@ const (
 	EntityEventBuildPlaced    EntityEventKind = "build_placed"
 	EntityEventBuildDestroyed EntityEventKind = "build_destroyed"
 	EntityEventBuildHealth    EntityEventKind = "build_health"
+	EntityEventBuildItems     EntityEventKind = "build_items"
 	EntityEventBulletFired    EntityEventKind = "bullet_fired"
 )
 
@@ -414,6 +419,23 @@ var entityHitRadiusByType = map[int16]float32{
 	15: 7.4,
 }
 
+// Official-ish storage capacities by block name.
+// Values are intentionally limited to frequently interacted storage/core blocks
+// to keep behavior close without blocking unknown modded blocks.
+var buildingItemCapacityByName = map[string]int32{
+	"core-shard":           4000,
+	"core-foundation":      9000,
+	"core-nucleus":         13000,
+	"core-bastion":         2000,
+	"core-citadel":         3000,
+	"core-acropolis":       4000,
+	"container":            300,
+	"vault":                1000,
+	"reinforced-container": 160,
+	"reinforced-vault":     900,
+	"unloader":             120,
+}
+
 func New(cfg Config) *World {
 	tps := cfg.TPS
 	if tps <= 0 {
@@ -436,6 +458,9 @@ func New(cfg Config) *World {
 		unitProfilesByType:     cloneUnitWeaponProfiles(weaponProfilesByType),
 		unitProfilesByName:     map[string]weaponProfile{},
 		buildingProfilesByName: cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
+		tileConfigValues:       map[int32]any{},
+		sorterRouteBits:        map[int32]byte{},
+		unloaderRotations:      map[int32]int16{},
 		rulesMgr:               NewRulesManager(nil),
 		wavesMgr:               NewWaveManager(nil),
 	}
@@ -463,7 +488,642 @@ func (w *World) Step(delta time.Duration) {
 	}
 
 	w.stepPendingBuilds(delta)
+	w.stepLogistics()
 	w.stepEntities(delta)
+}
+
+func (w *World) stepLogistics() {
+	if w.model == nil || len(w.model.Tiles) == 0 || w.blockNamesByID == nil {
+		return
+	}
+	if w.tick%15 != 0 {
+		return
+	}
+	moves := 0
+	const maxMovesPerStep = 96
+	for i := range w.model.Tiles {
+		if moves >= maxMovesPerStep {
+			break
+		}
+		t := &w.model.Tiles[i]
+		if t == nil || t.Build == nil || t.Block == 0 {
+			continue
+		}
+		name := w.blockNamesByID[int16(t.Block)]
+		isUnloader := strings.Contains(name, "unloader")
+		isSorter := strings.Contains(name, "sorter")
+		isBridge := strings.Contains(name, "bridge") && (strings.Contains(name, "conveyor") || strings.Contains(name, "duct"))
+		if !isUnloader && !isSorter && !isBridge {
+			continue
+		}
+		if isUnloader {
+			srcPos, dstPos, moved, ok := w.stepUnloaderOneLocked(t)
+			if ok && moved > 0 {
+				if srcTile, ok := w.tileForPosLocked(srcPos); ok && srcTile != nil && srcTile.Build != nil {
+					w.entityEvents = append(w.entityEvents, EntityEvent{
+						Kind:       EntityEventBuildItems,
+						BuildPos:   srcPos,
+						BuildItems: append([]ItemStack(nil), srcTile.Build.Items...),
+					})
+				}
+				if dstTile, ok := w.tileForPosLocked(dstPos); ok && dstTile != nil && dstTile.Build != nil {
+					w.entityEvents = append(w.entityEvents, EntityEvent{
+						Kind:       EntityEventBuildItems,
+						BuildPos:   dstPos,
+						BuildItems: append([]ItemStack(nil), dstTile.Build.Items...),
+					})
+				}
+				moves++
+			}
+			continue
+		}
+		if isSorter {
+			srcPos, dstPos, moved, ok := w.stepSorterOneLocked(t, name)
+			if ok && moved > 0 {
+				if srcTile, ok := w.tileForPosLocked(srcPos); ok && srcTile != nil && srcTile.Build != nil {
+					w.entityEvents = append(w.entityEvents, EntityEvent{
+						Kind:       EntityEventBuildItems,
+						BuildPos:   srcPos,
+						BuildItems: append([]ItemStack(nil), srcTile.Build.Items...),
+					})
+				}
+				if dstTile, ok := w.tileForPosLocked(dstPos); ok && dstTile != nil && dstTile.Build != nil {
+					w.entityEvents = append(w.entityEvents, EntityEvent{
+						Kind:       EntityEventBuildItems,
+						BuildPos:   dstPos,
+						BuildItems: append([]ItemStack(nil), dstTile.Build.Items...),
+					})
+				}
+				moves++
+			}
+			continue
+		}
+		if isBridge {
+			curPos := packTilePos(t.X, t.Y)
+			dstPos, ok := w.configuredBuildPosForBuildLocked(curPos)
+			validLink := ok && dstPos != curPos && w.bridgeLinkAllowed(name, curPos, dstPos)
+			var dstTile *Tile
+			if validLink {
+				if dt, ok := w.tileForPosLocked(dstPos); ok && dt != nil && dt.Build != nil && dt.Block != 0 && dt.Team == t.Team && dt.Block == t.Block {
+					dstTile = dt
+				} else {
+					validLink = false
+				}
+			}
+			if !validLink {
+				if outPos, moved, ok := w.bridgeDumpOneLocked(t); ok && moved > 0 {
+					w.entityEvents = append(w.entityEvents, EntityEvent{
+						Kind:       EntityEventBuildItems,
+						BuildPos:   curPos,
+						BuildItems: append([]ItemStack(nil), t.Build.Items...),
+					})
+					if outTile, ok := w.tileForPosLocked(outPos); ok && outTile != nil && outTile.Build != nil {
+						w.entityEvents = append(w.entityEvents, EntityEvent{
+							Kind:       EntityEventBuildItems,
+							BuildPos:   outPos,
+							BuildItems: append([]ItemStack(nil), outTile.Build.Items...),
+						})
+					}
+					moves++
+				}
+				continue
+			}
+			neighbors := w.adjacentBuildingsLocked(t.X, t.Y)
+			var src *Tile
+			var itemID int16
+			for _, nb := range neighbors {
+				if nb == nil || nb.Build == nil || nb.Team != t.Team || (nb.X == dstTile.X && nb.Y == dstTile.Y) {
+					continue
+				}
+				for _, st := range nb.Build.Items {
+					if st.Amount > 0 {
+						src = nb
+						itemID = int16(st.Item)
+						break
+					}
+				}
+				if src != nil {
+					break
+				}
+			}
+			if src == nil || itemID <= 0 {
+				continue
+			}
+			taken := w.removeBuildingItemLocked(packTilePos(src.X, src.Y), itemID, 1)
+			if taken <= 0 {
+				continue
+			}
+			added := w.acceptBuildingItemLocked(packTilePos(dstTile.X, dstTile.Y), itemID, taken)
+			if added < taken {
+				_ = w.acceptBuildingItemLocked(packTilePos(src.X, src.Y), itemID, taken-added)
+			}
+			if added <= 0 {
+				continue
+			}
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildItems,
+				BuildPos:   packTilePos(src.X, src.Y),
+				BuildItems: append([]ItemStack(nil), src.Build.Items...),
+			})
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildItems,
+				BuildPos:   packTilePos(dstTile.X, dstTile.Y),
+				BuildItems: append([]ItemStack(nil), dstTile.Build.Items...),
+			})
+			moves++
+		}
+	}
+}
+
+func (w *World) logisticsItemAllowed(blockName string, filterItemID int16, itemID int16) bool {
+	if itemID <= 0 {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(blockName))
+	if strings.Contains(name, "inverted-sorter") {
+		if filterItemID <= 0 {
+			return true
+		}
+		return itemID != filterItemID
+	}
+	if strings.Contains(name, "sorter") || strings.Contains(name, "unloader") {
+		if filterItemID <= 0 {
+			return true
+		}
+		return itemID == filterItemID
+	}
+	return true
+}
+
+func (w *World) adjacentBuildingsLocked(x, y int) []*Tile {
+	if w.model == nil {
+		return nil
+	}
+	out := make([]*Tile, 0, 4)
+	dirs := [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+	for _, d := range dirs {
+		nx, ny := x+d[0], y+d[1]
+		if !w.model.InBounds(nx, ny) {
+			continue
+		}
+		t, err := w.model.TileAt(nx, ny)
+		if err != nil || t == nil || t.Build == nil || t.Block == 0 {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// bridgeDumpOneLocked tries to dump one item from bridge inventory to one
+// adjacent same-team building, similar to ItemBridge#doDump fallback.
+func (w *World) bridgeDumpOneLocked(bridge *Tile) (outPos int32, moved int32, ok bool) {
+	if bridge == nil || bridge.Build == nil || len(bridge.Build.Items) == 0 {
+		return 0, 0, false
+	}
+	itemID := int16(0)
+	for _, st := range bridge.Build.Items {
+		if st.Amount > 0 {
+			itemID = int16(st.Item)
+			break
+		}
+	}
+	if itemID <= 0 {
+		return 0, 0, false
+	}
+	for _, nb := range w.adjacentBuildingsLocked(bridge.X, bridge.Y) {
+		if nb == nil || nb.Build == nil || nb.Team != bridge.Team {
+			continue
+		}
+		if nb.Block == bridge.Block {
+			continue
+		}
+		if w.acceptBuildingItemAmountLocked(packTilePos(nb.X, nb.Y), itemID, 1) <= 0 {
+			continue
+		}
+		taken := w.removeBuildingItemLocked(packTilePos(bridge.X, bridge.Y), itemID, 1)
+		if taken <= 0 {
+			return 0, 0, false
+		}
+		added := w.acceptBuildingItemLocked(packTilePos(nb.X, nb.Y), itemID, taken)
+		if added < taken {
+			_ = w.acceptBuildingItemLocked(packTilePos(bridge.X, bridge.Y), itemID, taken-added)
+		}
+		if added <= 0 {
+			return 0, 0, false
+		}
+		return packTilePos(nb.X, nb.Y), added, true
+	}
+	return 0, 0, false
+}
+
+func (w *World) stepSorterOneLocked(sorter *Tile, blockName string) (srcPos int32, dstPos int32, moved int32, ok bool) {
+	if sorter == nil || sorter.Build == nil {
+		return 0, 0, 0, false
+	}
+	neighbors := w.adjacentBuildingsLocked(sorter.X, sorter.Y)
+	if len(neighbors) == 0 {
+		return 0, 0, 0, false
+	}
+	for _, src := range neighbors {
+		if src == nil || src.Build == nil || src.Team != sorter.Team {
+			continue
+		}
+		dir, okDir := directionFromSourceToSorter(src.X, src.Y, sorter.X, sorter.Y)
+		if !okDir {
+			continue
+		}
+		for _, st := range src.Build.Items {
+			itemID := int16(st.Item)
+			if st.Amount <= 0 || itemID <= 0 {
+				continue
+			}
+			dst := w.sorterTargetLocked(sorter, src, itemID, dir, true, blockName)
+			if dst == nil {
+				continue
+			}
+			taken := w.removeBuildingItemLocked(packTilePos(src.X, src.Y), itemID, 1)
+			if taken <= 0 {
+				return 0, 0, 0, false
+			}
+			added := w.acceptBuildingItemLocked(packTilePos(dst.X, dst.Y), itemID, taken)
+			if added < taken {
+				_ = w.acceptBuildingItemLocked(packTilePos(src.X, src.Y), itemID, taken-added)
+			}
+			if added <= 0 {
+				return 0, 0, 0, false
+			}
+			return packTilePos(src.X, src.Y), packTilePos(dst.X, dst.Y), added, true
+		}
+	}
+	return 0, 0, 0, false
+}
+
+func (w *World) stepUnloaderOneLocked(unloader *Tile) (srcPos int32, dstPos int32, moved int32, ok bool) {
+	if unloader == nil || unloader.Build == nil {
+		return 0, 0, 0, false
+	}
+	neighbors := w.adjacentBuildingsLocked(unloader.X, unloader.Y)
+	if len(neighbors) < 2 {
+		return 0, 0, 0, false
+	}
+	pos := packTilePos(unloader.X, unloader.Y)
+	itemID := w.configuredItemIDForBuildLocked(pos)
+	if itemID <= 0 {
+		itemID = w.nextUnloaderItemLocked(pos, neighbors)
+	}
+	if itemID <= 0 {
+		return 0, 0, 0, false
+	}
+	var from *Tile
+	var to *Tile
+	var fromLF float32
+	var toLF float32
+	var fromCanLoad bool
+	for _, b := range neighbors {
+		if b == nil || b.Build == nil || b.Team != unloader.Team {
+			continue
+		}
+		amount := w.buildingItemAmountLocked(b, itemID)
+		canUnload := amount > 0
+		canLoad := w.acceptBuildingItemAmountLocked(packTilePos(b.X, b.Y), itemID, 1) > 0
+		lf := w.buildingItemLoadFactorLocked(b, itemID)
+		if canUnload {
+			if from == nil || lf > fromLF {
+				from = b
+				fromLF = lf
+				fromCanLoad = canLoad
+			}
+		}
+		if canLoad {
+			if to == nil || lf < toLF {
+				to = b
+				toLF = lf
+			}
+		}
+	}
+	if from == nil || to == nil || (from.X == to.X && from.Y == to.Y) {
+		return 0, 0, 0, false
+	}
+	if math.Abs(float64(fromLF-toLF)) < 1e-6 && fromCanLoad {
+		return 0, 0, 0, false
+	}
+	bestSrcPos := packTilePos(from.X, from.Y)
+	bestDstPos := packTilePos(to.X, to.Y)
+	taken := w.removeBuildingItemLocked(bestSrcPos, itemID, 1)
+	if taken <= 0 {
+		return 0, 0, 0, false
+	}
+	added := w.acceptBuildingItemLocked(bestDstPos, itemID, taken)
+	if added < taken {
+		_ = w.acceptBuildingItemLocked(bestSrcPos, itemID, taken-added)
+	}
+	if added <= 0 {
+		return 0, 0, 0, false
+	}
+	return bestSrcPos, bestDstPos, added, true
+}
+
+func (w *World) nextUnloaderItemLocked(unloaderPos int32, neighbors []*Tile) int16 {
+	filterItemID := w.configuredItemIDForBuildLocked(unloaderPos)
+	if filterItemID > 0 {
+		if w.unloaderCanTradeItemLocked(neighbors, filterItemID) {
+			return filterItemID
+		}
+		return 0
+	}
+	if w.unloaderRotations == nil {
+		w.unloaderRotations = map[int32]int16{}
+	}
+	last := w.unloaderRotations[unloaderPos]
+	bestAfter := int16(0)
+	bestAny := int16(0)
+	for _, b := range neighbors {
+		if b == nil || b.Build == nil {
+			continue
+		}
+		for _, st := range b.Build.Items {
+			id := int16(st.Item)
+			if st.Amount <= 0 || id <= 0 {
+				continue
+			}
+			if !w.unloaderCanTradeItemLocked(neighbors, id) {
+				continue
+			}
+			if bestAny == 0 || id < bestAny {
+				bestAny = id
+			}
+			if id > last && (bestAfter == 0 || id < bestAfter) {
+				bestAfter = id
+			}
+		}
+	}
+	chosen := bestAfter
+	if chosen <= 0 {
+		chosen = bestAny
+	}
+	if chosen > 0 {
+		w.unloaderRotations[unloaderPos] = chosen
+	}
+	return chosen
+}
+
+func (w *World) unloaderCanTradeItemLocked(neighbors []*Tile, itemID int16) bool {
+	hasProvider := false
+	hasReceiver := false
+	for _, b := range neighbors {
+		if b == nil || b.Build == nil {
+			continue
+		}
+		if w.buildingItemAmountLocked(b, itemID) > 0 {
+			hasProvider = true
+		}
+		if w.acceptBuildingItemAmountLocked(packTilePos(b.X, b.Y), itemID, 1) > 0 {
+			hasReceiver = true
+		}
+	}
+	return hasProvider && hasReceiver
+}
+
+func (w *World) buildingItemAmountLocked(t *Tile, itemID int16) int32 {
+	if t == nil || t.Build == nil || itemID <= 0 {
+		return 0
+	}
+	for _, st := range t.Build.Items {
+		if st.Item == ItemID(itemID) && st.Amount > 0 {
+			return st.Amount
+		}
+	}
+	return 0
+}
+
+func (w *World) buildingItemLoadFactorLocked(t *Tile, itemID int16) float32 {
+	if t == nil || t.Build == nil || itemID <= 0 {
+		return 0
+	}
+	amount := w.buildingItemAmountLocked(t, itemID)
+	capacity := w.buildingMaxAcceptedLocked(t)
+	if capacity <= 0 {
+		return float32(amount)
+	}
+	return float32(amount) / float32(capacity)
+}
+
+func (w *World) buildingMaxAcceptedLocked(t *Tile) int32 {
+	if t == nil || t.Build == nil || t.Block == 0 {
+		return 0
+	}
+	if w.blockNamesByID == nil {
+		return 0
+	}
+	name := strings.ToLower(strings.TrimSpace(w.blockNamesByID[int16(t.Block)]))
+	return buildingItemCapacityByName[name]
+}
+
+func (w *World) sorterTargetLocked(sorter *Tile, source *Tile, itemID int16, dir int, flip bool, blockName string) *Tile {
+	if sorter == nil || source == nil || itemID <= 0 {
+		return nil
+	}
+	filterItemID := w.configuredItemIDForBuildLocked(packTilePos(sorter.X, sorter.Y))
+	invert := strings.Contains(strings.ToLower(strings.TrimSpace(blockName)), "inverted-sorter")
+	match := false
+	if filterItemID > 0 {
+		match = itemID == filterItemID
+	}
+	if invert {
+		match = !match
+	}
+	if match {
+		to := w.nearbyDirLocked(sorter, dir)
+		if w.sorterCanOutputToLocked(sorter, source, to, itemID) {
+			return to
+		}
+		return nil
+	}
+	a := w.nearbyDirLocked(sorter, (dir+3)%4)
+	b := w.nearbyDirLocked(sorter, (dir+1)%4)
+	ac := w.sorterCanOutputToLocked(sorter, source, a, itemID)
+	bc := w.sorterCanOutputToLocked(sorter, source, b, itemID)
+	if ac && !bc {
+		return a
+	}
+	if bc && !ac {
+		return b
+	}
+	if !bc {
+		return nil
+	}
+	pos := packTilePos(sorter.X, sorter.Y)
+	if w.sorterRouteBits == nil {
+		w.sorterRouteBits = map[int32]byte{}
+	}
+	mask := w.sorterRouteBits[pos]
+	useA := (mask & (1 << uint(dir))) == 0
+	if flip {
+		mask ^= (1 << uint(dir))
+		w.sorterRouteBits[pos] = mask
+	}
+	if useA {
+		return a
+	}
+	return b
+}
+
+func (w *World) sorterCanOutputToLocked(sorter *Tile, source *Tile, to *Tile, itemID int16) bool {
+	if sorter == nil || source == nil || to == nil || to.Build == nil || to.Team != sorter.Team {
+		return false
+	}
+	if to.X == source.X && to.Y == source.Y {
+		return false
+	}
+	return w.acceptBuildingItemAmountLocked(packTilePos(to.X, to.Y), itemID, 1) > 0
+}
+
+func (w *World) nearbyDirLocked(t *Tile, dir int) *Tile {
+	if t == nil || w.model == nil {
+		return nil
+	}
+	dx, dy := dirToDelta(dir)
+	nx, ny := t.X+dx, t.Y+dy
+	if !w.model.InBounds(nx, ny) {
+		return nil
+	}
+	tt, err := w.model.TileAt(nx, ny)
+	if err != nil || tt == nil || tt.Build == nil || tt.Block == 0 {
+		return nil
+	}
+	return tt
+}
+
+func directionFromSourceToSorter(sx, sy, tx, ty int) (int, bool) {
+	dx, dy := tx-sx, ty-sy
+	switch {
+	case dx == 1 && dy == 0:
+		return 0, true
+	case dx == 0 && dy == 1:
+		return 1, true
+	case dx == -1 && dy == 0:
+		return 2, true
+	case dx == 0 && dy == -1:
+		return 3, true
+	default:
+		return 0, false
+	}
+}
+
+func dirToDelta(dir int) (int, int) {
+	switch (dir%4 + 4) % 4 {
+	case 0:
+		return 1, 0
+	case 1:
+		return 0, 1
+	case 2:
+		return -1, 0
+	default:
+		return 0, -1
+	}
+}
+
+func (w *World) configuredItemIDForBuildLocked(buildPos int32) int16 {
+	if w.tileConfigValues == nil {
+		return 0
+	}
+	v, ok := w.tileConfigValues[buildPos]
+	if !ok || v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case int:
+		return int16(x)
+	case int8:
+		return int16(x)
+	case int16:
+		return x
+	case int32:
+		return int16(x)
+	case int64:
+		return int16(x)
+	case uint:
+		return int16(x)
+	case uint8:
+		return int16(x)
+	case uint16:
+		return int16(x)
+	case uint32:
+		return int16(x)
+	case uint64:
+		return int16(x)
+	default:
+		if ref, ok := v.(interface{ ID() int16 }); ok {
+			return ref.ID()
+		}
+	}
+	return 0
+}
+
+func (w *World) configuredBuildPosForBuildLocked(buildPos int32) (int32, bool) {
+	if w.tileConfigValues == nil {
+		return 0, false
+	}
+	v, ok := w.tileConfigValues[buildPos]
+	if !ok || v == nil {
+		return 0, false
+	}
+	switch x := v.(type) {
+	case int:
+		return int32(x), true
+	case int8:
+		return int32(x), true
+	case int16:
+		return int32(x), true
+	case int32:
+		return x, true
+	case int64:
+		return int32(x), true
+	case uint:
+		return int32(x), true
+	case uint8:
+		return int32(x), true
+	case uint16:
+		return int32(x), true
+	case uint32:
+		return int32(x), true
+	case uint64:
+		return int32(x), true
+	default:
+		if ref, ok := v.(interface{ Pos() int32 }); ok {
+			return ref.Pos(), true
+		}
+	}
+	return 0, false
+}
+
+func (w *World) bridgeLinkAllowed(blockName string, fromPos int32, toPos int32) bool {
+	from := protocol.UnpackPoint2(fromPos)
+	to := protocol.UnpackPoint2(toPos)
+	dx := from.X - to.X
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := from.Y - to.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	// Bridge-like transport links are axial in vanilla.
+	if dx != 0 && dy != 0 {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(blockName))
+	maxRange := int32(4)
+	switch {
+	case strings.Contains(name, "phase-conveyor"):
+		maxRange = int32(12)
+	case strings.Contains(name, "bridge-conveyor"):
+		maxRange = int32(4)
+	case strings.Contains(name, "duct-bridge"):
+		maxRange = int32(4)
+	}
+	return dx <= maxRange && dy <= maxRange
 }
 
 func (w *World) nextWaveSpacingSec() float32 {
@@ -529,6 +1189,9 @@ func (w *World) SetModel(m *WorldModel) {
 	w.pendingBuilds = map[int32]pendingBuildState{}
 	w.unitMountCDs = map[int32][]float32{}
 	w.unitTargets = map[int32]targetTrackState{}
+	w.tileConfigValues = map[int32]any{}
+	w.sorterRouteBits = map[int32]byte{}
+	w.unloaderRotations = map[int32]int16{}
 	w.blockNamesByID = nil
 	w.unitNamesByID = nil
 	w.unitTypeDefsByID = nil
@@ -661,6 +1324,7 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 				tile.Team = 0
 				tile.Rotation = 0
 				delete(w.buildStates, pos)
+				delete(w.tileConfigValues, packTilePos(tile.X, tile.Y))
 				w.entityEvents = append(w.entityEvents, EntityEvent{
 					Kind:       EntityEventBuildDestroyed,
 					BuildPos:   packTilePos(tile.X, tile.Y),
@@ -1165,6 +1829,30 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 	return changed
 }
 
+// RemovePendingBuild removes one queued/pending build operation at tile x,y.
+// It only cancels pending progress and does not force-remove existing blocks.
+func (w *World) RemovePendingBuild(x, y int32, breaking bool) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil || !w.model.InBounds(int(x), int(y)) {
+		return false
+	}
+	pos := int32(int(y)*w.model.Width + int(x))
+	st, ok := w.pendingBuilds[pos]
+	if !ok || st.Breaking != breaking {
+		return false
+	}
+	delete(w.pendingBuilds, pos)
+	return true
+}
+
+// PendingBuildCount returns the number of active pending build operations.
+func (w *World) PendingBuildCount() int {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return len(w.pendingBuilds)
+}
+
 func unpackPos(pos int32) (int, int) {
 	x := int((pos >> 16) & 0xFFFF)
 	y := int(pos & 0xFFFF)
@@ -1306,16 +1994,7 @@ func (w *World) AddBuildingItem(buildPos int32, itemID int16, amount int32) bool
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	t, ok := w.tileForPosLocked(buildPos)
-	if !ok {
-		return false
-	}
-	b := w.ensureBuildLocked(t)
-	if b == nil {
-		return false
-	}
-	b.AddItem(ItemID(itemID), amount)
-	return true
+	return w.acceptBuildingItemLocked(buildPos, itemID, amount) > 0
 }
 
 func (w *World) RemoveBuildingItem(buildPos int32, itemID int16, amount int32) int32 {
@@ -1324,6 +2003,10 @@ func (w *World) RemoveBuildingItem(buildPos int32, itemID int16, amount int32) i
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.removeBuildingItemLocked(buildPos, itemID, amount)
+}
+
+func (w *World) removeBuildingItemLocked(buildPos int32, itemID int16, amount int32) int32 {
 	t, ok := w.tileForPosLocked(buildPos)
 	if !ok || t.Build == nil {
 		return 0
@@ -1379,6 +2062,145 @@ func (w *World) SetBuildingConfigRaw(buildPos int32, raw []byte) bool {
 	return true
 }
 
+func (w *World) SetBuildingConfigValue(buildPos int32, value any) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if buildPos < 0 {
+		return false
+	}
+	if w.tileConfigValues == nil {
+		w.tileConfigValues = map[int32]any{}
+	}
+	if value == nil {
+		delete(w.tileConfigValues, buildPos)
+		return true
+	}
+	w.tileConfigValues[buildPos] = value
+	return true
+}
+
+func (w *World) HasBuilding(buildPos int32) bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	return ok && t != nil && t.Block != 0 && t.Build != nil
+}
+
+func (w *World) BuildingTeam(buildPos int32) (TeamID, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok || t == nil || t.Block == 0 || t.Build == nil {
+		return 0, false
+	}
+	return t.Team, true
+}
+
+func (w *World) CanDepositToBuilding(buildPos int32) bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok || t == nil || t.Block == 0 || t.Build == nil {
+		return false
+	}
+	rules := w.rulesMgr.Get()
+	if rules == nil || !rules.OnlyDepositCore {
+		return true
+	}
+	name := ""
+	if w.blockNamesByID != nil {
+		name = strings.ToLower(strings.TrimSpace(w.blockNamesByID[int16(t.Block)]))
+	}
+	return strings.Contains(name, "core") || strings.Contains(name, "foundation") || strings.Contains(name, "nucleus")
+}
+
+// AcceptBuildingItem adds up to amount items into a building inventory and
+// returns the actual accepted amount, clamped by known block capacity.
+func (w *World) AcceptBuildingItem(buildPos int32, itemID int16, amount int32) int32 {
+	if amount <= 0 || itemID <= 0 {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.acceptBuildingItemLocked(buildPos, itemID, amount)
+}
+
+func (w *World) acceptBuildingItemLocked(buildPos int32, itemID int16, amount int32) int32 {
+	accepted := w.acceptBuildingItemAmountLocked(buildPos, itemID, amount)
+	if accepted <= 0 {
+		return 0
+	}
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok {
+		return 0
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return 0
+	}
+	b.AddItem(ItemID(itemID), accepted)
+	return accepted
+}
+
+func (w *World) acceptBuildingItemAmountLocked(buildPos int32, itemID int16, amount int32) int32 {
+	t, ok := w.tileForPosLocked(buildPos)
+	if !ok {
+		return 0
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return 0
+	}
+	capacity := int32(0)
+	if w.blockNamesByID != nil {
+		if name, ok := w.blockNamesByID[int16(t.Block)]; ok {
+			capacity = buildingItemCapacityByName[strings.ToLower(strings.TrimSpace(name))]
+		}
+	}
+	accepted := amount
+	if capacity > 0 {
+		total := int32(0)
+		for i := range b.Items {
+			if b.Items[i].Amount > 0 {
+				total += b.Items[i].Amount
+			}
+		}
+		space := capacity - total
+		if space <= 0 {
+			return 0
+		}
+		if accepted > space {
+			accepted = space
+		}
+	}
+	if accepted <= 0 {
+		return 0
+	}
+	return accepted
+}
+
+// RotateBuilding rotates an existing building by one 90deg step.
+// direction=true rotates clockwise, false rotates counterclockwise.
+func (w *World) RotateBuilding(buildPos int32, direction bool) (blockID int16, rotation int8, team TeamID, ok bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, exists := w.tileForPosLocked(buildPos)
+	if !exists || t == nil || t.Block == 0 {
+		return 0, 0, 0, false
+	}
+	b := w.ensureBuildLocked(t)
+	if b == nil {
+		return 0, 0, 0, false
+	}
+	step := -1
+	if direction {
+		step = 1
+	}
+	t.Rotation = int8((int(t.Rotation) + step + 4) % 4)
+	b.Rotation = t.Rotation
+	return int16(t.Block), t.Rotation, t.Team, true
+}
+
 func (w *World) SnapshotBuildingItems() map[int32][]ItemStack {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -1394,6 +2216,31 @@ func (w *World) SnapshotBuildingItems() map[int32][]ItemStack {
 		pos := packTilePos(t.X, t.Y)
 		items := append([]ItemStack(nil), t.Build.Items...)
 		out[pos] = items
+	}
+	return out
+}
+
+// SnapshotBuildingInventories returns all building positions and their current
+// item stacks, including empty inventories. This is useful for late-join replay
+// where explicit clear+set keeps client state deterministic.
+func (w *World) SnapshotBuildingInventories() map[int32][]ItemStack {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	out := make(map[int32][]ItemStack)
+	if w.model == nil {
+		return out
+	}
+	for i := range w.model.Tiles {
+		t := &w.model.Tiles[i]
+		if t == nil || t.Build == nil {
+			continue
+		}
+		pos := packTilePos(t.X, t.Y)
+		if len(t.Build.Items) == 0 {
+			out[pos] = nil
+			continue
+		}
+		out[pos] = append([]ItemStack(nil), t.Build.Items...)
 	}
 	return out
 }
@@ -2449,6 +3296,7 @@ func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
 	t.Build = nil
 	t.Block = 0
 	delete(w.buildStates, pos)
+	delete(w.tileConfigValues, packTilePos(x, y))
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind:      EntityEventBuildDestroyed,
 		BuildPos:  packTilePos(x, y),

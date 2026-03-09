@@ -775,6 +775,7 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	srv.SetItemDepositCooldown(wld.GetRulesManager().Get().ItemDepositCooldown)
 	buildService := buildsvc.New(wld, buildsvc.Options{
 		MaxQueuedBatches: 4096,
 		MaxPlansPerBatch: 64,
@@ -860,6 +861,7 @@ func main() {
 		}
 		wld.SetModel(model)
 		wld.ResetRuntimeFromTags(model.Tags)
+		srv.SetItemDepositCooldown(wld.GetRulesManager().Get().ItemDepositCooldown)
 		startup.ok("地图规则", mapModeSummary(wld.GetRulesManager().Get()))
 		loadedModel = model
 		loadedMapPath = path
@@ -1055,15 +1057,20 @@ func main() {
 		}
 
 		// Replay inventory state for late joiners (e.g. core/sorter/unloader items).
-		itemsByPos := wld.SnapshotBuildingItems()
-		if len(itemsByPos) > 0 {
-			posList := make([]int32, 0, len(itemsByPos))
-			for pos := range itemsByPos {
+		// Clear then set makes replay deterministic even if base world stream had stale values.
+		inventoriesByPos := wld.SnapshotBuildingInventories()
+		if len(inventoriesByPos) > 0 {
+			posList := make([]int32, 0, len(inventoriesByPos))
+			for pos := range inventoriesByPos {
 				posList = append(posList, pos)
 			}
 			sort.Slice(posList, func(i, j int) bool { return posList[i] < posList[j] })
 			for _, pos := range posList {
-				src := itemsByPos[pos]
+				sendReplay(&protocol.Remote_InputHandler_clearItems_63{
+					Build: protocol.BuildingBox{PosValue: pos},
+				})
+
+				src := inventoriesByPos[pos]
 				items := make([]protocol.ItemStack, 0, len(src))
 				for _, st := range src {
 					if st.Amount <= 0 {
@@ -1085,19 +1092,31 @@ func main() {
 		}
 
 		// Replay per-tile configs (sorter/bridge/logic/etc.) after tile state is present.
+		// For runtime-changed positions, explicitly sending nil clears stale client config.
 		configs := srv.SnapshotTileConfigs()
-		if len(configs) == 0 {
+		replayConfigPos := make(map[int32]struct{}, len(pending)+len(configs))
+		for _, it := range pending {
+			replayConfigPos[it.pos] = struct{}{}
+		}
+		for pos := range configs {
+			replayConfigPos[pos] = struct{}{}
+		}
+		if len(replayConfigPos) == 0 {
 			return
 		}
-		posList := make([]int32, 0, len(configs))
-		for pos := range configs {
+		posList := make([]int32, 0, len(replayConfigPos))
+		for pos := range replayConfigPos {
 			posList = append(posList, pos)
 		}
 		sort.Slice(posList, func(i, j int) bool { return posList[i] < posList[j] })
 		for _, pos := range posList {
+			val, ok := configs[pos]
+			if !ok {
+				val = nil
+			}
 			sendReplay(&protocol.Remote_InputHandler_tileConfig_86{
 				Build: protocol.BuildingBox{PosValue: pos},
-				Value: configs[pos],
+				Value: val,
 			})
 		}
 	}
@@ -1125,6 +1144,35 @@ func main() {
 		}
 		_ = buildService.ApplyPlansNow(world.TeamID(1), plans)
 	}
+	srv.CanInteractBuildFn = func(c *netserver.Conn, buildPos int32, action string) bool {
+		if buildPos < 0 {
+			return false
+		}
+		if !wld.HasBuilding(buildPos) {
+			return false
+		}
+		rules := wld.GetRulesManager().Get()
+		team, ok := wld.BuildingTeam(buildPos)
+		if !ok {
+			return false
+		}
+		connTeam := world.TeamID(srv.ConnTeamID(c))
+		if team != connTeam && (rules == nil || !rules.Editor) {
+			return false
+		}
+		switch action {
+		case "transfer_inventory", "transfer_item_to":
+			return wld.CanDepositToBuilding(buildPos)
+		default:
+			return true
+		}
+	}
+	srv.OnSetPlayerTeamEditor = func(c *netserver.Conn, teamID byte) bool {
+		_ = c
+		_ = teamID
+		r := wld.GetRulesManager().Get()
+		return r != nil && r.Editor
+	}
 	srv.OnSetItem = func(buildPos int32, itemID int16, amount int32) {
 		_ = wld.SetBuildingItem(buildPos, itemID, amount)
 	}
@@ -1147,11 +1195,62 @@ func main() {
 	srv.OnClearItems = func(buildPos int32) {
 		_ = wld.ClearBuildingItems(buildPos)
 	}
-	srv.OnTransferItemTo = func(buildPos int32, itemID int16, amount int32) {
-		_ = wld.AddBuildingItem(buildPos, itemID, amount)
+	srv.OnTransferItemTo = func(buildPos int32, itemID int16, amount int32) int32 {
+		return wld.AcceptBuildingItem(buildPos, itemID, amount)
 	}
-	srv.OnRequestItem = func(buildPos int32, itemID int16, amount int32) {
-		_ = wld.RemoveBuildingItem(buildPos, itemID, amount)
+	srv.OnTakeItems = func(buildPos int32, itemID int16, amount int32, toUnitID int32) int32 {
+		if buildPos < 0 || itemID <= 0 || amount <= 0 || toUnitID == 0 {
+			return 0
+		}
+		removed := wld.RemoveBuildingItem(buildPos, itemID, amount)
+		if removed <= 0 {
+			return 0
+		}
+		added := srv.AddUnitItemByID(toUnitID, itemID, removed)
+		if added < removed {
+			_ = wld.AddBuildingItem(buildPos, itemID, removed-added)
+		}
+		return added
+	}
+	srv.OnTransferItemToUnit = func(itemID int16, amount int32, toUnitID int32) int32 {
+		if itemID <= 0 || amount <= 0 || toUnitID == 0 {
+			return 0
+		}
+		return srv.AddUnitItemByID(toUnitID, itemID, amount)
+	}
+	srv.OnTransferInventory = func(c *netserver.Conn, buildPos int32) (int16, int32) {
+		if c == nil || buildPos < 0 {
+			return 0, 0
+		}
+		itemID, amount, ok := srv.ConsumePlayerUnitStack(c, 0)
+		if !ok || amount <= 0 {
+			return 0, 0
+		}
+		accepted := wld.AcceptBuildingItem(buildPos, itemID, amount)
+		if accepted < amount {
+			_ = srv.AddPlayerUnitItem(c, itemID, amount-accepted)
+		}
+		return itemID, accepted
+	}
+	srv.OnRequestItem = func(c *netserver.Conn, buildPos int32, itemID int16, amount int32) int32 {
+		if c == nil || buildPos < 0 || itemID <= 0 || amount <= 0 {
+			return 0
+		}
+		if !srv.CanPlayerUnitCarry(c, itemID) {
+			return 0
+		}
+		moved := wld.RemoveBuildingItem(buildPos, itemID, amount)
+		if moved <= 0 {
+			return 0
+		}
+		added := srv.AddPlayerUnitItem(c, itemID, moved)
+		if added < moved {
+			_ = wld.AcceptBuildingItem(buildPos, itemID, moved-added)
+		}
+		return added
+	}
+	srv.OnRemoveQueueBlock = func(x, y int32, breaking bool) {
+		_ = wld.RemovePendingBuild(x, y, breaking)
 	}
 	srv.OnTileConfig = func(buildPos int32, value any) {
 		raw, err := encodeTileConfigRaw(value, srv.TypeIO)
@@ -1159,6 +1258,53 @@ func main() {
 			return
 		}
 		_ = wld.SetBuildingConfigRaw(buildPos, raw)
+		_ = wld.SetBuildingConfigValue(buildPos, value)
+	}
+	srv.OnRotateBlock = func(buildPos int32, direction bool) {
+		blockID, rot, team, ok := wld.RotateBuilding(buildPos, direction)
+		if !ok {
+			return
+		}
+		broadcastConstructFinish(srv, buildPos, blockID, rot, byte(team))
+	}
+	srv.OnRequestDropPayload = func(c *netserver.Conn, x, y float32) {
+		if c == nil {
+			return
+		}
+		unitID := c.UnitID()
+		if unitID == 0 {
+			return
+		}
+		rot := float32(0)
+		if ent, ok := wld.GetEntity(unitID); ok {
+			rot = ent.Rotation
+		}
+		_, _ = wld.SetEntityPosition(unitID, x, y, rot)
+	}
+	srv.OnPayloadDropped = func(c *netserver.Conn, unitID int32, x, y float32) {
+		if unitID == 0 {
+			return
+		}
+		rot := float32(0)
+		if ent, ok := wld.GetEntity(unitID); ok {
+			rot = ent.Rotation
+		}
+		_, _ = wld.SetEntityPosition(unitID, x, y, rot)
+		_, _ = wld.ClearEntityBehavior(unitID)
+	}
+	srv.OnUnitEnteredPayload = func(c *netserver.Conn, unitID int32, buildPos int32) {
+		if unitID == 0 {
+			return
+		}
+		if buildPos != 0 {
+			pt := protocol.UnpackPoint2(buildPos)
+			rot := float32(0)
+			if ent, ok := wld.GetEntity(unitID); ok {
+				rot = ent.Rotation
+			}
+			_, _ = wld.SetEntityPosition(unitID, float32(pt.X), float32(pt.Y), rot)
+		}
+		_, _ = wld.ClearEntityBehavior(unitID)
 	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
@@ -1191,6 +1337,7 @@ func main() {
 		for range t.C {
 			evs := wld.DrainEntityEvents()
 			buildHealth := make([]int32, 0, len(evs)*2)
+			buildItems := make(map[int32][]world.ItemStack)
 			for _, ev := range evs {
 				switch ev.Kind {
 				case world.EntityEventRemoved:
@@ -1223,12 +1370,19 @@ func main() {
 					}
 					runtimeTileMu.Unlock()
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
+				case world.EntityEventBuildItems:
+					buildItems[ev.BuildPos] = append([]world.ItemStack(nil), ev.BuildItems...)
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
 				}
 			}
 			if len(buildHealth) > 0 {
 				broadcastBuildHealthUpdate(srv, buildHealth)
+			}
+			if len(buildItems) > 0 {
+				for pos, items := range buildItems {
+					broadcastBuildItems(srv, pos, items)
+				}
 			}
 		}
 	}()
@@ -3169,6 +3323,32 @@ func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
 	}
 	srv.Broadcast(&protocol.Remote_Tile_buildHealthUpdate_135{
 		Buildings: protocol.IntSeq{Items: items},
+	})
+}
+
+func broadcastBuildItems(srv *netserver.Server, buildPos int32, items []world.ItemStack) {
+	if srv == nil || buildPos < 0 {
+		return
+	}
+	out := make([]protocol.ItemStack, 0, len(items))
+	for _, st := range items {
+		if st.Amount <= 0 {
+			continue
+		}
+		out = append(out, protocol.ItemStack{
+			Item:   itemRef{id: int16(st.Item)},
+			Amount: st.Amount,
+		})
+	}
+	if len(out) == 0 {
+		srv.Broadcast(&protocol.Remote_InputHandler_clearItems_63{
+			Build: protocol.BuildingBox{PosValue: buildPos},
+		})
+		return
+	}
+	srv.Broadcast(&protocol.Remote_InputHandler_setItems_61{
+		Build: protocol.BuildingBox{PosValue: buildPos},
+		Items: out,
 	})
 }
 

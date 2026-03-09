@@ -2,7 +2,9 @@ package protocol
 
 import (
 	"encoding/base64"
+	"fmt"
 	"hash/crc32"
+	"math"
 )
 
 // Connect is a generic client connect event (server-side only in Java).
@@ -19,9 +21,22 @@ type Disconnect struct {
 	Reason string
 }
 
-func (p *Disconnect) Read(r *Reader, _ int) error { return nil }
-func (p *Disconnect) Write(w *Writer) error       { return nil }
-func (p *Disconnect) Priority() int               { return PriorityHigh }
+func (p *Disconnect) Read(r *Reader, _ int) error {
+	reason, err := r.ReadStringNullable()
+	if err != nil {
+		return err
+	}
+	if reason != nil {
+		p.Reason = *reason
+	}
+	return nil
+}
+
+func (p *Disconnect) Write(w *Writer) error {
+	return w.WriteStringNullable(&p.Reason)
+}
+
+func (p *Disconnect) Priority() int { return PriorityHigh }
 
 // StreamBegin marks a stream.
 type StreamBegin struct {
@@ -76,6 +91,9 @@ func (p *StreamChunk) Read(r *Reader, _ int) error {
 	if err != nil {
 		return err
 	}
+	if l < 0 {
+		return fmt.Errorf("invalid stream chunk length: %d", l)
+	}
 	data, err := r.ReadBytes(int(l))
 	if err != nil {
 		return err
@@ -86,6 +104,9 @@ func (p *StreamChunk) Read(r *Reader, _ int) error {
 }
 
 func (p *StreamChunk) Write(w *Writer) error {
+	if len(p.Data) > math.MaxInt16 {
+		return fmt.Errorf("stream chunk too large: %d", len(p.Data))
+	}
 	if err := w.WriteInt32(p.ID); err != nil {
 		return err
 	}
@@ -98,11 +119,31 @@ func (p *StreamChunk) Write(w *Writer) error {
 func (p *StreamChunk) Priority() int { return PriorityHigh }
 
 // WorldStream is a marker for a streaming packet payload.
-type WorldStream struct{}
+type WorldStream struct {
+	Data []byte
+}
 
-func (p *WorldStream) Read(r *Reader, _ int) error { return nil }
-func (p *WorldStream) Write(w *Writer) error       { return nil }
-func (p *WorldStream) Priority() int               { return PriorityNormal }
+func (p *WorldStream) Read(r *Reader, length int) error {
+	if length <= 0 {
+		p.Data = nil
+		return nil
+	}
+	b, err := r.ReadBytes(length)
+	if err != nil {
+		return err
+	}
+	p.Data = b
+	return nil
+}
+
+func (p *WorldStream) Write(w *Writer) error {
+	if len(p.Data) == 0 {
+		return nil
+	}
+	return w.WriteBytes(p.Data)
+}
+
+func (p *WorldStream) Priority() int { return PriorityNormal }
 
 // ConnectPacket mirrors mindustry.net.Packets.ConnectPacket.
 type ConnectPacket struct {
