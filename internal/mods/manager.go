@@ -5,14 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
-
-	"mdt-server/internal/mods/go"
-	"mdt-server/internal/mods/java"
-	"mdt-server/internal/mods/js"
-	"mdt-server/internal/mods/node"
 )
 
 // ====================
@@ -138,9 +132,11 @@ func (m *ModManager) LoadAll() error {
 	// load each mod
 	for _, path := range modFiles {
 		if err := m.loader.Load(path); err != nil {
-			Log.Warn("failed to load mod: %s (%v)", path, err)
+			modLog.Warn("failed to load mod: %s (%v)", path, err)
 		}
 	}
+
+	m.mods = m.collectLoadedModsLocked()
 
 	return nil
 }
@@ -154,9 +150,10 @@ func (m *ModManager) UnloadAll() error {
 	for _, mod := range m.mods {
 		if err := m.loader.Unload(mod.Name); err != nil {
 			errors = append(errors, err)
-			Log.Warn("failed to unload mod: %s (%v)", mod.Name, err)
+			modLog.Warn("failed to unload mod: %s (%v)", mod.Name, err)
 		}
 	}
+	m.mods = m.mods[:0]
 
 	if len(errors) > 0 {
 		return fmt.Errorf("failed to unload some mods: %v", errors)
@@ -179,13 +176,9 @@ func (m *ModManager) StartAll() error {
 	defer m.mu.Unlock()
 
 	var errors []error
-	for _, mod := range m.mods {
-		if !mod.Started {
-			if err := mod.Start(); err != nil {
-				errors = append(errors, err)
-				Log.Warn("failed to start mod: %s (%v)", mod.Name, err)
-			}
-		}
+	if err := m.loader.Start(); err != nil {
+		errors = append(errors, err)
+		modLog.Warn("failed to start mods: %v", err)
 	}
 
 	if len(errors) > 0 {
@@ -201,13 +194,9 @@ func (m *ModManager) StopAll() error {
 	defer m.mu.Unlock()
 
 	var errors []error
-	for _, mod := range m.mods {
-		if mod.Started {
-			if err := mod.Stop(); err != nil {
-				errors = append(errors, err)
-				Log.Warn("failed to stop mod: %s (%v)", mod.Name, err)
-			}
-		}
+	if err := m.loader.Stop(); err != nil {
+		errors = append(errors, err)
+		modLog.Warn("failed to stop mods: %v", err)
 	}
 
 	if len(errors) > 0 {
@@ -275,4 +264,16 @@ func (m *ModManager) GetProperty(key string) (interface{}, error) {
 // GetLoader return mod loader
 func (m *ModManager) GetLoader() *ModLoader {
 	return m.loader
+}
+
+func (m *ModManager) collectLoadedModsLocked() []*LoadedMod {
+	names := m.loader.ListMods()
+	mods := make([]*LoadedMod, 0, len(names))
+	for _, name := range names {
+		mod, err := m.loader.GetMod(name)
+		if err == nil {
+			mods = append(mods, mod)
+		}
+	}
+	return mods
 }

@@ -23,6 +23,8 @@ type Log interface {
 // simpleLogger simple logger
 type simpleLogger struct{}
 
+var modLog Log = &simpleLogger{}
+
 func (l *simpleLogger) Info(msg string, args ...interface{}) {
 	fmt.Printf("[MOD] "+msg+"\n", args...)
 }
