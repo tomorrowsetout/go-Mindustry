@@ -262,9 +262,4 @@ mdt-server/
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
-## 感谢各位
 
-
-<a href="https://github.com/tomorrowsetout/go-Mindustry/graphs/contributors">
-  <img alt="contributors" src="https://opencollective.com/affine/contributors.svg?width=890&button=false" />
-</a>
