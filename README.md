@@ -265,6 +265,6 @@ mdt-server/
 ## 感谢各位
 
 
-<a href="https://github.com/toeverything/affine/graphs/contributors">
+<a href="https://github.com/tomorrowsetout/go-Mindustry/graphs/contributors">
   <img alt="contributors" src="https://opencollective.com/affine/contributors.svg?width=890&button=false" />
 </a>
