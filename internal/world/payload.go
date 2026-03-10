@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"math"
 	"strings"
+
+	"mdt-server/internal/protocol"
 )
 
 const (
@@ -182,7 +184,7 @@ func (w *World) PickBuildPayload(carrierID int32, buildPos int32) (blockID int16
 	if t.Build.Team != w.model.Entities[carrierIdx].Team {
 		return 0, 0, 0, false
 	}
-	payload := encodePayloadBuild(t)
+	payload := encodePayloadBuild(w, t)
 	if len(payload) == 0 {
 		return 0, 0, 0, false
 	}
@@ -214,11 +216,25 @@ func (w *World) DropEntityPayload(carrierID int32, x, y float32) (PayloadDropRes
 	if len(payload) == 0 {
 		return PayloadDropResult{}, false
 	}
+	result, ok := w.dropPayloadAtLocked(payload, x, y, w.model.Entities[carrierIdx].Team)
+	if !ok {
+		return PayloadDropResult{}, false
+	}
+	w.model.Entities[carrierIdx].Payload = nil
+	return result, true
+}
+
+func (w *World) dropPayloadAtLocked(payload []byte, x, y float32, fallbackTeam TeamID) (PayloadDropResult, bool) {
+	if w.model == nil || len(payload) == 0 {
+		return PayloadDropResult{}, false
+	}
 	if unitData, ok := decodePayloadUnit(payload); ok {
 		unitData.X = x
 		unitData.Y = y
+		if unitData.Team == 0 {
+			unitData.Team = fallbackTeam
+		}
 		ent := addEntityFromPayloadLocked(w, unitData)
-		w.model.Entities[carrierIdx].Payload = nil
 		return PayloadDropResult{Kind: PayloadDropUnit, UnitID: ent.ID}, true
 	}
 	if buildData, ok := decodePayloadBuild(payload); ok {
@@ -232,11 +248,10 @@ func (w *World) DropEntityPayload(carrierID int32, x, y float32) (PayloadDropRes
 			return PayloadDropResult{}, false
 		}
 		if buildData.Team == 0 {
-			buildData.Team = w.model.Entities[carrierIdx].Team
+			buildData.Team = fallbackTeam
 		}
 		buildPos := packTilePos(tx, ty)
 		placeBuildingLocked(w, t, buildData)
-		w.model.Entities[carrierIdx].Payload = nil
 		return PayloadDropResult{
 			Kind:     PayloadDropBuild,
 			BuildPos: buildPos,
@@ -294,6 +309,108 @@ func buildCanAcceptPayloadLocked(w *World, t *Tile) bool {
 	return strings.Contains(name, "payload")
 }
 
+func (w *World) payloadSourceEnsurePayloadLocked(t *Tile) bool {
+	if w == nil || t == nil || t.Build == nil {
+		return false
+	}
+	if len(t.Build.Payload) > 0 {
+		return true
+	}
+	cfg := any(nil)
+	if w.tileConfigValues != nil {
+		cfg = w.tileConfigValues[packTilePos(t.X, t.Y)]
+	}
+	payload := w.payloadFromConfigLocked(t.Build.Team, cfg)
+	if len(payload) == 0 {
+		return false
+	}
+	t.Build.Payload = payload
+	return true
+}
+
+func (w *World) payloadFromConfigLocked(team TeamID, cfg any) []byte {
+	if cfg == nil {
+		return nil
+	}
+	switch v := cfg.(type) {
+	case protocol.Block:
+		return w.payloadFromBlockLocked(team, v.ID())
+	case protocol.UnitType:
+		return w.payloadFromUnitLocked(team, v.ID())
+	case protocol.Content:
+		switch v.ContentType() {
+		case protocol.ContentBlock:
+			return w.payloadFromBlockLocked(team, v.ID())
+		case protocol.ContentUnit:
+			return w.payloadFromUnitLocked(team, v.ID())
+		}
+	case protocol.BlockRef:
+		return w.payloadFromBlockLocked(team, v.ID())
+	case protocol.UnitCommand:
+	case protocol.UnitStance:
+	case protocol.UnitBox:
+		return w.payloadFromUnitLocked(team, int16(v.ID()))
+	case int16:
+		return w.payloadFromAnyIDLocked(team, v)
+	case int32:
+		return w.payloadFromAnyIDLocked(team, int16(v))
+	case int:
+		return w.payloadFromAnyIDLocked(team, int16(v))
+	case uint16:
+		return w.payloadFromAnyIDLocked(team, int16(v))
+	case uint32:
+		return w.payloadFromAnyIDLocked(team, int16(v))
+	case byte:
+		return w.payloadFromAnyIDLocked(team, int16(v))
+	}
+	return nil
+}
+
+func (w *World) payloadFromAnyIDLocked(team TeamID, id int16) []byte {
+	if id <= 0 {
+		return nil
+	}
+	if w.blockNamesByID != nil {
+		if _, ok := w.blockNamesByID[id]; ok {
+			return w.payloadFromBlockLocked(team, id)
+		}
+	}
+	if w.unitNamesByID != nil {
+		if _, ok := w.unitNamesByID[id]; ok {
+			return w.payloadFromUnitLocked(team, id)
+		}
+	}
+	return nil
+}
+
+func (w *World) payloadFromBlockLocked(team TeamID, blockID int16) []byte {
+	if blockID <= 0 {
+		return nil
+	}
+		return encodePayloadBuild(w, &Tile{Build: &Building{Block: BlockID(blockID), Team: team, Rotation: 0, Health: 100, MaxHealth: 100}})
+}
+
+func (w *World) payloadFromUnitLocked(team TeamID, typeID int16) []byte {
+	if typeID <= 0 {
+		return nil
+	}
+	ent := RawEntity{
+		TypeID:      typeID,
+		Team:        team,
+		Health:      100,
+		MaxHealth:   100,
+		Shield:      0,
+		ShieldMax:   0,
+		ShieldRegen: 0,
+		Armor:       0,
+		SlowMul:     1,
+		RuntimeInit: true,
+	}
+	w.applyUnitTypeDef(&ent)
+	w.applyWeaponProfile(&ent)
+	return encodePayloadUnit(ent)
+}
+
 type payloadUnitData struct {
 	ID        int32
 	TypeID    int16
@@ -321,6 +438,8 @@ type payloadBuildData struct {
 	Items    []ItemStack
 	Liquids  []LiquidStack
 	Payload  []byte
+	PowerStatus float32
+	Extra   []byte
 }
 
 func encodePayloadUnit(ent RawEntity) []byte {
@@ -342,7 +461,17 @@ func encodePayloadUnit(ent RawEntity) []byte {
 	return buf.Bytes()
 }
 
-func encodePayloadBuild(t *Tile) []byte {
+func encodePayloadBuild(w *World, t *Tile) []byte {
+	if t == nil || t.Build == nil {
+		return nil
+	}
+	if payload := encodePayloadBuildVanilla(w, t); len(payload) > 0 {
+		return payload
+	}
+	return encodePayloadBuildCustom(t)
+}
+
+func encodePayloadBuildCustom(t *Tile) []byte {
 	if t == nil || t.Build == nil {
 		return nil
 	}
@@ -376,6 +505,20 @@ func encodePayloadBuild(t *Tile) []byte {
 }
 
 func decodePayloadUnit(payload []byte) (payloadUnitData, bool) {
+	if data, ok := decodePayloadUnitCustom(payload); ok {
+		return data, true
+	}
+	return decodePayloadUnitVanilla(payload)
+}
+
+func decodePayloadBuild(payload []byte) (payloadBuildData, bool) {
+	if data, ok := decodePayloadBuildCustom(payload); ok {
+		return data, true
+	}
+	return decodePayloadBuildVanilla(payload)
+}
+
+func decodePayloadUnitCustom(payload []byte) (payloadUnitData, bool) {
 	reader := newPayloadReader(payload, payloadKindUnit)
 	if reader == nil {
 		return payloadUnitData{}, false
@@ -454,7 +597,7 @@ func decodePayloadUnit(payload []byte) (payloadUnitData, bool) {
 	}, true
 }
 
-func decodePayloadBuild(payload []byte) (payloadBuildData, bool) {
+func decodePayloadBuildCustom(payload []byte) (payloadBuildData, bool) {
 	reader := newPayloadReader(payload, payloadKindBuild)
 	if reader == nil {
 		return payloadBuildData{}, false
@@ -536,6 +679,107 @@ func decodePayloadBuild(payload []byte) (payloadBuildData, bool) {
 	}, true
 }
 
+func encodePayloadBuildVanilla(w *World, t *Tile) []byte {
+	if t == nil || t.Build == nil {
+		return nil
+	}
+	writer := protocol.NewWriter()
+	if err := writer.WriteByte(protocol.PayloadBlock); err != nil {
+		return nil
+	}
+	if err := writer.WriteInt16(int16(t.Build.Block)); err != nil {
+		return nil
+	}
+	if err := writer.WriteByte(0); err != nil { // build version (block-specific)
+		return nil
+	}
+	if !writeBuildingBaseVanilla(writer, w, t) {
+		return nil
+	}
+	return writer.Bytes()
+}
+
+type vanillaBuildBase struct {
+	Health       float32
+	Rotation     int8
+	Team         TeamID
+	Items        []ItemStack
+	Liquids      []LiquidStack
+	PowerStatus  float32
+	Enabled      bool
+	Efficiency   float32
+	OptionalEff  float32
+	Extra        []byte
+}
+
+func decodePayloadBuildVanilla(payload []byte) (payloadBuildData, bool) {
+	r := protocol.NewReader(payload)
+	typ, err := r.ReadByte()
+	if err != nil || typ != protocol.PayloadBlock {
+		return payloadBuildData{}, false
+	}
+	blockID, err := r.ReadInt16()
+	if err != nil {
+		return payloadBuildData{}, false
+	}
+	if _, err := r.ReadByte(); err != nil { // build version
+		return payloadBuildData{}, false
+	}
+	base, ok := readBuildingBaseVanilla(r)
+	if !ok {
+		return payloadBuildData{}, false
+	}
+	extra := []byte(nil)
+	if rem := r.Remaining(); rem > 0 {
+		extra, _ = r.ReadBytes(rem)
+	}
+	maxHealth := base.Health
+	if maxHealth <= 0 {
+		maxHealth = 1
+	}
+	return payloadBuildData{
+		BlockID:     blockID,
+		Team:        base.Team,
+		Rotation:    base.Rotation,
+		Health:      maxf(base.Health, 1),
+		MaxHealth:   maxHealth,
+		Items:       base.Items,
+		Liquids:     base.Liquids,
+		PowerStatus: base.PowerStatus,
+		Extra:       extra,
+	}, true
+}
+
+func decodePayloadUnitVanilla(payload []byte) (payloadUnitData, bool) {
+	r := protocol.NewReader(payload)
+	typ, err := r.ReadByte()
+	if err != nil || typ != protocol.PayloadUnit {
+		return payloadUnitData{}, false
+	}
+	classID, err := r.ReadByte()
+	if err != nil {
+		return payloadUnitData{}, false
+	}
+	_ = classID
+	u := &protocol.UnitEntitySync{}
+	if err := u.ReadSync(r); err != nil {
+		return payloadUnitData{}, false
+	}
+	return payloadUnitData{
+		TypeID:    u.TypeID,
+		Team:      TeamID(u.TeamID),
+		Health:    u.Health,
+		MaxHealth: u.Health,
+		Rotation:  u.Rotation,
+		X:         u.X,
+		Y:         u.Y,
+		VelX:      u.Vel.X,
+		VelY:      u.Vel.Y,
+		Shield:    u.Shield,
+		ShieldMax: 0,
+	}, true
+}
+
 func addEntityFromPayloadLocked(w *World, data payloadUnitData) RawEntity {
 	ent := RawEntity{
 		TypeID:    data.TypeID,
@@ -583,6 +827,426 @@ func placeBuildingLocked(w *World, t *Tile, data payloadBuildData) {
 	if len(data.Liquids) > 0 {
 		t.Build.Liquids = append([]LiquidStack(nil), data.Liquids...)
 	}
+	if data.PowerStatus > 0 && w.blockNamesByID != nil && w.blockPropsByName != nil {
+		pos := packTilePos(t.X, t.Y)
+		if name, ok := w.blockNamesByID[int16(t.Block)]; ok {
+			n := strings.ToLower(strings.TrimSpace(name))
+			if props, ok := w.blockPropsByName[n]; ok && props.PowerCapacity > 0 {
+				state := w.buildStates[pos]
+				state.Power = data.PowerStatus * props.PowerCapacity
+				w.buildStates[pos] = state
+			}
+		}
+	}
+}
+
+func writeBuildingBaseVanilla(wr *protocol.Writer, w *World, t *Tile) bool {
+	if wr == nil || t == nil || t.Build == nil {
+		return false
+	}
+	health := t.Build.Health
+	rotation := byte(t.Build.Rotation) | 0x80
+	team := byte(t.Build.Team)
+	version := byte(3)
+	enabled := byte(1)
+	hasItems := len(t.Build.Items) > 0
+	hasLiquids := len(t.Build.Liquids) > 0
+	hasPower := false
+	status := float32(0)
+	if w != nil && w.blockNamesByID != nil && w.blockPropsByName != nil {
+		if name, ok := w.blockNamesByID[int16(t.Build.Block)]; ok {
+			n := strings.ToLower(strings.TrimSpace(name))
+			if props, ok := w.blockPropsByName[n]; ok {
+				if props.ItemCapacity > 0 {
+					hasItems = true
+				}
+				if props.LiquidCapacity > 0 {
+					hasLiquids = true
+				}
+				if props.PowerCapacity > 0 || props.PowerUse > 0 || props.PowerProduction > 0 {
+					hasPower = true
+				}
+				if hasPower && props.PowerCapacity > 0 {
+					pos := packTilePos(t.X, t.Y)
+					if net := w.powerNetByPos[pos]; net != nil && net.Capacity > 0 {
+						status = net.Energy / net.Capacity
+					}
+				}
+			}
+		}
+	}
+	if status < 0 {
+		status = 0
+	}
+	if status > 1 {
+		status = 1
+	}
+	if !hasPower && status > 0 {
+		hasPower = true
+	}
+	moduleBits := byte(0)
+	if hasItems {
+		moduleBits |= 1
+	}
+	if hasPower {
+		moduleBits |= 1 << 1
+	}
+	if hasLiquids {
+		moduleBits |= 1 << 2
+	}
+	moduleBits |= 1 << 3
+
+	if err := wr.WriteFloat32(health); err != nil {
+		return false
+	}
+	if err := wr.WriteByte(rotation); err != nil {
+		return false
+	}
+	if err := wr.WriteByte(team); err != nil {
+		return false
+	}
+	if err := wr.WriteByte(version); err != nil {
+		return false
+	}
+	if err := wr.WriteByte(enabled); err != nil {
+		return false
+	}
+	if err := wr.WriteByte(moduleBits); err != nil {
+		return false
+	}
+	if hasItems {
+		if !writeItemModuleVanilla(wr, t.Build.Items) {
+			return false
+		}
+	}
+	if hasPower {
+		if !writePowerModuleVanilla(wr, status) {
+			return false
+		}
+	}
+	if hasLiquids {
+		if !writeLiquidModuleVanilla(wr, t.Build.Liquids) {
+			return false
+		}
+	}
+	if err := wr.WriteByte(0xFF); err != nil { // efficiency=1.0
+		return false
+	}
+	if err := wr.WriteByte(0xFF); err != nil { // optionalEfficiency=1.0
+		return false
+	}
+	return true
+}
+
+func readBuildingBaseVanilla(r *protocol.Reader) (vanillaBuildBase, bool) {
+	if r == nil {
+		return vanillaBuildBase{}, false
+	}
+	health, err := r.ReadFloat32()
+	if err != nil {
+		return vanillaBuildBase{}, false
+	}
+	rot, err := r.ReadByte()
+	if err != nil {
+		return vanillaBuildBase{}, false
+	}
+	team, err := r.ReadByte()
+	if err != nil {
+		return vanillaBuildBase{}, false
+	}
+	rotation := int8(rot & 0x7F)
+	moduleBits := byte(0)
+	enabled := true
+	version := byte(0)
+	legacy := true
+	if (rot & 0x80) != 0 {
+		v, err := r.ReadByte()
+		if err != nil {
+			return vanillaBuildBase{}, false
+		}
+		version = v
+		if version >= 1 {
+			on, err := r.ReadByte()
+			if err != nil {
+				return vanillaBuildBase{}, false
+			}
+			enabled = on == 1
+		}
+		if version >= 2 {
+			if v2, err := r.ReadUByte(); err == nil {
+				moduleBits = byte(v2)
+			} else {
+				return vanillaBuildBase{}, false
+			}
+		}
+		legacy = false
+	}
+	items := []ItemStack(nil)
+	liquids := []LiquidStack(nil)
+	powerStatus := float32(0)
+	if moduleBits&1 != 0 {
+		it, ok := readItemModuleVanilla(r, legacy)
+		if !ok {
+			return vanillaBuildBase{}, false
+		}
+		items = it
+	}
+	if moduleBits&(1<<1) != 0 {
+		status, ok := readPowerModuleVanilla(r)
+		if !ok {
+			return vanillaBuildBase{}, false
+		}
+		powerStatus = status
+	}
+	if moduleBits&(1<<2) != 0 {
+		lq, ok := readLiquidModuleVanilla(r, legacy)
+		if !ok {
+			return vanillaBuildBase{}, false
+		}
+		liquids = lq
+	}
+	if moduleBits&(1<<4) != 0 {
+		if _, err := r.ReadFloat32(); err != nil {
+			return vanillaBuildBase{}, false
+		}
+		if _, err := r.ReadFloat32(); err != nil {
+			return vanillaBuildBase{}, false
+		}
+	}
+	if moduleBits&(1<<5) != 0 {
+		if _, err := r.ReadInt32(); err != nil {
+			return vanillaBuildBase{}, false
+		}
+	}
+	if version <= 2 {
+		if _, err := r.ReadBool(); err != nil {
+			return vanillaBuildBase{}, false
+		}
+	}
+	eff := float32(1)
+	optional := float32(1)
+	if version >= 3 {
+		if v, err := r.ReadUByte(); err == nil {
+			eff = float32(v) / 255
+		} else {
+			return vanillaBuildBase{}, false
+		}
+		if v, err := r.ReadUByte(); err == nil {
+			optional = float32(v) / 255
+		} else {
+			return vanillaBuildBase{}, false
+		}
+	}
+	if version == 4 {
+		if _, err := r.ReadInt64(); err != nil {
+			return vanillaBuildBase{}, false
+		}
+	}
+	return vanillaBuildBase{
+		Health:      health,
+		Rotation:    rotation,
+		Team:        TeamID(team),
+		Items:       items,
+		Liquids:     liquids,
+		PowerStatus: powerStatus,
+		Enabled:     enabled,
+		Efficiency:  eff,
+		OptionalEff: optional,
+	}, true
+}
+
+func writeItemModuleVanilla(wr *protocol.Writer, items []ItemStack) bool {
+	if wr == nil {
+		return false
+	}
+	count := int16(0)
+	for _, st := range items {
+		if st.Amount > 0 {
+			count++
+		}
+	}
+	if err := wr.WriteInt16(count); err != nil {
+		return false
+	}
+	if count == 0 {
+		return true
+	}
+	for _, st := range items {
+		if st.Amount <= 0 {
+			continue
+		}
+		if err := wr.WriteInt16(int16(st.Item)); err != nil {
+			return false
+		}
+		if err := wr.WriteInt32(st.Amount); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func readItemModuleVanilla(r *protocol.Reader, legacy bool) ([]ItemStack, bool) {
+	if r == nil {
+		return nil, false
+	}
+	var count int16
+	if legacy {
+		v, err := r.ReadUByte()
+		if err != nil {
+			return nil, false
+		}
+		count = int16(v)
+	} else {
+		v, err := r.ReadInt16()
+		if err != nil {
+			return nil, false
+		}
+		count = v
+	}
+	if count <= 0 {
+		return nil, true
+	}
+	out := make([]ItemStack, 0, maxInt16(count))
+	for i := int16(0); i < count; i++ {
+		var itemID int16
+		if legacy {
+			v, err := r.ReadUByte()
+			if err != nil {
+				return nil, false
+			}
+			itemID = int16(v)
+		} else {
+			v, err := r.ReadInt16()
+			if err != nil {
+				return nil, false
+			}
+			itemID = v
+		}
+		amt, err := r.ReadInt32()
+		if err != nil {
+			return nil, false
+		}
+		if amt > 0 {
+			out = append(out, ItemStack{Item: ItemID(itemID), Amount: amt})
+		}
+	}
+	return out, true
+}
+
+func writeLiquidModuleVanilla(wr *protocol.Writer, liquids []LiquidStack) bool {
+	if wr == nil {
+		return false
+	}
+	count := int16(0)
+	for _, st := range liquids {
+		if st.Amount > 0 {
+			count++
+		}
+	}
+	if err := wr.WriteInt16(count); err != nil {
+		return false
+	}
+	if count == 0 {
+		return true
+	}
+	for _, st := range liquids {
+		if st.Amount <= 0 {
+			continue
+		}
+		if err := wr.WriteInt16(int16(st.Liquid)); err != nil {
+			return false
+		}
+		if err := wr.WriteFloat32(st.Amount); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func readLiquidModuleVanilla(r *protocol.Reader, legacy bool) ([]LiquidStack, bool) {
+	if r == nil {
+		return nil, false
+	}
+	var count int16
+	if legacy {
+		v, err := r.ReadUByte()
+		if err != nil {
+			return nil, false
+		}
+		count = int16(v)
+	} else {
+		v, err := r.ReadInt16()
+		if err != nil {
+			return nil, false
+		}
+		count = v
+	}
+	if count <= 0 {
+		return nil, true
+	}
+	out := make([]LiquidStack, 0, maxInt16(count))
+	for i := int16(0); i < count; i++ {
+		var liquidID int16
+		if legacy {
+			v, err := r.ReadUByte()
+			if err != nil {
+				return nil, false
+			}
+			liquidID = int16(v)
+		} else {
+			v, err := r.ReadInt16()
+			if err != nil {
+				return nil, false
+			}
+			liquidID = v
+		}
+		amt, err := r.ReadFloat32()
+		if err != nil {
+			return nil, false
+		}
+		if amt > 0 {
+			out = append(out, LiquidStack{Liquid: LiquidID(liquidID), Amount: amt})
+		}
+	}
+	return out, true
+}
+
+func writePowerModuleVanilla(wr *protocol.Writer, status float32) bool {
+	if wr == nil {
+		return false
+	}
+	if err := wr.WriteInt16(0); err != nil {
+		return false
+	}
+	if err := wr.WriteFloat32(status); err != nil {
+		return false
+	}
+	return true
+}
+
+func readPowerModuleVanilla(r *protocol.Reader) (float32, bool) {
+	if r == nil {
+		return 0, false
+	}
+	links, err := r.ReadInt16()
+	if err != nil {
+		return 0, false
+	}
+	if links > 0 {
+		for i := int16(0); i < links; i++ {
+			if _, err := r.ReadInt32(); err != nil {
+				return 0, false
+			}
+		}
+	}
+	status, err := r.ReadFloat32()
+	if err != nil {
+		return 0, false
+	}
+	if status < 0 {
+		status = 0
+	}
+	return status, true
 }
 
 func removeBuildingLocked(w *World, t *Tile) {
