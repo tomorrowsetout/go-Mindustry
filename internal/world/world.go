@@ -1250,8 +1250,8 @@ func (w *World) stepPayloadLogisticsLocked(t *Tile, name string, dt float32, mov
 	}
 	if strings.Contains(name, "payload-source") {
 		// Source has infinite payload only when preconfigured; otherwise no-op.
-		if len(t.Build.Payload) > 0 {
-			return 0, 0, false, true
+		if len(t.Build.Payload) == 0 {
+			_ = w.payloadSourceEnsurePayloadLocked(t)
 		}
 		return 0, 0, false, true
 	}
@@ -3451,6 +3451,17 @@ func (w *World) RemoveEntity(id int32) (RawEntity, bool) {
 			Kind:   EntityEventRemoved,
 			Entity: ent,
 		})
+		if len(ent.Payload) > 0 {
+			explode := false
+			if w.rulesMgr != nil {
+				if rules := w.rulesMgr.Get(); rules != nil {
+					explode = rules.UnitPayloadsExplode
+				}
+			}
+			if !explode {
+				_, _ = w.dropPayloadAtLocked(ent.Payload, ent.X, ent.Y, ent.Team)
+			}
+		}
 	}
 	return ent, ok
 }
