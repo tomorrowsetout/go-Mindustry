@@ -1,18 +1,24 @@
 package net
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 
 	"mdt-server/internal/core"
+	"mdt-server/internal/persist"
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/storage"
+	"mdt-server/internal/worldstream"
 )
 
 // NetworkCore 是网络核心（运行在 Core2 的 IO Core 中）
 type NetworkCore struct {
 	core     *core.Core2
 	server   *Server
+	serverCore *core.ServerCore
+	recorder storage.Recorder
 	connMap  map[int32]*Conn
 	connMu   sync.RWMutex
 }
@@ -44,11 +50,13 @@ func (nc *NetworkCore) Stop() {
 
 // SetServerCore 设置 ServerCore 引用
 func (nc *NetworkCore) SetServerCore(sc *core.ServerCore) {
+	nc.serverCore = sc
 	nc.core.SetServerCore(sc)
 }
 
 // SetRecorder 设置事件记录器
 func (nc *NetworkCore) SetRecorder(rec storage.Recorder) {
+	nc.recorder = rec
 	nc.core.SetRecorder(rec)
 }
 
@@ -237,23 +245,77 @@ func (nc *NetworkCore) HandlePersistenceMessage(m *core.PersistenceMessage) {
 }
 
 func (nc *NetworkCore) handleSaveState(m *core.PersistenceMessage) {
-	// TODO: 实现存档保存逻辑
-	fmt.Printf("[NetworkCore] Saving state: path=%s\n", m.Path)
+	result := core.PersistenceResult{}
+	if nc.serverCore == nil {
+		result.Error = fmt.Errorf("server core not initialized")
+	} else {
+		state := persist.State{}
+		if len(m.StateData) > 0 {
+			if err := json.Unmarshal(m.StateData, &state); err != nil {
+				result.Error = err
+			}
+		}
+		if result.Error == nil && state.MapPath == "" && m.Path != "" {
+			state.MapPath = m.Path
+		}
+		if result.Error == nil {
+			if err := persist.Save(nc.serverCore.GetPersistConfig(), state); err != nil {
+				result.Error = err
+			}
+		}
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleLoadState(m *core.PersistenceMessage) {
-	// TODO: 实现存档加载逻辑
-	fmt.Printf("[NetworkCore] Loading state: path=%s\n", m.Path)
+	result := core.PersistenceResult{}
+	if nc.serverCore == nil {
+		result.Error = fmt.Errorf("server core not initialized")
+	} else {
+		st, ok, err := persist.Load(nc.serverCore.GetPersistConfig())
+		if err != nil {
+			result.Error = err
+		} else if ok {
+			if data, err := json.Marshal(st); err == nil {
+				result.StateData = data
+			} else {
+				result.Error = err
+			}
+		}
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleSaveWorld(m *core.PersistenceMessage) {
-	// TODO: 实现世界保存逻辑
-	fmt.Printf("[NetworkCore] Saving world: path=%s\n", m.Path)
+	result := core.PersistenceResult{}
+	if m.Path == "" {
+		result.Error = fmt.Errorf("world path is empty")
+	} else if len(m.WorldData) == 0 {
+		result.Error = fmt.Errorf("world data is empty")
+	} else if err := os.WriteFile(m.Path, m.WorldData, 0644); err != nil {
+		result.Error = err
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleLoadWorld(m *core.PersistenceMessage) {
-	// TODO: 实现世界加载逻辑
-	fmt.Printf("[NetworkCore] Loading world: path=%s\n", m.Path)
+	result := core.PersistenceResult{}
+	if m.Path == "" {
+		result.Error = fmt.Errorf("world path is empty")
+	} else if data, err := os.ReadFile(m.Path); err != nil {
+		result.Error = err
+	} else {
+		result.WorldData = data
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 // HandleStorageMessage 处理存储事件（在 Core2 worker 中调用）
@@ -273,23 +335,41 @@ func (nc *NetworkCore) HandleStorageMessage(m *core.StorageMessage) {
 }
 
 func (nc *NetworkCore) handleRecordEvent(m *core.StorageMessage) {
-	// TODO: 实现事件记录逻辑
-	fmt.Printf("[NetworkCore] Recording event\n")
+	if nc.recorder == nil {
+		return
+	}
+	var ev storage.Event
+	if len(m.EventData) > 0 {
+		_ = json.Unmarshal(m.EventData, &ev)
+	}
+	_ = nc.recorder.Record(ev)
 }
 
 func (nc *NetworkCore) handleRecordPlayer(m *core.StorageMessage) {
-	// TODO: 实现玩家事件记录逻辑
-	fmt.Printf("[NetworkCore] Recording player event\n")
+	if nc.recorder == nil {
+		return
+	}
+	var ev storage.Event
+	if len(m.EventData) > 0 {
+		_ = json.Unmarshal(m.EventData, &ev)
+	}
+	_ = nc.recorder.Record(ev)
 }
 
 func (nc *NetworkCore) handleFlush(m *core.StorageMessage) {
-	// TODO: 实现刷新逻辑
-	fmt.Printf("[NetworkCore] Flushing storage\n")
+	if nc.recorder == nil {
+		return
+	}
+	if fl, ok := nc.recorder.(storage.Flusher); ok {
+		_ = fl.Flush()
+	}
 }
 
 func (nc *NetworkCore) handleClose(m *core.StorageMessage) {
-	// TODO: 实现关闭记录器逻辑
-	fmt.Printf("[NetworkCore] Storage closed\n")
+	if nc.recorder == nil {
+		return
+	}
+	_ = nc.recorder.Close()
 }
 
 // HandleModMessage 处理 Mod 操作（在 Core2 worker 中调用）
@@ -357,17 +437,49 @@ func (nc *NetworkCore) HandleWorldStreamMessage(m *core.WorldStreamMessage) {
 }
 
 func (nc *NetworkCore) handleWorldStreamLoadModel(m *core.WorldStreamMessage) {
-	// TODO: 实现从 MSAV 加载世界模型
-	fmt.Printf("[NetworkCore] Loading world model: path=%s\n", m.Path)
+	result := core.WorldStreamResult{}
+	if m.Path == "" {
+		result.Error = fmt.Errorf("worldstream load path is empty")
+	} else if data, err := worldstream.BuildWorldStreamFromMSAV(m.Path); err != nil {
+		result.Error = err
+	} else {
+		result.WorldData = data
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleWorldStreamSaveSnapshot(m *core.WorldStreamMessage) {
-	// TODO: 实现保存世界快照到 MSAV
-	fmt.Printf("[NetworkCore] Saving world snapshot: path=%s\n", m.Path)
+	result := core.WorldStreamResult{}
+	if m.Path == "" {
+		result.Error = fmt.Errorf("worldstream save path is empty")
+	} else if len(m.ModelData) > 0 {
+		if err := os.WriteFile(m.Path, m.ModelData, 0644); err != nil {
+			result.Error = err
+		}
+	} else if len(m.Tags) > 0 {
+		if err := worldstream.WriteMSAVSnapshot(m.Path, m.Path, m.Tags); err != nil {
+			result.Error = err
+		}
+	} else {
+		result.Error = fmt.Errorf("worldstream save has no model data or tags")
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleWorldStreamRewritePlayer(m *core.WorldStreamMessage) {
-	// TODO: 实现重写玩家数据
-	fmt.Printf("[NetworkCore] Rewriting player ID %d in world stream: path=%s\n",
-		m.PlayerID, m.Path)
+	result := core.WorldStreamResult{}
+	if len(m.ModelData) == 0 {
+		result.Error = fmt.Errorf("worldstream data is empty")
+	} else if out, err := worldstream.RewritePlayerIDInWorldStream(m.ModelData, m.PlayerID); err != nil {
+		result.Error = err
+	} else {
+		result.WorldData = out
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }

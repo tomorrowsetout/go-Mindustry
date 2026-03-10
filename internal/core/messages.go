@@ -219,12 +219,18 @@ type WorldStreamMessage struct {
 	PlayerID   int32
 	Tags       map[string]string
 	ModelData  []byte
+	ResultChan chan WorldStreamResult
 }
 
 func (m *WorldStreamMessage) Type() MessageType {
 	return MessageWorldStreamLoad
 }
 
+// WorldStreamResult - Core2: worldstream result
+type WorldStreamResult struct {
+	WorldData []byte
+	Error     error
+}
+
 // PersistenceConfigAlias 别名以便在 core 包中使用
 // type PersistenceConfigAlias persist.Config
-

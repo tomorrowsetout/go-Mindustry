@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 
 	"mdt-server/internal/persist"
 	"mdt-server/internal/storage"
+	"mdt-server/internal/worldstream"
 )
 
 // Core1 - Game Loop 核心（主线程）
@@ -381,43 +383,53 @@ func (c2 *Core2) handleWorldStreamMessage(m *WorldStreamMessage) {
 
 // handleWorldStreamLoadModel 从 MSAV 加载世界模型
 func (c2 *Core2) handleWorldStreamLoadModel(m *WorldStreamMessage) {
-	// TODO: 实现从 MSAV 加载世界模型
-	// model, err := worldstream.LoadWorldModelFromMSAV(m.Path)
-	// if err != nil {
-	//     result.Error = err
-	// } else {
-	//     result.WorldData = worldstream.BuildWorldStreamFromModel(model)
-	// }
-
-	fmt.Printf("[Core2 %s] Loading world model from: %s\n", c2.name, m.Path)
-
-	// 模拟加载成功
-	// result.WorldData = []byte("mock_world_stream_data")
+	result := WorldStreamResult{}
+	if m.Path == "" {
+		result.Error = fmt.Errorf("worldstream load path is empty")
+	} else if data, err := worldstream.BuildWorldStreamFromMSAV(m.Path); err != nil {
+		result.Error = err
+	} else {
+		result.WorldData = data
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 // handleWorldStreamSaveSnapshot 保存世界快照到 MSAV
 func (c2 *Core2) handleWorldStreamSaveSnapshot(m *WorldStreamMessage) {
-	// TODO: 实现保存世界快照到 MSAV
-	// err := worldstream.SaveWorldModelToMSAV(m.Path, m.ModelData)
-	// if err != nil {
-	//     result.Error = err
-	// }
-
-	fmt.Printf("[Core2 %s] Saving world snapshot to: %s\n", c2.name, m.Path)
-
-	// 模拟保存成功
+	result := WorldStreamResult{}
+	if m.Path == "" {
+		result.Error = fmt.Errorf("worldstream save path is empty")
+	} else if len(m.ModelData) > 0 {
+		if err := os.WriteFile(m.Path, m.ModelData, 0644); err != nil {
+			result.Error = err
+		}
+	} else if len(m.Tags) > 0 {
+		if err := worldstream.WriteMSAVSnapshot(m.Path, m.Path, m.Tags); err != nil {
+			result.Error = err
+		}
+	} else {
+		result.Error = fmt.Errorf("worldstream save has no model data or tags")
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 // handleWorldStreamRewritePlayer 重写玩家数据
 func (c2 *Core2) handleWorldStreamRewritePlayer(m *WorldStreamMessage) {
-	// TODO: 实现重写玩家数据
-	// result.WorldData, result.Error = worldstream.RewritePlayerIDInWorldStream(m.ModelData, m.PlayerID)
-
-	fmt.Printf("[Core2 %s] Rewriting player ID %d in world stream: %s\n",
-		c2.name, m.PlayerID, m.Path)
-
-	// 模拟重写成功
-	// result.WorldData = []byte("mock_world_stream_data_with_new_player_id")
+	result := WorldStreamResult{}
+	if len(m.ModelData) == 0 {
+		result.Error = fmt.Errorf("worldstream data is empty")
+	} else if out, err := worldstream.RewritePlayerIDInWorldStream(m.ModelData, m.PlayerID); err != nil {
+		result.Error = err
+	} else {
+		result.WorldData = out
+	}
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 // handlePacketMessage 处理网络包（IO Core）
@@ -539,17 +551,22 @@ func (c2 *Core2) handleSaveState(m *PersistenceMessage) {
 
 	// 从 ServerCore 获取配置
 	if sc, ok := c2.serverCore.Load().(*ServerCore); ok {
+		state := persist.State{}
+		if len(m.StateData) > 0 {
+			if err := json.Unmarshal(m.StateData, &state); err != nil {
+				result.Error = err
+				if m.ResultChan != nil {
+					m.ResultChan <- result
+				}
+				return
+			}
+		}
+		if state.MapPath == "" && m.Path != "" {
+			state.MapPath = m.Path
+		}
 		// 保存状态到 JSON
-		err := persist.Save(sc.persistCfg, persist.State{
-			MapPath:  m.Path,
-			WaveTime: 0, // TODO: 从游戏状态获取
-			Wave:     0, // TODO: 从游戏状态获取
-			Tick:     0, // TODO: 从游戏状态获取
-			TimeData: 0, // TODO: 从游戏状态获取
-			Rand0:    0, // TODO: 从游戏状态获取
-			Rand1:    0, // TODO: 从游戏状态获取
-			SavedAt:  time.Now().UTC().Format(time.RFC3339),
-		})
+		state.SavedAt = time.Now().UTC().Format(time.RFC3339)
+		err := persist.Save(sc.persistCfg, state)
 		if err != nil {
 			result.Error = err
 		}
@@ -572,7 +589,9 @@ func (c2 *Core2) handleLoadState(m *PersistenceMessage) {
 		if err != nil {
 			result.Error = err
 		} else if ok {
-			result.StateData = []byte(fmt.Sprintf("wave=%d,tick=%d", st.Wave, st.Tick))
+			if data, err := json.Marshal(st); err == nil {
+				result.StateData = data
+			}
 		}
 	} else {
 		result.Error = fmt.Errorf("server core not initialized")
@@ -587,11 +606,13 @@ func (c2 *Core2) handleLoadState(m *PersistenceMessage) {
 func (c2 *Core2) handleSaveWorld(m *PersistenceMessage) {
 	result := PersistenceResult{}
 
-	// TODO: 从世界模型保存 MSAV
-	// err := worldstream.SaveWorldModelToMSAV(m.Path, m.ModelData)
-	// if err != nil {
-	//     result.Error = err
-	// }
+	if m.Path == "" {
+		result.Error = fmt.Errorf("world path is empty")
+	} else if len(m.WorldData) == 0 {
+		result.Error = fmt.Errorf("world data is empty")
+	} else if err := os.WriteFile(m.Path, m.WorldData, 0644); err != nil {
+		result.Error = err
+	}
 
 	if m.ResultChan != nil {
 		m.ResultChan <- result
@@ -602,13 +623,13 @@ func (c2 *Core2) handleSaveWorld(m *PersistenceMessage) {
 func (c2 *Core2) handleLoadWorld(m *PersistenceMessage) {
 	result := PersistenceResult{}
 
-	// TODO: 加载 MSAV 文件
-	// model, err := worldstream.LoadWorldModelFromMSAV(m.Path)
-	// if err != nil {
-	//     result.Error = err
-	// } else {
-	//     result.WorldData = worldstream.BuildWorldStreamFromModel(model)
-	// }
+	if m.Path == "" {
+		result.Error = fmt.Errorf("world path is empty")
+	} else if data, err := os.ReadFile(m.Path); err != nil {
+		result.Error = err
+	} else {
+		result.WorldData = data
+	}
 
 	if m.ResultChan != nil {
 		m.ResultChan <- result

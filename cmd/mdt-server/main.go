@@ -775,6 +775,48 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	weatherNamesByID := map[int16]string{}
+	weatherIDsByName := map[string]int16{}
+	srv.Content.IterateWeathers(func(w protocol.Weather) bool {
+		name := strings.ToLower(strings.TrimSpace(w.Name()))
+		if name == "" {
+			return true
+		}
+		weatherNamesByID[w.ID()] = name
+		weatherIDsByName[name] = w.ID()
+		return true
+	})
+	wld.SetWeatherNamesByID(weatherNamesByID)
+	itemNamesByID := map[int16]string{}
+	liquidNamesByID := map[int16]string{}
+	srv.Content.IterateItems(func(it protocol.Item) bool {
+		name := strings.ToLower(strings.TrimSpace(it.Name()))
+		if name == "" {
+			return true
+		}
+		itemNamesByID[it.ID()] = name
+		return true
+	})
+	srv.Content.IterateLiquids(func(l protocol.Liquid) bool {
+		name := strings.ToLower(strings.TrimSpace(l.Name()))
+		if name == "" {
+			return true
+		}
+		liquidNamesByID[l.ID()] = name
+		return true
+	})
+	wld.SetItemNamesByID(itemNamesByID)
+	wld.SetLiquidNamesByID(liquidNamesByID)
+	if err := wld.LoadRecipes(filepath.FromSlash("data/vanilla/recipes.json")); err != nil {
+		startup.warn("原版 recipes", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 recipes", "data/vanilla/recipes.json")
+	}
+	if err := wld.LoadBlockProps(filepath.FromSlash("data/vanilla/block_props.json")); err != nil {
+		startup.warn("原版 block_props", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 block_props", "data/vanilla/block_props.json")
+	}
 	srv.SetItemDepositCooldown(wld.GetRulesManager().Get().ItemDepositCooldown)
 	buildService := buildsvc.New(wld, buildsvc.Options{
 		MaxQueuedBatches: 4096,
@@ -783,6 +825,32 @@ func main() {
 	})
 	var runtimeTileMu sync.RWMutex
 	runtimeTiles := make(map[int32]runtimeTileSyncState)
+	updateRuntimeTileState := func(buildPos int32) {
+		if buildPos == 0 {
+			return
+		}
+		model := wld.Model()
+		if model == nil {
+			return
+		}
+		pt := protocol.UnpackPoint2(buildPos)
+		if !model.InBounds(int(pt.X), int(pt.Y)) {
+			return
+		}
+		tile := &model.Tiles[int(pt.Y)*model.Width+int(pt.X)]
+		runtimeTileMu.Lock()
+		defer runtimeTileMu.Unlock()
+		if tile == nil || tile.Build == nil || tile.Block == 0 {
+			delete(runtimeTiles, buildPos)
+			return
+		}
+		runtimeTiles[buildPos] = runtimeTileSyncState{
+			BlockID: int16(tile.Block),
+			Team:    byte(tile.Build.Team),
+			Rot:     tile.Build.Rotation,
+			Health:  maxf32(tile.Build.Health, 1),
+		}
+	}
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
 			return 0, 0, false
@@ -1189,11 +1257,33 @@ func main() {
 		}
 		_ = wld.SetBuildingItems(buildPos, out)
 	}
+	srv.OnSetLiquid = func(buildPos int32, liquidID int16, amount float32) {
+		_ = wld.SetBuildingLiquid(buildPos, liquidID, amount)
+	}
+	srv.OnSetLiquids = func(buildPos int32, liquids []protocol.LiquidStack) {
+		out := make([]world.LiquidStack, 0, len(liquids))
+		for _, st := range liquids {
+			if st.Liquid == nil || st.Amount <= 0 {
+				continue
+			}
+			out = append(out, world.LiquidStack{
+				Liquid: world.LiquidID(st.Liquid.ID()),
+				Amount: st.Amount,
+			})
+		}
+		_ = wld.SetBuildingLiquids(buildPos, out)
+	}
 	srv.OnSetTileItems = func(itemID int16, amount int32, positions []int32) {
 		_ = wld.SetTileItems(positions, itemID, amount)
 	}
+	srv.OnSetTileLiquids = func(liquidID int16, amount float32, positions []int32) {
+		_ = wld.SetTileLiquids(positions, liquidID, amount)
+	}
 	srv.OnClearItems = func(buildPos int32) {
 		_ = wld.ClearBuildingItems(buildPos)
+	}
+	srv.OnClearLiquids = func(buildPos int32) {
+		_ = wld.ClearBuildingLiquids(buildPos)
 	}
 	srv.OnTransferItemTo = func(buildPos int32, itemID int16, amount int32) int32 {
 		return wld.AcceptBuildingItem(buildPos, itemID, amount)
@@ -1267,42 +1357,100 @@ func main() {
 		}
 		broadcastConstructFinish(srv, buildPos, blockID, rot, byte(team))
 	}
-	srv.OnRequestDropPayload = func(c *netserver.Conn, x, y float32) {
+	srv.OnRequestUnitPayload = func(c *netserver.Conn, unitID int32, targetID int32) bool {
 		if c == nil {
-			return
+			return false
+		}
+		carrierID := c.UnitID()
+		if carrierID == 0 {
+			return false
+		}
+		if targetID == 0 {
+			return false
+		}
+		if !wld.PickUnitPayload(carrierID, targetID) {
+			return false
+		}
+		srv.Broadcast(&protocol.Remote_InputHandler_pickedUnitPayload_79{
+			Unit:   protocol.UnitBox{IDValue: carrierID},
+			Target: protocol.UnitBox{IDValue: targetID},
+		})
+		return true
+	}
+	srv.OnRequestBuildPayload = func(c *netserver.Conn, unitID int32, buildPos int32) bool {
+		if c == nil {
+			return false
+		}
+		carrierID := c.UnitID()
+		if carrierID == 0 || buildPos == 0 {
+			return false
+		}
+		if _, _, _, ok := wld.PickBuildPayload(carrierID, buildPos); !ok {
+			return false
+		}
+		updateRuntimeTileState(buildPos)
+		srv.Broadcast(&protocol.Remote_InputHandler_pickedBuildPayload_80{
+			Unit:     protocol.UnitBox{IDValue: carrierID},
+			Build:    protocol.BuildingBox{PosValue: buildPos},
+			OnGround: false,
+		})
+		return true
+	}
+	srv.OnPickedUnitPayload = func(c *netserver.Conn, unitID int32, targetID int32) bool {
+		if unitID == 0 || targetID == 0 {
+			return false
+		}
+		return wld.PickUnitPayload(unitID, targetID)
+	}
+	srv.OnPickedBuildPayload = func(c *netserver.Conn, unitID int32, buildPos int32, onGround bool) bool {
+		if unitID == 0 || buildPos == 0 {
+			return false
+		}
+		if _, _, _, ok := wld.PickBuildPayload(unitID, buildPos); !ok {
+			return false
+		}
+		_ = onGround
+		updateRuntimeTileState(buildPos)
+		return true
+	}
+	srv.OnRequestDropPayload = func(c *netserver.Conn, x, y float32) bool {
+		if c == nil {
+			return false
 		}
 		unitID := c.UnitID()
 		if unitID == 0 {
-			return
+			return false
 		}
-		rot := float32(0)
-		if ent, ok := wld.GetEntity(unitID); ok {
-			rot = ent.Rotation
+		result, ok := wld.DropEntityPayload(unitID, x, y)
+		if !ok {
+			return false
 		}
-		_, _ = wld.SetEntityPosition(unitID, x, y, rot)
+		if result.Kind == world.PayloadDropBuild && result.BuildPos != 0 {
+			updateRuntimeTileState(result.BuildPos)
+		}
+		srv.Broadcast(&protocol.Remote_InputHandler_payloadDropped_82{
+			Unit: protocol.UnitBox{IDValue: unitID},
+			X:    x,
+			Y:    y,
+		})
+		return true
 	}
 	srv.OnPayloadDropped = func(c *netserver.Conn, unitID int32, x, y float32) {
 		if unitID == 0 {
 			return
 		}
-		rot := float32(0)
-		if ent, ok := wld.GetEntity(unitID); ok {
-			rot = ent.Rotation
+		result, ok := wld.DropEntityPayload(unitID, x, y)
+		if ok && result.Kind == world.PayloadDropBuild && result.BuildPos != 0 {
+			updateRuntimeTileState(result.BuildPos)
 		}
-		_, _ = wld.SetEntityPosition(unitID, x, y, rot)
 		_, _ = wld.ClearEntityBehavior(unitID)
 	}
 	srv.OnUnitEnteredPayload = func(c *netserver.Conn, unitID int32, buildPos int32) {
-		if unitID == 0 {
+		if unitID == 0 || buildPos == 0 {
 			return
 		}
-		if buildPos != 0 {
-			pt := protocol.UnpackPoint2(buildPos)
-			rot := float32(0)
-			if ent, ok := wld.GetEntity(unitID); ok {
-				rot = ent.Rotation
-			}
-			_, _ = wld.SetEntityPosition(unitID, float32(pt.X), float32(pt.Y), rot)
+		if wld.EnterUnitIntoPayload(unitID, buildPos) {
+			updateRuntimeTileState(buildPos)
 		}
 		_, _ = wld.ClearEntityBehavior(unitID)
 	}
@@ -1338,6 +1486,7 @@ func main() {
 			evs := wld.DrainEntityEvents()
 			buildHealth := make([]int32, 0, len(evs)*2)
 			buildItems := make(map[int32][]world.ItemStack)
+			buildLiquids := make(map[int32][]world.LiquidStack)
 			for _, ev := range evs {
 				switch ev.Kind {
 				case world.EntityEventRemoved:
@@ -1372,8 +1521,12 @@ func main() {
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
 				case world.EntityEventBuildItems:
 					buildItems[ev.BuildPos] = append([]world.ItemStack(nil), ev.BuildItems...)
+				case world.EntityEventBuildLiquids:
+					buildLiquids[ev.BuildPos] = append([]world.LiquidStack(nil), ev.BuildLiquids...)
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
+				case world.EntityEventWeather:
+					broadcastWeatherCreate(srv, weatherIDsByName, ev.Weather)
 				}
 			}
 			if len(buildHealth) > 0 {
@@ -1382,6 +1535,11 @@ func main() {
 			if len(buildItems) > 0 {
 				for pos, items := range buildItems {
 					broadcastBuildItems(srv, pos, items)
+				}
+			}
+			if len(buildLiquids) > 0 {
+				for pos, liquids := range buildLiquids {
+					broadcastBuildLiquids(srv, pos, liquids)
 				}
 			}
 		}
@@ -3249,6 +3407,14 @@ func (i itemRef) ContentType() protocol.ContentType { return protocol.ContentIte
 func (i itemRef) ID() int16                         { return i.id }
 func (i itemRef) Name() string                      { return "" }
 
+type liquidRef struct {
+	id int16
+}
+
+func (l liquidRef) ContentType() protocol.ContentType { return protocol.ContentLiquid }
+func (l liquidRef) ID() int16                         { return l.id }
+func (l liquidRef) Name() string                      { return "" }
+
 type blockRef struct {
 	id int16
 }
@@ -3349,6 +3515,55 @@ func broadcastBuildItems(srv *netserver.Server, buildPos int32, items []world.It
 	srv.Broadcast(&protocol.Remote_InputHandler_setItems_61{
 		Build: protocol.BuildingBox{PosValue: buildPos},
 		Items: out,
+	})
+}
+
+func broadcastBuildLiquids(srv *netserver.Server, buildPos int32, liquids []world.LiquidStack) {
+	if srv == nil || buildPos < 0 {
+		return
+	}
+	out := make([]protocol.LiquidStack, 0, len(liquids))
+	for _, st := range liquids {
+		if st.Amount <= 0 {
+			continue
+		}
+		out = append(out, protocol.LiquidStack{
+			Liquid: liquidRef{id: int16(st.Liquid)},
+			Amount: st.Amount,
+		})
+	}
+	if len(out) == 0 {
+		srv.Broadcast(&protocol.Remote_InputHandler_clearLiquids_67{
+			Build: protocol.BuildingBox{PosValue: buildPos},
+		})
+		return
+	}
+	srv.Broadcast(&protocol.Remote_InputHandler_setLiquids_65{
+		Build:   protocol.BuildingBox{PosValue: buildPos},
+		Liquids: out,
+	})
+}
+
+func broadcastWeatherCreate(srv *netserver.Server, weatherIDsByName map[string]int16, ev world.WeatherEvent) {
+	if srv == nil {
+		return
+	}
+	id := ev.ID
+	if id == 0 && ev.Name != "" && weatherIDsByName != nil {
+		if v, ok := weatherIDsByName[strings.ToLower(strings.TrimSpace(ev.Name))]; ok {
+			id = v
+		}
+	}
+	var wth protocol.Weather
+	if id != 0 {
+		wth = srv.Content.Weather(id)
+	}
+	srv.Broadcast(&protocol.Remote_Weather_createWeather_101{
+		Weather:   wth,
+		Intensity: ev.Intensity,
+		Duration:  ev.Duration,
+		WindX:     ev.WindX,
+		WindY:     ev.WindY,
 	})
 }
 

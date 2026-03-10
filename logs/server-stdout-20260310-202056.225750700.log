@@ -1,0 +1,51 @@
+mdt-server dev (none)
+config=config.json cores=6 addr=127.0.0.1:6569 build=154 world=.\\assets\\worlds\\23315.msav vanilla=data/vanilla/profiles.json
+workspace initialized: dirs=12 files=0
+当前地图: .\\assets\\worlds\\23315.msav
+[script] 每日 GC 已关闭
+[worldstream] found cores in content: 341(core-nucleus) 344(core-acropolis) 340(core-foundation) 78(core-zone) 342(core-bastion) 339(core-shard) 343(core-citadel) 
+========================================
+ 启动报告
+========================================
+[32m[ OK ][0m 开发者日志: 已启用
+[INFO][0m Mods: 未启用
+[32m[ OK ][0m 原版 content IDs: entries=1288 path=data\vanilla\content_ids.json
+[32m[ OK ][0m 原版 recipes: data/vanilla/recipes.json
+[32m[ OK ][0m 原版 block_props: data/vanilla/block_props.json
+[32m[ OK ][0m 原版 profiles: data/vanilla/profiles.json
+[32m[ OK ][0m 地图规则: mode=survival waves=true waveTimer=true waveSpacing=90.0s initialWave=0.0s
+[32m[ OK ][0m 地图模型: .\\assets\\worlds\\23315.msav (600x600)
+[32m[ OK ][0m 单位 ID 列表: count=39
+[32m[ OK ][0m 玩家出生单位: typeId=36
+[32m[ OK ][0m OP 列表: count=0
+[32m[ OK ][0m WorldData 预载入: enabled=true max=30MB
+[32m[ OK ][0m API: bind=0.0.0.0:8090 auth=false
+[32m[ OK ][0m 服务端启动: 初始化完成
+========================================
+{"fields":{"error":"listen tcp 0.0.0.0:8090: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted."},"level":"error","msg":"api serve failed","ts":"2026-03-10T12:20:56.4282407Z"}
+========================================
+ 地图加载详情
+========================================
+路径: .\\assets\\worlds\\23315.msav
+尺寸: 600x600  Tiles=360000
+建筑: blocks=314566 builds=0 cores=0
+实体: entities=0 units=0
+类型: blockKinds=96 floorKinds=20 overlayKinds=6
+MSAV: version=11 tags=23 rulesTag=true
+数据: content=9689 patch=1554 rawMap=458917 rawEntities=26 markers=2 custom=4
+========================================
+========================================
+ 单位 ID 列表
+========================================
+0(dagger), 1(mace), 2(fortress), 3(scepter), 4(reign), 5(nova)
+6(pulsar), 7(quasar), 8(vela), 9(corvus), 10(crawler), 11(atrax)
+12(spiroct), 13(arkyid), 14(toxopid), 15(flare), 16(horizon), 17(zenith)
+18(antumbra), 19(eclipse), 20(mono), 21(poly), 22(mega), 23(quad)
+24(oct), 25(risso), 26(minke), 27(bryde), 28(sei), 29(omura)
+30(retusa), 31(oxynoe), 32(cyerce), 33(aegires), 34(navanax), 35(alpha)
+36(beta), 37(gamma), 38(block)
+========================================
+========================================
+服务器名称: mdt-server
+当前地图:   .\\assets\\worlds\\23315.msav
+监听地址:   127.0.0.1:6569
