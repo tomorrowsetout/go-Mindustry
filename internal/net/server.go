@@ -40,18 +40,24 @@ type Server struct {
 	Content  *protocol.ContentRegistry
 	TypeIO   *protocol.TypeIOContext
 
-	mu       sync.Mutex
-	conns    map[*Conn]struct{}
-	pending  map[int32]*Conn
-	byUDP    map[string]*Conn
-	banUUID  map[string]string
-	banIP    map[string]string
-	udpConn  *net.UDPConn
-	opMu     sync.RWMutex
-	ops      map[string]struct{}
-	entityMu sync.Mutex
-	entities map[int32]protocol.UnitSyncEntity
-	unitNext int32
+	mu               sync.Mutex
+	conns            map[*Conn]struct{}
+	pending          map[int32]*Conn
+	byUDP            map[string]*Conn
+	banUUID          map[string]string
+	banIP            map[string]string
+	kickUUID         map[string]time.Time
+	kickIP           map[string]time.Time
+	whiteUUID        map[string]struct{}
+	whiteUSID        map[string]struct{}
+	whitelistEnabled bool
+	playerLimit      int32
+	udpConn          *net.UDPConn
+	opMu             sync.RWMutex
+	ops              map[string]struct{}
+	entityMu         sync.Mutex
+	entities         map[int32]protocol.UnitSyncEntity
+	unitNext         int32
 
 	// EventManager 事件管理器
 	EventManager *storage.EventManager
@@ -77,6 +83,10 @@ type Server struct {
 	OnSetItems     func(buildPos int32, items []protocol.ItemStack)
 	OnSetTileItems func(itemID int16, amount int32, positions []int32)
 	OnClearItems   func(buildPos int32)
+	OnSetLiquid      func(buildPos int32, liquidID int16, amount float32)
+	OnSetLiquids     func(buildPos int32, liquids []protocol.LiquidStack)
+	OnSetTileLiquids func(liquidID int16, amount float32, positions []int32)
+	OnClearLiquids   func(buildPos int32)
 	// Removes up to amount from building and moves to the target unit stack.
 	// Returns actual moved amount.
 	OnTakeItems func(buildPos int32, itemID int16, amount int32, toUnitID int32) int32
@@ -93,7 +103,11 @@ type Server struct {
 	CanInteractBuildFn   func(c *Conn, buildPos int32, action string) bool
 	OnRemoveQueueBlock   func(x, y int32, breaking bool)
 	OnRotateBlock        func(buildPos int32, direction bool)
-	OnRequestDropPayload func(c *Conn, x, y float32)
+	OnRequestUnitPayload  func(c *Conn, unitID int32, targetID int32) bool
+	OnRequestBuildPayload func(c *Conn, unitID int32, buildPos int32) bool
+	OnPickedUnitPayload   func(c *Conn, unitID int32, targetID int32) bool
+	OnPickedBuildPayload  func(c *Conn, unitID int32, buildPos int32, onGround bool) bool
+	OnRequestDropPayload  func(c *Conn, x, y float32) bool
 	OnPayloadDropped     func(c *Conn, unitID int32, x, y float32)
 	OnUnitEnteredPayload func(c *Conn, unitID int32, buildPos int32)
 	OnTileConfig         func(buildPos int32, value any)
@@ -165,6 +179,12 @@ func NewServer(addr string, buildVersion int) *Server {
 		byUDP:               map[string]*Conn{},
 		banUUID:             map[string]string{},
 		banIP:               map[string]string{},
+		kickUUID:            map[string]time.Time{},
+		kickIP:              map[string]time.Time{},
+		whiteUUID:           map[string]struct{}{},
+		whiteUSID:           map[string]struct{}{},
+		whitelistEnabled:    false,
+		playerLimit:         0,
 		EventManager:        em,
 		BuildVersion:        buildVersion,
 		WorldDataFn:         defaultWorldData,
@@ -386,6 +406,104 @@ func isConnReadClosed(err error) bool {
 	return false
 }
 
+func normalizeConnectName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func (s *Server) hasDuplicateIdentity(curr *Conn, name, uuid, usid string) (protocol.KickReason, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	normName := normalizeConnectName(name)
+	usid = strings.TrimSpace(usid)
+	for c := range s.conns {
+		if c == nil || c == curr || !c.hasBegunConnecting {
+			continue
+		}
+		if uuid != "" && strings.TrimSpace(c.uuid) == uuid {
+			return protocol.KickReasonIDInUse, true
+		}
+		if usid != "" && strings.TrimSpace(c.usid) == usid {
+			return protocol.KickReasonIDInUse, true
+		}
+		if normName != "" && normalizeConnectName(c.name) == normName {
+			return protocol.KickReasonNameInUse, true
+		}
+	}
+	return 0, false
+}
+
+func (s *Server) registerRecentKick(uuid, ip string, dur time.Duration) {
+	if s == nil || dur <= 0 {
+		return
+	}
+	exp := time.Now().Add(dur)
+	s.mu.Lock()
+	if uuid = strings.TrimSpace(uuid); uuid != "" {
+		s.kickUUID[uuid] = exp
+	}
+	if ip = strings.TrimSpace(ip); ip != "" {
+		s.kickIP[ip] = exp
+	}
+	s.mu.Unlock()
+}
+
+func (s *Server) isRecentlyKicked(uuid, ip string) bool {
+	if s == nil {
+		return false
+	}
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if uuid = strings.TrimSpace(uuid); uuid != "" {
+		if exp, ok := s.kickUUID[uuid]; ok {
+			if now.Before(exp) {
+				return true
+			}
+			delete(s.kickUUID, uuid)
+		}
+	}
+	if ip = strings.TrimSpace(ip); ip != "" {
+		if exp, ok := s.kickIP[ip]; ok {
+			if now.Before(exp) {
+				return true
+			}
+			delete(s.kickIP, ip)
+		}
+	}
+	return false
+}
+
+func (s *Server) onlinePlayersCount() int32 {
+	if s == nil {
+		return 0
+	}
+	var n int32
+	s.mu.Lock()
+	for c := range s.conns {
+		if c != nil && c.hasConnected {
+			n++
+		}
+	}
+	s.mu.Unlock()
+	return n
+}
+
+func (s *Server) isWhitelisted(uuid, usid string) bool {
+	if s == nil {
+		return true
+	}
+	s.mu.Lock()
+	enabled := s.whitelistEnabled
+	if !enabled {
+		s.mu.Unlock()
+		return true
+	}
+	_, okUUID := s.whiteUUID[strings.TrimSpace(uuid)]
+	_, okUSID := s.whiteUSID[strings.TrimSpace(usid)]
+	s.mu.Unlock()
+	return okUUID || okUSID
+}
+
 func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 	detail := ""
 	if fromTCP {
@@ -487,8 +605,52 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			return
 		}
+		v.Name = strings.TrimSpace(v.Name)
+		v.UUID = strings.TrimSpace(v.UUID)
+		v.USID = strings.TrimSpace(v.USID)
+		v.VersionType = strings.TrimSpace(v.VersionType)
+		v.Locale = strings.TrimSpace(v.Locale)
+		if v.Locale == "" {
+			v.Locale = "en"
+		}
 		if err := ValidateConnect(v, s.BuildVersion); err != nil {
 			switch {
+			case errors.Is(err, ErrTypeMismatch):
+				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonTypeMismatch})
+				if s.DevLogger != nil {
+					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
+						devlog.StringFld("reason", "typeMismatch"),
+						devlog.StringFld("error", err.Error()))
+				} else {
+					fmt.Printf("[net] connect rejected id=%d reason=typeMismatch err=%v\n", c.id, err)
+				}
+			case errors.Is(err, ErrCustomClient):
+				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonCustomClient})
+				if s.DevLogger != nil {
+					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
+						devlog.StringFld("reason", "customClient"),
+						devlog.StringFld("error", err.Error()))
+				} else {
+					fmt.Printf("[net] connect rejected id=%d reason=customClient err=%v\n", c.id, err)
+				}
+			case errors.Is(err, ErrIDInUse):
+				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonIDInUse})
+				if s.DevLogger != nil {
+					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
+						devlog.StringFld("reason", "idInUse"),
+						devlog.StringFld("error", err.Error()))
+				} else {
+					fmt.Printf("[net] connect rejected id=%d reason=idInUse err=%v\n", c.id, err)
+				}
+			case errors.Is(err, ErrNameEmpty):
+				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonNameEmpty})
+				if s.DevLogger != nil {
+					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
+						devlog.StringFld("reason", "nameEmpty"),
+						devlog.StringFld("error", err.Error()))
+				} else {
+					fmt.Printf("[net] connect rejected id=%d reason=nameEmpty err=%v\n", c.id, err)
+				}
 			case errors.Is(err, ErrClientOutdated):
 				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonClientOutdated})
 				if s.DevLogger != nil {
@@ -519,8 +681,35 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			return
 		}
+		if reason, dup := s.hasDuplicateIdentity(c, v.Name, v.UUID, v.USID); dup {
+			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: reason})
+			if s.DevLogger != nil {
+				s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
+					devlog.StringFld("reason", "duplicate_identity"))
+			} else {
+				fmt.Printf("[net] connect rejected id=%d reason=duplicate_identity kick=%d\n", c.id, reason)
+			}
+			return
+		}
+		ip := c.remoteIP()
+		if s.isRecentlyKicked(v.UUID, ip) {
+			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonRecentKick})
+			fmt.Printf("[net] connect rejected id=%d reason=recentKick ip=%s uuid=%s\n", c.id, ip, v.UUID)
+			return
+		}
+		if limit := s.PlayerLimit(); limit > 0 && s.onlinePlayersCount() >= limit && !s.IsOp(v.UUID) {
+			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonPlayerLimit})
+			fmt.Printf("[net] connect rejected id=%d reason=playerLimit current=%d limit=%d\n", c.id, s.onlinePlayersCount(), limit)
+			return
+		}
+		if !s.isWhitelisted(v.UUID, v.USID) {
+			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonWhitelist})
+			fmt.Printf("[net] connect rejected id=%d reason=whitelist uuid=%s usid=%s\n", c.id, v.UUID, v.USID)
+			return
+		}
 		c.name = v.Name
 		c.uuid = v.UUID
+		c.usid = v.USID
 		c.versionType = strings.TrimSpace(v.VersionType)
 		c.color = v.Color
 		// Use official call IDs for official clients; keep compat IDs only for
@@ -534,7 +723,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		}
 		s.ensurePlayerEntity(c)
 		s.emitEvent(c, "connect_packet", fmt.Sprintf("%T", v), fmt.Sprintf("version=%d type=%s mods=%d", v.Version, v.VersionType, len(v.Mods)))
-		ip := c.remoteIP()
 		if ip != "" {
 			s.mu.Lock()
 			ipReason, ipBanned := s.banIP[ip]
@@ -824,22 +1012,44 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 64, "Remote_InputHandler_setLiquid_64", "set_liquid")
 		}
+		if v.Build != nil && v.Liquid != nil && s.OnSetLiquid != nil {
+			s.OnSetLiquid(v.Build.Pos(), v.Liquid.ID(), v.Amount)
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setLiquids_65:
 		// 批量设置液体
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 65, "Remote_InputHandler_setLiquids_65", "set_liquids")
 		}
+		if v.Build != nil && s.OnSetLiquids != nil {
+			out := make([]protocol.LiquidStack, 0, len(v.Liquids))
+			for _, st := range v.Liquids {
+				if st.Liquid == nil || st.Amount <= 0 {
+					continue
+				}
+				out = append(out, st)
+			}
+			s.OnSetLiquids(v.Build.Pos(), out)
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setTileLiquids_66:
 		// 设置地砖液体
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 66, "Remote_InputHandler_setTileLiquids_66", "set_tile_liquids")
 		}
-		s.WarnFeatureOnce("packet-set-tile-liquids", "[feature] setTileLiquids received: server-side liquid network simulation is incomplete")
+		if v.Liquid != nil && s.OnSetTileLiquids != nil {
+			s.OnSetTileLiquids(v.Liquid.ID(), v.Amount, append([]int32(nil), v.Positions...))
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_clearLiquids_67:
 		// 清空液体
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 67, "Remote_InputHandler_clearLiquids_67", "clear_liquids")
 		}
+		if v.Build != nil && s.OnClearLiquids != nil {
+			s.OnClearLiquids(v.Build.Pos())
+		}
+		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_transferItemTo_68:
 		// 通用物品传输到
 		if s.DevLogger != nil {
@@ -949,11 +1159,28 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 77, "Remote_InputHandler_requestUnitPayload_77", "request_unit_payload")
 		}
+		if s.OnRequestUnitPayload != nil {
+			playerID := extractUnitID(v.Player)
+			targetID := extractUnitID(v.Target)
+			if s.OnRequestUnitPayload(c, playerID, targetID) {
+				return
+			}
+		}
 		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_requestBuildPayload_78:
 		// 请求建筑载荷
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 78, "Remote_InputHandler_requestBuildPayload_78", "request_build_payload")
+		}
+		if s.OnRequestBuildPayload != nil {
+			playerID := extractUnitID(v.Player)
+			buildPos := int32(0)
+			if v.Build != nil {
+				buildPos = v.Build.Pos()
+			}
+			if s.OnRequestBuildPayload(c, playerID, buildPos) {
+				return
+			}
 		}
 		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_pickedUnitPayload_79:
@@ -961,11 +1188,28 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 79, "Remote_InputHandler_pickedUnitPayload_79", "picked_unit_payload")
 		}
+		if s.OnPickedUnitPayload != nil {
+			unitID := extractUnitID(v.Unit)
+			targetID := extractUnitID(v.Target)
+			if s.OnPickedUnitPayload(c, unitID, targetID) {
+				return
+			}
+		}
 		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_pickedBuildPayload_80:
 		// 建筑运载选择
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 80, "Remote_InputHandler_pickedBuildPayload_80", "picked_build_payload")
+		}
+		if s.OnPickedBuildPayload != nil {
+			unitID := extractUnitID(v.Unit)
+			buildPos := int32(0)
+			if v.Build != nil {
+				buildPos = v.Build.Pos()
+			}
+			if s.OnPickedBuildPayload(c, unitID, buildPos, v.OnGround) {
+				return
+			}
 		}
 		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_requestDropPayload_81:
@@ -974,7 +1218,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 81, "Remote_InputHandler_requestDropPayload_81", fmt.Sprintf("request_drop_payload(x=%.1f y=%.1f)", v.X, v.Y))
 		}
 		if s.OnRequestDropPayload != nil {
-			s.OnRequestDropPayload(c, v.X, v.Y)
+			if s.OnRequestDropPayload(c, v.X, v.Y) {
+				return
+			}
 		}
 		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_payloadDropped_82:
@@ -1732,6 +1978,7 @@ type Conn struct {
 	hasConnected           bool
 	name                   string
 	uuid                   string
+	usid                   string
 	versionType            string
 	color                  int32
 	teamID                 byte
@@ -2001,6 +2248,10 @@ func (c *Conn) UnitID() int32 {
 
 func (c *Conn) UUID() string {
 	return c.uuid
+}
+
+func (c *Conn) USID() string {
+	return c.usid
 }
 
 func (c *Conn) VersionType() string {
@@ -3412,6 +3663,7 @@ func (s *Server) KickByID(id int32, reason string) bool {
 		reason = "kicked by admin"
 	}
 	_ = target.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
+	s.registerRecentKick(target.uuid, target.remoteIP(), 30*time.Second)
 	s.closeConnLater(target, 250*time.Millisecond)
 	return true
 }
@@ -3467,6 +3719,7 @@ func (s *Server) BanUUID(uuid, reason string) int {
 	s.mu.Unlock()
 	for _, c := range targets {
 		_ = c.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
+		s.registerRecentKick(c.uuid, c.remoteIP(), 30*time.Second)
 		s.closeConnLater(c, 250*time.Millisecond)
 	}
 	return len(targets)
@@ -3490,6 +3743,7 @@ func (s *Server) BanIP(ip, reason string) int {
 	s.mu.Unlock()
 	for _, c := range targets {
 		_ = c.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
+		s.registerRecentKick(c.uuid, c.remoteIP(), 30*time.Second)
 		s.closeConnLater(c, 250*time.Millisecond)
 	}
 	return len(targets)
@@ -3527,6 +3781,116 @@ func (s *Server) BanLists() (map[string]string, map[string]string) {
 		ipCopy[k] = v
 	}
 	return uuidCopy, ipCopy
+}
+
+func (s *Server) SetPlayerLimit(limit int32) {
+	if s == nil {
+		return
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	s.mu.Lock()
+	s.playerLimit = limit
+	s.mu.Unlock()
+}
+
+func (s *Server) PlayerLimit() int32 {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	limit := s.playerLimit
+	s.mu.Unlock()
+	return limit
+}
+
+func (s *Server) SetWhitelistEnabled(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.whitelistEnabled = enabled
+	s.mu.Unlock()
+}
+
+func (s *Server) WhitelistEnabled() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	enabled := s.whitelistEnabled
+	s.mu.Unlock()
+	return enabled
+}
+
+func (s *Server) AddWhitelistUUID(uuid string) {
+	if s == nil {
+		return
+	}
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" {
+		return
+	}
+	s.mu.Lock()
+	s.whiteUUID[uuid] = struct{}{}
+	s.mu.Unlock()
+}
+
+func (s *Server) RemoveWhitelistUUID(uuid string) {
+	if s == nil {
+		return
+	}
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" {
+		return
+	}
+	s.mu.Lock()
+	delete(s.whiteUUID, uuid)
+	s.mu.Unlock()
+}
+
+func (s *Server) AddWhitelistUSID(usid string) {
+	if s == nil {
+		return
+	}
+	usid = strings.TrimSpace(usid)
+	if usid == "" {
+		return
+	}
+	s.mu.Lock()
+	s.whiteUSID[usid] = struct{}{}
+	s.mu.Unlock()
+}
+
+func (s *Server) RemoveWhitelistUSID(usid string) {
+	if s == nil {
+		return
+	}
+	usid = strings.TrimSpace(usid)
+	if usid == "" {
+		return
+	}
+	s.mu.Lock()
+	delete(s.whiteUSID, usid)
+	s.mu.Unlock()
+}
+
+func (s *Server) WhitelistLists() (uuids []string, usids []string) {
+	if s == nil {
+		return nil, nil
+	}
+	s.mu.Lock()
+	uuids = make([]string, 0, len(s.whiteUUID))
+	for u := range s.whiteUUID {
+		uuids = append(uuids, u)
+	}
+	usids = make([]string, 0, len(s.whiteUSID))
+	for u := range s.whiteUSID {
+		usids = append(usids, u)
+	}
+	s.mu.Unlock()
+	return uuids, usids
 }
 
 func (s *Server) AddOp(uuid string) {

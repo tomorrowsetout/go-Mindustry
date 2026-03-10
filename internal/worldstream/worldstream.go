@@ -105,8 +105,10 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err := w.WriteInt32(1); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalPlayer(w); err != nil {
-		return nil, err
+	if err := writeTemplatePlayerForContent(w, data.Content); err != nil {
+		if err := writeMinimalPlayer(w); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := w.WriteBytes(data.Content); err != nil {

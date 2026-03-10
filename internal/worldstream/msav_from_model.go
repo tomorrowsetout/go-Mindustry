@@ -164,8 +164,10 @@ func BuildWorldStreamFromModel(model *world.WorldModel) ([]byte, error) {
 	if err := w.WriteInt32(1); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalPlayer(w); err != nil {
-		return nil, err
+	if err := writeTemplatePlayerForContent(w, model.Content); err != nil {
+		if err := writeMinimalPlayer(w); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := w.WriteBytes(model.Content); err != nil {
@@ -223,30 +225,84 @@ func encodeMapChunkMinimal(model *world.WorldModel) ([]byte, error) {
 	}
 	total := model.Width * model.Height
 
-	// Floors + overlays (no run-length compression for now).
-	for i := 0; i < total; i++ {
+	// Floors + overlays (run-length encoded).
+	for i := 0; i < total; {
 		t := model.Tiles[i]
-		if err := w.WriteInt16(int16(t.Floor)); err != nil {
+		floor := t.Floor
+		overlay := t.Overlay
+		run := 0
+		for run < 255 && i+run+1 < total {
+			nt := model.Tiles[i+run+1]
+			if nt.Floor != floor || nt.Overlay != overlay {
+				break
+			}
+			run++
+		}
+		if err := w.WriteInt16(int16(floor)); err != nil {
 			return nil, err
 		}
-		if err := w.WriteInt16(int16(t.Overlay)); err != nil {
+		if err := w.WriteInt16(int16(overlay)); err != nil {
 			return nil, err
 		}
-		if err := w.WriteByte(0); err != nil {
+		if err := w.WriteByte(byte(run)); err != nil {
 			return nil, err
 		}
+		i += run + 1
 	}
 
-	// Blocks (no run-length compression for now).
-	for i := 0; i < total; i++ {
+	// Blocks (run-length encoded when no extra data is required).
+	for i := 0; i < total; {
 		t := model.Tiles[i]
-		if err := w.WriteInt16(int16(t.Block)); err != nil {
+		block := t.Block
+		hasData := t.Rotation != 0 || t.Team != 0 || t.Build != nil
+		if !hasData {
+			run := 0
+			for run < 255 && i+run+1 < total {
+				nt := model.Tiles[i+run+1]
+				if nt.Block != block || nt.Rotation != 0 || nt.Team != 0 || nt.Build != nil {
+					break
+				}
+				run++
+			}
+			if err := w.WriteInt16(int16(block)); err != nil {
+				return nil, err
+			}
+			if err := w.WriteByte(0); err != nil { // packed: no entity/data
+				return nil, err
+			}
+			if err := w.WriteByte(byte(run)); err != nil {
+				return nil, err
+			}
+			i += run + 1
+			continue
+		}
+
+		rot := t.Rotation
+		team := t.Team
+		if t.Build != nil {
+			rot = t.Build.Rotation
+			team = t.Build.Team
+		}
+		if err := w.WriteInt16(int16(block)); err != nil {
 			return nil, err
 		}
-		// packed: no entity/data
+		if err := w.WriteByte(4); err != nil { // packed: has data, no entity
+			return nil, err
+		}
+		if err := w.WriteByte(byte(rot)); err != nil {
+			return nil, err
+		}
+		if err := w.WriteByte(byte(team)); err != nil {
+			return nil, err
+		}
+		// config type + config int (0/empty)
 		if err := w.WriteByte(0); err != nil {
 			return nil, err
 		}
+		if err := w.WriteInt32(0); err != nil {
+			return nil, err
+		}
+		i++
 	}
 	return out.Bytes(), nil
 }
