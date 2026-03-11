@@ -50,31 +50,42 @@
   },
   {
     "block": "silicon-smelter",
-    "powerUse": 0.5
+    "powerUse": 0.5,
+    "boostItem": "coal",
+    "boostItemAmount": 1
   },
   {
     "block": "silicon-crucible",
     "itemCapacity": 30,
-    "powerUse": 4
+    "powerUse": 4,
+    "boostItem": "coal",
+    "boostItemAmount": 4
   },
   {
     "block": "kiln",
-    "powerUse": 0.6
+    "powerUse": 0.6,
+    "boostItem": "lead",
+    "boostItemAmount": 1
   },
   {
     "block": "plastanium-compressor",
     "liquidCapacity": 60,
-    "powerUse": 3
+    "powerUse": 3,
+    "health": 320
   },
   {
     "block": "phase-weaver",
     "itemCapacity": 30,
-    "powerUse": 5
+    "powerUse": 5,
+    "boostItem": "thorium",
+    "boostItemAmount": 4
   },
   {
     "block": "surge-smelter",
     "itemCapacity": 20,
-    "powerUse": 4
+    "powerUse": 4,
+    "boostItem": "copper",
+    "boostItemAmount": 3
   },
   {
     "block": "cryofluid-mixer",
@@ -83,15 +94,20 @@
   },
   {
     "block": "pyratite-mixer",
-    "powerUse": 0.2
+    "powerUse": 0.2,
+    "boostItem": "coal",
+    "boostItemAmount": 1
   },
   {
     "block": "blast-mixer",
-    "powerUse": 0.4
+    "powerUse": 0.4,
+    "boostItem": "pyratite",
+    "boostItemAmount": 1
   },
   {
     "block": "melter",
-    "powerUse": 1
+    "powerUse": 1,
+    "health": 200
   },
   {
     "block": "separator",
@@ -105,11 +121,17 @@
   {
     "block": "spore-press",
     "liquidCapacity": 60,
-    "powerUse": 0.7
+    "powerUse": 0.7,
+    "health": 320
   },
   {
     "block": "pulverizer",
-    "powerUse": 0.5
+    "powerUse": 0.5,
+    "rotateSpeed": 2
+  },
+  {
+    "block": "-rotator",
+    "rotateSpeed": 2
   },
   {
     "block": "coal-centrifuge",
@@ -117,17 +139,21 @@
   },
   {
     "block": "incinerator",
-    "powerUse": 0.5
+    "powerUse": 0.5,
+    "health": 90
   },
   {
     "block": "silicon-arc-furnace",
     "itemCapacity": 30,
-    "powerUse": 5
+    "powerUse": 5,
+    "boostItem": "graphite",
+    "boostItemAmount": 1
   },
   {
     "block": "electrolyzer",
     "liquidCapacity": 50,
-    "powerUse": 1
+    "powerUse": 1,
+    "radius": 1.5
   },
   {
     "block": "atmospheric-concentrator",
@@ -150,7 +176,9 @@
   {
     "block": "carbide-crucible",
     "itemCapacity": 20,
-    "powerUse": 2
+    "powerUse": 2,
+    "boostItem": "tungsten",
+    "boostItemAmount": 2
   },
   {
     "block": "slag-centrifuge",
@@ -161,7 +189,8 @@
     "block": "surge-crucible",
     "itemCapacity": 20,
     "liquidCapacity": 400,
-    "powerUse": 1.5
+    "powerUse": 1.5,
+    "radius": 10
   },
   {
     "block": "cyanogen-synthesizer",
@@ -172,35 +201,111 @@
     "block": "phase-synthesizer",
     "itemCapacity": 40,
     "liquidCapacity": 40,
-    "powerUse": 8
+    "powerUse": 8,
+    "rotateSpeed": 0.5,
+    "boostItem": "thorium",
+    "boostItemAmount": 2
   },
   {
     "block": "heat-reactor",
     "itemCapacity": 20
   },
   {
+    "block": "beryllium-wall",
+    "armor": 2
+  },
+  {
+    "block": "beryllium-wall-large",
+    "armor": 2
+  },
+  {
+    "block": "tungsten-wall",
+    "armor": 14
+  },
+  {
+    "block": "tungsten-wall-large",
+    "armor": 14
+  },
+  {
+    "block": "blast-door",
+    "armor": 14
+  },
+  {
+    "block": "reinforced-surge-wall",
+    "armor": 20
+  },
+  {
+    "block": "reinforced-surge-wall-large",
+    "armor": 20
+  },
+  {
+    "block": "carbide-wall",
+    "armor": 16
+  },
+  {
+    "block": "carbide-wall-large",
+    "armor": 16
+  },
+  {
     "block": "shielded-wall",
-    "powerUse": 0.05
+    "powerUse": 0.05,
+    "armor": 15
   },
   {
     "block": "mender",
-    "powerUse": 0.3
+    "powerUse": 0.3,
+    "health": 80,
+    "healPercent": 4,
+    "range": 40,
+    "reload": 200,
+    "phaseBoost": 4,
+    "phaseRangeBoost": 20,
+    "boostItem": "silicon",
+    "boostItemAmount": 1
   },
   {
     "block": "mend-projector",
-    "powerUse": 1.5
+    "powerUse": 1.5,
+    "scaledHealth": 80,
+    "healPercent": 11,
+    "range": 85,
+    "reload": 250,
+    "phaseBoost": 15,
+    "boostItem": "phasefabric",
+    "boostItemAmount": 1
   },
   {
     "block": "overdrive-projector",
-    "powerUse": 3.5
+    "powerUse": 3.5,
+    "boostItem": "phasefabric",
+    "boostItemAmount": 1
   },
   {
     "block": "overdrive-dome",
-    "powerUse": 10
+    "powerUse": 10,
+    "range": 200,
+    "speedBoost": 2.5,
+    "useTime": 300,
+    "boostItem": "phasefabric",
+    "boostItemAmount": 1
   },
   {
     "block": "force-projector",
-    "powerUse": 4
+    "powerUse": 4,
+    "shieldHealth": 750,
+    "radius": 101.7,
+    "cooldownNormal": 1.5,
+    "cooldownLiquid": 1.2,
+    "cooldownBroken": 0.35,
+    "phaseRadiusBoost": 80,
+    "boostItem": "phasefabric",
+    "boostItemAmount": 1
+  },
+  {
+    "block": "shock-mine",
+    "health": 50,
+    "damage": 25,
+    "tileDamage": 7
   },
   {
     "block": "radar",
@@ -208,19 +313,30 @@
   },
   {
     "block": "build-tower",
-    "powerUse": 3
+    "powerUse": 3,
+    "range": 200
   },
   {
     "block": "regen-projector",
-    "powerUse": 1
+    "powerUse": 1,
+    "healPercent": 0.06666667,
+    "range": 28,
+    "radius": 3.5,
+    "boostItem": "phasefabric",
+    "boostItemAmount": 1
   },
   {
     "block": "barrier-projector",
-    "powerUse": 4
+    "powerUse": 4,
+    "shieldHealth": 2000,
+    "cooldownNormal": 3,
+    "cooldownBroken": 0.35
   },
   {
     "block": "shockwave-tower",
-    "powerUse": 1.6666666
+    "powerUse": 1.6666666,
+    "range": 170,
+    "reload": 80
   },
   {
     "block": "shield-projector",
@@ -228,29 +344,84 @@
   },
   {
     "block": "large-shield-projector",
-    "powerUse": 5
+    "powerUse": 5,
+    "radius": 400
+  },
+  {
+    "block": "conveyor",
+    "health": 45
+  },
+  {
+    "block": "titanium-conveyor",
+    "health": 65
   },
   {
     "block": "plastanium-conveyor",
-    "itemCapacity": 10
+    "itemCapacity": 10,
+    "health": 90
+  },
+  {
+    "block": "armored-conveyor",
+    "health": 280
+  },
+  {
+    "block": "junction",
+    "health": 30
+  },
+  {
+    "block": "bridge-conveyor",
+    "range": 4
   },
   {
     "block": "phase-conveyor",
-    "powerUse": 0.3
+    "powerUse": 0.3,
+    "range": 12
   },
   {
     "block": "mass-driver",
     "itemCapacity": 120,
-    "powerUse": 1.75
+    "powerUse": 1.75,
+    "range": 440,
+    "reload": 200
+  },
+  {
+    "block": "duct",
+    "health": 90
+  },
+  {
+    "block": "armored-duct",
+    "health": 140
+  },
+  {
+    "block": "duct-router",
+    "health": 90
+  },
+  {
+    "block": "overflow-duct",
+    "health": 90
+  },
+  {
+    "block": "underflow-duct",
+    "health": 90
+  },
+  {
+    "block": "duct-bridge",
+    "health": 90
+  },
+  {
+    "block": "duct-unloader",
+    "health": 120
   },
   {
     "block": "surge-conveyor",
     "itemCapacity": 10,
-    "powerUse": 0.016666668
+    "powerUse": 0.016666668,
+    "health": 130
   },
   {
     "block": "surge-router",
-    "powerUse": 0.05
+    "powerUse": 0.05,
+    "health": 130
   },
   {
     "block": "unit-cargo-loader",
@@ -280,17 +451,20 @@
   },
   {
     "block": "conduit",
-    "liquidCapacity": 20
+    "liquidCapacity": 20,
+    "health": 45
   },
   {
     "block": "pulse-conduit",
     "liquidCapacity": 40,
-    "liquidPressure": 1.025
+    "liquidPressure": 1.025,
+    "health": 90
   },
   {
     "block": "plated-conduit",
     "liquidCapacity": 50,
-    "liquidPressure": 1.025
+    "liquidPressure": 1.025,
+    "health": 220
   },
   {
     "block": "liquid-router",
@@ -302,16 +476,19 @@
   },
   {
     "block": "liquid-tank",
-    "liquidCapacity": 1800
+    "liquidCapacity": 1800,
+    "health": 500
   },
   {
     "block": "bridge-conduit",
-    "liquidCapacity": 100
+    "liquidCapacity": 100,
+    "range": 4
   },
   {
     "block": "phase-conduit",
     "liquidCapacity": 100,
-    "powerUse": 0.3
+    "powerUse": 0.3,
+    "range": 12
   },
   {
     "block": "reinforced-pump",
@@ -321,39 +498,48 @@
   {
     "block": "reinforced-conduit",
     "liquidCapacity": 50,
-    "liquidPressure": 1.03
+    "liquidPressure": 1.03,
+    "health": 250
+  },
+  {
+    "block": "reinforced-liquid-junction",
+    "health": 250
   },
   {
     "block": "reinforced-bridge-conduit",
-    "liquidCapacity": 120
+    "liquidCapacity": 120,
+    "health": 250,
+    "range": 4
   },
   {
     "block": "reinforced-liquid-router",
-    "liquidCapacity": 150
+    "liquidCapacity": 150,
+    "health": 250
   },
   {
     "block": "reinforced-liquid-container",
-    "liquidCapacity": 1000
+    "liquidCapacity": 1000,
+    "health": 400
   },
   {
     "block": "reinforced-liquid-tank",
-    "liquidCapacity": 2700
+    "liquidCapacity": 2700,
+    "health": 900
   },
   {
     "block": "power-node",
-    "linkRange": 6
+    "linkRange": 6,
+    "maxLinks": 10
   },
   {
     "block": "power-node-large",
-    "linkRange": 15
+    "linkRange": 15,
+    "maxLinks": 15
   },
   {
     "block": "surge-tower",
-    "linkRange": 40
-  },
-  {
-    "block": "beam-link",
-    "linkRange": 500
+    "linkRange": 40,
+    "maxLinks": 2
   },
   {
     "block": "combustion-generator",
@@ -365,7 +551,12 @@
   },
   {
     "block": "steam-generator",
-    "powerProduction": 5.5
+    "powerProduction": 5.5,
+    "rotateSpeed": 2
+  },
+  {
+    "block": "-turbine",
+    "rotateSpeed": 2
   },
   {
     "block": "differential-generator",
@@ -385,13 +576,31 @@
   },
   {
     "block": "thorium-reactor",
-    "powerProduction": 15
+    "powerProduction": 15,
+    "health": 700
   },
   {
     "block": "impact-reactor",
     "liquidCapacity": 80,
     "powerProduction": 130,
-    "powerUse": 25
+    "powerUse": 25,
+    "health": 900
+  },
+  {
+    "block": "beam-node",
+    "health": 90,
+    "range": 10
+  },
+  {
+    "block": "beam-tower",
+    "scaledHealth": 90,
+    "range": 23
+  },
+  {
+    "block": "beam-link",
+    "linkRange": 500,
+    "maxLinks": 1,
+    "scaledHealth": 130
   },
   {
     "block": "turbine-condenser",
@@ -417,17 +626,21 @@
     "block": "neoplasia-reactor",
     "itemCapacity": 10,
     "liquidCapacity": 80,
-    "powerProduction": 140
+    "powerProduction": 140,
+    "range": 4,
+    "radius": 16.25
   },
   {
     "block": "mechanical-drill",
     "drillTime": 600,
+    "drillTier": 2,
     "boostLiquid": "water",
     "boostAmount": 0.05
   },
   {
     "block": "pneumatic-drill",
     "drillTime": 400,
+    "drillTier": 3,
     "boostLiquid": "water",
     "boostAmount": 0.058333334
   },
@@ -435,6 +648,7 @@
     "block": "laser-drill",
     "powerUse": 1.1,
     "drillTime": 280,
+    "drillTier": 4,
     "boostLiquid": "water",
     "boostAmount": 0.08
   },
@@ -443,6 +657,8 @@
     "itemCapacity": 20,
     "powerUse": 3,
     "drillTime": 280,
+    "drillTier": 5,
+    "rotateSpeed": 6,
     "boostLiquid": "water",
     "boostAmount": 0.1,
     "boostMultiplier": 1.8
@@ -451,7 +667,8 @@
     "block": "water-extractor",
     "liquidCapacity": 40,
     "powerUse": 1.5,
-    "pumpAmount": 0.11
+    "pumpAmount": 0.11,
+    "rotateSpeed": 1.4
   },
   {
     "block": "cultivator",
@@ -479,6 +696,8 @@
     "itemCapacity": 20,
     "powerUse": 1,
     "drillTime": 48,
+    "boostItem": "graphite",
+    "boostItemAmount": 1,
     "boostLiquid": "nitrogen",
     "boostAmount": 0.05
   },
@@ -486,6 +705,8 @@
     "block": "plasma-bore",
     "powerUse": 0.15,
     "drillTime": 160,
+    "drillTier": 3,
+    "range": 5,
     "boostLiquid": "hydrogen",
     "boostAmount": 0.004166667
   },
@@ -494,6 +715,8 @@
     "itemCapacity": 20,
     "powerUse": 0.8,
     "drillTime": 100,
+    "drillTier": 5,
+    "range": 6,
     "boostLiquid": "nitrogen",
     "boostAmount": 0.05
   },
@@ -502,6 +725,7 @@
     "itemCapacity": 40,
     "powerUse": 2.6666667,
     "drillTime": 720,
+    "drillTier": 6,
     "boostLiquid": "ozone",
     "boostAmount": 0.05,
     "boostMultiplier": 1.75
@@ -511,103 +735,376 @@
     "itemCapacity": 60,
     "powerUse": 6,
     "drillTime": 281.25,
+    "drillTier": 7,
     "boostLiquid": "cyanogen",
     "boostAmount": 0.0125,
     "boostMultiplier": 2
   },
   {
     "block": "core-shard",
-    "itemCapacity": 4000
+    "itemCapacity": 4000,
+    "health": 1100
   },
   {
     "block": "core-foundation",
-    "itemCapacity": 9000
+    "itemCapacity": 9000,
+    "health": 3500
   },
   {
     "block": "core-nucleus",
-    "itemCapacity": 13000
+    "itemCapacity": 13000,
+    "health": 6000
   },
   {
     "block": "core-bastion",
-    "itemCapacity": 2000
+    "itemCapacity": 2000,
+    "health": 4500,
+    "armor": 5
   },
   {
     "block": "core-citadel",
-    "itemCapacity": 3000
+    "itemCapacity": 3000,
+    "health": 16000,
+    "armor": 10
   },
   {
     "block": "core-acropolis",
-    "itemCapacity": 4000
+    "itemCapacity": 4000,
+    "health": 30000,
+    "armor": 15
   },
   {
     "block": "container",
-    "itemCapacity": 300
+    "itemCapacity": 300,
+    "scaledHealth": 55
   },
   {
     "block": "vault",
-    "itemCapacity": 1000
+    "itemCapacity": 1000,
+    "scaledHealth": 55
   },
   {
     "block": "reinforced-container",
-    "itemCapacity": 160
+    "itemCapacity": 160,
+    "scaledHealth": 120
   },
   {
     "block": "reinforced-vault",
-    "itemCapacity": 900
+    "itemCapacity": 900,
+    "scaledHealth": 120
+  },
+  {
+    "block": "duo",
+    "health": 250,
+    "rotateSpeed": 10,
+    "inaccuracy": 2,
+    "coolantMultiplier": 10,
+    "coolantAmount": 0.1,
+    "range": 160,
+    "reload": 20,
+    "shootCone": 15
+  },
+  {
+    "block": "scatter",
+    "scaledHealth": 200,
+    "rotateSpeed": 15,
+    "inaccuracy": 17,
+    "shootShots": 2,
+    "shootShotDelay": 5,
+    "coolantAmount": 0.2,
+    "range": 220,
+    "reload": 18,
+    "shootCone": 35
+  },
+  {
+    "block": "scorch",
+    "health": 400,
+    "coolantMultiplier": 1.5,
+    "coolantAmount": 0.1,
+    "range": 60,
+    "reload": 6,
+    "shootCone": 50
+  },
+  {
+    "block": "hail",
+    "health": 260,
+    "inaccuracy": 1,
+    "coolantMultiplier": 10,
+    "coolantAmount": 0.1,
+    "range": 235,
+    "reload": 60,
+    "shootCone": 10
   },
   {
     "block": "wave",
-    "liquidCapacity": 10
+    "liquidCapacity": 10,
+    "scaledHealth": 250,
+    "damage": 4,
+    "inaccuracy": 5,
+    "range": 110,
+    "reload": 3,
+    "shootCone": 50
   },
   {
     "block": "lancer",
-    "powerUse": 6
+    "powerUse": 6,
+    "scaledHealth": 280,
+    "coolantAmount": 0.2,
+    "range": 165,
+    "reload": 80
   },
   {
     "block": "arc",
-    "powerUse": 3.3
+    "powerUse": 3.3,
+    "health": 260,
+    "rotateSpeed": 8,
+    "damage": 20,
+    "coolantAmount": 0.1,
+    "range": 90,
+    "reload": 35,
+    "shootCone": 40
   },
   {
     "block": "parallax",
-    "powerUse": 3.3
+    "powerUse": 3.3,
+    "scaledHealth": 160,
+    "rotateSpeed": 12,
+    "damage": 0.5,
+    "force": 16,
+    "scaledForce": 9,
+    "range": 300
+  },
+  {
+    "block": "swarmer",
+    "scaledHealth": 300,
+    "inaccuracy": 10,
+    "coolantAmount": 0.3,
+    "range": 240,
+    "reload": 34.285713
+  },
+  {
+    "block": "salvo",
+    "scaledHealth": 240,
+    "shootShots": 4,
+    "shootShotDelay": 3,
+    "coolantAmount": 0.2,
+    "range": 190,
+    "reload": 29
   },
   {
     "block": "segment",
-    "powerUse": 8
+    "powerUse": 8,
+    "scaledHealth": 250,
+    "bulletDamage": 30,
+    "range": 180,
+    "reload": 8
   },
   {
     "block": "tsunami",
-    "liquidCapacity": 40
+    "liquidCapacity": 40,
+    "scaledHealth": 250,
+    "damage": 0.2,
+    "inaccuracy": 4,
+    "velocityRnd": 0.1,
+    "shootShots": 2,
+    "range": 190,
+    "reload": 3,
+    "shootCone": 45
+  },
+  {
+    "block": "fuse",
+    "scaledHealth": 220,
+    "damage": 66,
+    "coolantAmount": 0.3,
+    "range": 90,
+    "reload": 35,
+    "shootCone": 30
+  },
+  {
+    "block": "ripple",
+    "scaledHealth": 130,
+    "inaccuracy": 11,
+    "velocityRnd": 0.2,
+    "shootShots": 4,
+    "coolantAmount": 0.3,
+    "range": 290,
+    "reload": 120,
+    "minRange": 50
+  },
+  {
+    "block": "cyclone",
+    "scaledHealth": 145,
+    "rotateSpeed": 10,
+    "inaccuracy": 10,
+    "coolantAmount": 0.3,
+    "range": 200,
+    "reload": 10,
+    "shootCone": 30
   },
   {
     "block": "foreshadow",
     "liquidCapacity": 60,
-    "powerUse": 10
+    "powerUse": 10,
+    "scaledHealth": 150,
+    "rotateSpeed": 2,
+    "damage": 1350,
+    "coolantMultiplier": 0.4,
+    "coolantAmount": 1,
+    "range": 500,
+    "reload": 200,
+    "shootCone": 2
   },
   {
     "block": "spectre",
-    "liquidCapacity": 120
+    "liquidCapacity": 120,
+    "scaledHealth": 160,
+    "inaccuracy": 3,
+    "coolantMultiplier": 0.5,
+    "coolantAmount": 1,
+    "range": 260,
+    "reload": 7,
+    "shootCone": 24
   },
   {
     "block": "meltdown",
     "liquidCapacity": 60,
-    "powerUse": 17
+    "powerUse": 17,
+    "scaledHealth": 200,
+    "coolantAmount": 0.5,
+    "range": 195,
+    "reload": 90,
+    "shootCone": 40
+  },
+  {
+    "block": "breach",
+    "scaledHealth": 180,
+    "rotateSpeed": 1.5,
+    "coolantMultiplier": 15,
+    "range": 190,
+    "reload": 40,
+    "shootCone": 3
+  },
+  {
+    "block": "diffuse",
+    "scaledHealth": 210,
+    "rotateSpeed": 3,
+    "inaccuracy": 0.2,
+    "velocityRnd": 0.17,
+    "coolantMultiplier": 15,
+    "range": 125,
+    "reload": 30,
+    "shootCone": 40
   },
   {
     "block": "sublimate",
-    "liquidCapacity": 50
+    "liquidCapacity": 50,
+    "scaledHealth": 210,
+    "damage": 60,
+    "range": 130
+  },
+  {
+    "block": "titan",
+    "scaledHealth": 250,
+    "rotateSpeed": 1.4,
+    "coolantMultiplier": 3.75,
+    "range": 390,
+    "reload": 138
+  },
+  {
+    "block": "disperse",
+    "scaledHealth": 280,
+    "rotateSpeed": 5,
+    "damage": 65,
+    "inaccuracy": 8,
+    "velocityRnd": 0.11,
+    "coolantMultiplier": 6.25,
+    "range": 310,
+    "reload": 9,
+    "shootCone": 30
   },
   {
     "block": "afflict",
-    "powerUse": 5
+    "powerUse": 5,
+    "scaledHealth": 220,
+    "rotateSpeed": 1.5,
+    "damage": 180,
+    "inaccuracy": 1,
+    "range": 368,
+    "reload": 50,
+    "shootCone": 20
   },
   {
     "block": "lustre",
-    "powerUse": 3.3333333
+    "powerUse": 3.3333333,
+    "scaledHealth": 210,
+    "rotateSpeed": 0.9,
+    "damage": 210,
+    "range": 250,
+    "shootCone": 360
+  },
+  {
+    "block": "scathe",
+    "health": 240,
+    "scaledHealth": 220,
+    "rotateSpeed": 0.25,
+    "coolantMultiplier": 15,
+    "range": 1350,
+    "reload": 1,
+    "radius": 3,
+    "shootCone": 360
+  },
+  {
+    "block": "scathe-missile",
+    "health": 240,
+    "rotateSpeed": 0.25,
+    "reload": 1,
+    "shootCone": 360
+  },
+  {
+    "block": "scathe-missile-phase",
+    "health": 500,
+    "rotateSpeed": 0.2,
+    "reload": 1,
+    "radius": 3,
+    "shootCone": 360
+  },
+  {
+    "block": "scathe-missile-surge",
+    "health": 300,
+    "rotateSpeed": 0.25,
+    "reload": 1,
+    "shootCone": 360
+  },
+  {
+    "block": "scathe-missile-surge-split",
+    "health": 50,
+    "rotateSpeed": 1.4,
+    "reload": 1,
+    "shootCone": 360
+  },
+  {
+    "block": "smite",
+    "scaledHealth": 350,
+    "damage": 30,
+    "coolantMultiplier": 15,
+    "range": 300,
+    "reload": 100,
+    "radius": 10,
+    "shootCone": 30
+  },
+  {
+    "block": "reinforced-",
+    "radius": 10
   },
   {
     "block": "malign",
-    "powerUse": 40
+    "powerUse": 40,
+    "scaledHealth": 370,
+    "damage": 18,
+    "velocityRnd": 0.15,
+    "range": 410,
+    "reload": 3.5,
+    "shootCone": 100
   },
   {
     "block": "ground-factory",
@@ -623,19 +1120,38 @@
   },
   {
     "block": "additive-reconstructor",
-    "powerUse": 3
+    "powerUse": 3,
+    "boostItem": "silicon",
+    "boostItemAmount": 40
   },
   {
     "block": "multiplicative-reconstructor",
-    "powerUse": 6
+    "powerUse": 6,
+    "boostItem": "silicon",
+    "boostItemAmount": 130
   },
   {
     "block": "exponential-reconstructor",
-    "powerUse": 13
+    "powerUse": 13,
+    "boostItem": "silicon",
+    "boostItemAmount": 850
   },
   {
     "block": "tetrative-reconstructor",
-    "powerUse": 25
+    "powerUse": 25,
+    "boostItem": "silicon",
+    "boostItemAmount": 1000
+  },
+  {
+    "block": "repair-point",
+    "repairSpeed": 0.45,
+    "repairRadius": 60
+  },
+  {
+    "block": "repair-turret",
+    "coolantMultiplier": 1.6,
+    "repairSpeed": 3,
+    "repairRadius": 145
   },
   {
     "block": "tank-fabricator",
@@ -651,19 +1167,27 @@
   },
   {
     "block": "tank-refabricator",
-    "powerUse": 3
+    "powerUse": 3,
+    "boostItem": "silicon",
+    "boostItemAmount": 40
   },
   {
     "block": "ship-refabricator",
-    "powerUse": 2.5
+    "powerUse": 2.5,
+    "boostItem": "silicon",
+    "boostItemAmount": 60
   },
   {
     "block": "mech-refabricator",
-    "powerUse": 2.5
+    "powerUse": 2.5,
+    "boostItem": "silicon",
+    "boostItemAmount": 50
   },
   {
     "block": "prime-refabricator",
-    "powerUse": 4.5
+    "powerUse": 4.5,
+    "boostItem": "thorium",
+    "boostItemAmount": 80
   },
   {
     "block": "tank-assembler",
@@ -683,15 +1207,28 @@
   },
   {
     "block": "unit-repair-tower",
-    "powerUse": 1
+    "powerUse": 1,
+    "range": 100
+  },
+  {
+    "block": "reinforced-payload-conveyor",
+    "health": 800
+  },
+  {
+    "block": "reinforced-payload-router",
+    "health": 800
   },
   {
     "block": "payload-mass-driver",
-    "powerUse": 0.5
+    "powerUse": 0.5,
+    "range": 700,
+    "reload": 130
   },
   {
     "block": "large-payload-mass-driver",
-    "powerUse": 3
+    "powerUse": 3,
+    "range": 2100,
+    "reload": 130
   },
   {
     "block": "small-deconstructor",
@@ -725,7 +1262,8 @@
   },
   {
     "block": "illuminator",
-    "powerUse": 0.05
+    "powerUse": 0.05,
+    "radius": 140
   },
   {
     "block": "launch-pad",
@@ -745,7 +1283,20 @@
   },
   {
     "block": "interplanetary-accelerator",
-    "powerUse": 10
+    "powerUse": 10,
+    "scaledHealth": 80
+  },
+  {
+    "block": "logic-processor",
+    "range": 176
+  },
+  {
+    "block": "hyper-processor",
+    "range": 336
+  },
+  {
+    "block": "reinforced-message",
+    "health": 100
   },
   {
     "block": "ore-copper",

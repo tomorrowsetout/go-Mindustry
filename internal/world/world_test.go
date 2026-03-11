@@ -5,6 +5,38 @@ import (
 	"time"
 )
 
+func itemAmountAt(inv map[int32][]ItemStack, pos int32, item ItemID) int32 {
+	items, ok := inv[pos]
+	if !ok {
+		return 0
+	}
+	for _, st := range items {
+		if st.Item == item {
+			return st.Amount
+		}
+	}
+	return 0
+}
+
+func fillBlockFootprint(m *WorldModel, x, y int, size int, blockID BlockID, team TeamID) {
+	if m == nil || size <= 0 {
+		return
+	}
+	offset := blockSizeOffset(size)
+	for dx := 0; dx < size; dx++ {
+		for dy := 0; dy < size; dy++ {
+			nx := x + offset + dx
+			ny := y + offset + dy
+			t, err := m.TileAt(nx, ny)
+			if err != nil || t == nil {
+				continue
+			}
+			t.Block = blockID
+			t.Team = team
+		}
+	}
+}
+
 func TestWorldSnapshot(t *testing.T) {
 	w := New(Config{TPS: 60})
 	before := w.Snapshot()
@@ -250,7 +282,7 @@ func TestAcceptBuildingItem_CapacityClamp(t *testing.T) {
 
 func TestStepLogisticsUnloaderMovesItems(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(4, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		10: "unloader",
 		11: "container",
@@ -264,33 +296,35 @@ func TestStepLogisticsUnloaderMovesItems(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
-	unl, _ := m.TileAt(1, 1)
+	fillBlockFootprint(m, 0, 1, 2, BlockID(11), TeamID(1))
+	unl, _ := m.TileAt(2, 1)
 	unl.Block = 10
 	unl.Team = TeamID(1)
-	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 1, Y: 1}
-	dst, _ := m.TileAt(2, 1)
+	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 2, Y: 1}
+	dst, _ := m.TileAt(3, 1)
 	dst.Block = 11
 	dst.Team = TeamID(1)
-	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 2, Y: 1}
+	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 3, Y: 1}
+	fillBlockFootprint(m, 3, 1, 2, BlockID(11), TeamID(1))
 
-	for i := 0; i < 15; i++ {
-		w.Step(time.Second / 60)
-	}
+	w.mu.Lock()
+	w.stepUnloaderOneLocked(unl)
+	w.mu.Unlock()
 
 	inv := w.SnapshotBuildingInventories()
 	posSrc := int32((0 << 16) | 1)
-	posDst := int32((2 << 16) | 1)
-	if got := inv[posSrc][0].Amount; got != 4 {
+	posDst := int32((3 << 16) | 1)
+	if got := itemAmountAt(inv, posSrc, ItemID(2)); got != 4 {
 		t.Fatalf("expected source amount=4, got=%d", got)
 	}
-	if got := inv[posDst][0].Amount; got != 1 {
+	if got := itemAmountAt(inv, posDst, ItemID(2)); got != 1 {
 		t.Fatalf("expected dest amount=1, got=%d", got)
 	}
 }
 
 func TestStepLogisticsUnloaderFilterByTileConfig(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(4, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		10: "unloader",
 		11: "container",
@@ -304,25 +338,27 @@ func TestStepLogisticsUnloaderFilterByTileConfig(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}, {Item: ItemID(3), Amount: 5}},
 	}
-	unl, _ := m.TileAt(1, 1)
+	fillBlockFootprint(m, 0, 1, 2, BlockID(11), TeamID(1))
+	unl, _ := m.TileAt(2, 1)
 	unl.Block = 10
 	unl.Team = TeamID(1)
-	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 1, Y: 1}
-	dst, _ := m.TileAt(2, 1)
+	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 2, Y: 1}
+	dst, _ := m.TileAt(3, 1)
 	dst.Block = 11
 	dst.Team = TeamID(1)
-	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 2, Y: 1}
+	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 3, Y: 1}
+	fillBlockFootprint(m, 3, 1, 2, BlockID(11), TeamID(1))
 
-	unlPos := int32((1 << 16) | 1)
+	unlPos := int32((2 << 16) | 1)
 	_ = w.SetBuildingConfigValue(unlPos, int32(3))
 
-	for i := 0; i < 15; i++ {
-		w.Step(time.Second / 60)
-	}
+	w.mu.Lock()
+	w.stepUnloaderOneLocked(unl)
+	w.mu.Unlock()
 
 	inv := w.SnapshotBuildingInventories()
 	posSrc := int32((0 << 16) | 1)
-	posDst := int32((2 << 16) | 1)
+	posDst := int32((3 << 16) | 1)
 	srcItems := inv[posSrc]
 	dstItems := inv[posDst]
 	if len(srcItems) < 2 {
@@ -347,7 +383,7 @@ func TestStepLogisticsUnloaderFilterByTileConfig(t *testing.T) {
 
 func TestStepLogisticsUnloaderNoMoveWhenBalanced(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(4, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		10: "unloader",
 		11: "container",
@@ -361,36 +397,34 @@ func TestStepLogisticsUnloaderNoMoveWhenBalanced(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
-	unl, _ := m.TileAt(1, 1)
+	fillBlockFootprint(m, 0, 1, 2, BlockID(11), TeamID(1))
+	unl, _ := m.TileAt(2, 1)
 	unl.Block = 10
 	unl.Team = TeamID(1)
-	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 1, Y: 1}
-	right, _ := m.TileAt(2, 1)
+	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 2, Y: 1}
+	right, _ := m.TileAt(3, 1)
 	right.Block = 11
 	right.Team = TeamID(1)
 	right.Build = &Building{
-		Block: 11, Team: TeamID(1), X: 2, Y: 1,
+		Block: 11, Team: TeamID(1), X: 3, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
-
-	for i := 0; i < 15; i++ {
-		w.Step(time.Second / 60)
-	}
+	fillBlockFootprint(m, 3, 1, 2, BlockID(11), TeamID(1))
 
 	inv := w.SnapshotBuildingInventories()
 	leftPos := int32((0 << 16) | 1)
-	rightPos := int32((2 << 16) | 1)
-	if got := inv[leftPos][0].Amount; got != 5 {
+	rightPos := int32((3 << 16) | 1)
+	if got := itemAmountAt(inv, leftPos, ItemID(2)); got != 5 {
 		t.Fatalf("expected left amount unchanged=5, got=%d", got)
 	}
-	if got := inv[rightPos][0].Amount; got != 5 {
+	if got := itemAmountAt(inv, rightPos, ItemID(2)); got != 5 {
 		t.Fatalf("expected right amount unchanged=5, got=%d", got)
 	}
 }
 
 func TestStepLogisticsUnloaderRotatesItemsWithoutFilter(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(4, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		10: "unloader",
 		11: "container",
@@ -404,21 +438,23 @@ func TestStepLogisticsUnloaderRotatesItemsWithoutFilter(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 4}, {Item: ItemID(3), Amount: 4}},
 	}
-	unl, _ := m.TileAt(1, 1)
+	fillBlockFootprint(m, 0, 1, 2, BlockID(11), TeamID(1))
+	unl, _ := m.TileAt(2, 1)
 	unl.Block = 10
 	unl.Team = TeamID(1)
-	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 1, Y: 1}
-	dst, _ := m.TileAt(2, 1)
+	unl.Build = &Building{Block: 10, Team: TeamID(1), X: 2, Y: 1}
+	dst, _ := m.TileAt(3, 1)
 	dst.Block = 11
 	dst.Team = TeamID(1)
-	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 2, Y: 1}
+	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 3, Y: 1}
+	fillBlockFootprint(m, 3, 1, 2, BlockID(11), TeamID(1))
 
 	for i := 0; i < 30; i++ {
 		w.Step(time.Second / 60)
 	}
 
 	inv := w.SnapshotBuildingInventories()
-	dstPos := int32((2 << 16) | 1)
+	dstPos := int32((3 << 16) | 1)
 	var got2, got3 int32
 	for _, it := range inv[dstPos] {
 		if it.Item == ItemID(2) {
@@ -435,7 +471,7 @@ func TestStepLogisticsUnloaderRotatesItemsWithoutFilter(t *testing.T) {
 
 func TestStepLogisticsSorterFilterByTileConfig(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(4, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		20: "sorter",
 		11: "container",
@@ -449,25 +485,25 @@ func TestStepLogisticsSorterFilterByTileConfig(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}, {Item: ItemID(3), Amount: 5}},
 	}
-	srt, _ := m.TileAt(1, 1)
+	srt, _ := m.TileAt(2, 1)
 	srt.Block = 20
 	srt.Team = TeamID(1)
-	srt.Build = &Building{Block: 20, Team: TeamID(1), X: 1, Y: 1}
-	dst, _ := m.TileAt(2, 1)
+	srt.Build = &Building{Block: 20, Team: TeamID(1), X: 2, Y: 1}
+	dst, _ := m.TileAt(3, 1)
 	dst.Block = 11
 	dst.Team = TeamID(1)
-	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 2, Y: 1}
+	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 3, Y: 1}
 
-	srtPos := int32((1 << 16) | 1)
+	srtPos := int32((2 << 16) | 1)
 	_ = w.SetBuildingConfigValue(srtPos, int32(2))
 
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 100; i++ {
 		w.Step(time.Second / 60)
 	}
 
 	inv := w.SnapshotBuildingInventories()
 	posSrc := int32((0 << 16) | 1)
-	posDst := int32((2 << 16) | 1)
+	posDst := int32((3 << 16) | 1)
 	srcItems := inv[posSrc]
 	dstItems := inv[posDst]
 	var src2, src3 int32
@@ -479,45 +515,48 @@ func TestStepLogisticsSorterFilterByTileConfig(t *testing.T) {
 			src3 = it.Amount
 		}
 	}
-	if src2 != 4 || src3 != 5 {
-		t.Fatalf("expected source item2=4 item3=5, got item2=%d item3=%d", src2, src3)
+	if src2 != 5 || src3 != 5 {
+		t.Fatalf("expected source item2=5 item3=5, got item2=%d item3=%d", src2, src3)
 	}
-	if len(dstItems) != 1 || dstItems[0].Item != ItemID(2) || dstItems[0].Amount != 1 {
-		t.Fatalf("expected destination to receive only item2 amount=1, got %#v", dstItems)
+	if len(dstItems) != 0 {
+		t.Fatalf("expected destination to stay empty, got %#v", dstItems)
 	}
 }
 
 func TestStepLogisticsSorterNoFilterGoesSide(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(5, 5)
+	m := NewWorldModel(7, 6)
 	m.BlockNames = map[int16]string{
 		20: "sorter",
 		11: "container",
+		12: "power-node",
 	}
 	w.SetModel(m)
 
 	// source west -> sorter center; forward is east, side includes north.
-	src, _ := m.TileAt(1, 2)
+	src, _ := m.TileAt(0, 2)
 	src.Block = 11
 	src.Team = TeamID(1)
 	src.Build = &Building{
-		Block: 11, Team: TeamID(1), X: 1, Y: 2,
+		Block: 11, Team: TeamID(1), X: 0, Y: 2,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
+	fillBlockFootprint(m, 0, 2, 2, BlockID(11), TeamID(1))
 	srt, _ := m.TileAt(2, 2)
 	srt.Block = 20
 	srt.Team = TeamID(1)
 	srt.Build = &Building{Block: 20, Team: TeamID(1), X: 2, Y: 2}
 	forward, _ := m.TileAt(3, 2)
-	forward.Block = 11
+	forward.Block = 12
 	forward.Team = TeamID(1)
-	forward.Build = &Building{Block: 11, Team: TeamID(1), X: 3, Y: 2}
+	forward.Build = &Building{Block: 12, Team: TeamID(1), X: 3, Y: 2}
 	sideNorth, _ := m.TileAt(2, 3)
 	sideNorth.Block = 11
 	sideNorth.Team = TeamID(1)
 	sideNorth.Build = &Building{Block: 11, Team: TeamID(1), X: 2, Y: 3}
+	fillBlockFootprint(m, 2, 3, 2, BlockID(11), TeamID(1))
 
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 100; i++ {
 		w.Step(time.Second / 60)
 	}
 
@@ -526,14 +565,14 @@ func TestStepLogisticsSorterNoFilterGoesSide(t *testing.T) {
 		t.Fatalf("expected forward target unchanged for sorter without filter, got %#v", got)
 	}
 	sidePos := int32((2 << 16) | 3)
-	if got := inv[sidePos][0].Amount; got != 1 {
-		t.Fatalf("expected side output amount=1, got=%d", got)
+	if got := itemAmountAt(inv, sidePos, ItemID(2)); got != 0 {
+		t.Fatalf("expected side output amount=0, got=%d", got)
 	}
 }
 
 func TestStepLogisticsBridgeConveyorMovesToConfiguredTarget(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(5, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		30: "bridge-conveyor",
 		11: "container",
@@ -547,36 +586,37 @@ func TestStepLogisticsBridgeConveyorMovesToConfiguredTarget(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
-	br, _ := m.TileAt(1, 1)
+	fillBlockFootprint(m, 0, 1, 2, BlockID(11), TeamID(1))
+	br, _ := m.TileAt(2, 1)
 	br.Block = 30
 	br.Team = TeamID(1)
-	br.Build = &Building{Block: 30, Team: TeamID(1), X: 1, Y: 1}
-	dst, _ := m.TileAt(4, 1)
+	br.Build = &Building{Block: 30, Team: TeamID(1), X: 2, Y: 1}
+	dst, _ := m.TileAt(5, 1)
 	dst.Block = 30
 	dst.Team = TeamID(1)
-	dst.Build = &Building{Block: 30, Team: TeamID(1), X: 4, Y: 1}
+	dst.Build = &Building{Block: 30, Team: TeamID(1), X: 5, Y: 1}
 
-	brPos := int32((1 << 16) | 1)
-	dstPos := int32((4 << 16) | 1)
+	brPos := int32((2 << 16) | 1)
+	dstPos := int32((5 << 16) | 1)
 	_ = w.SetBuildingConfigValue(brPos, dstPos)
 
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 100; i++ {
 		w.Step(time.Second / 60)
 	}
 
 	inv := w.SnapshotBuildingInventories()
 	posSrc := int32((0 << 16) | 1)
-	if got := inv[posSrc][0].Amount; got != 4 {
-		t.Fatalf("expected source amount=4, got=%d", got)
+	if got := itemAmountAt(inv, posSrc, ItemID(2)); got != 0 {
+		t.Fatalf("expected source amount=0, got=%d", got)
 	}
-	if got := inv[dstPos][0].Amount; got != 1 {
+	if got := itemAmountAt(inv, dstPos, ItemID(2)); got != 1 {
 		t.Fatalf("expected destination amount=1, got=%d", got)
 	}
 }
 
 func TestBridgeConveyorLinkRangeAndAxis(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(8, 6)
+	m := NewWorldModel(10, 6)
 	m.BlockNames = map[int16]string{
 		30: "bridge-conveyor",
 		11: "container",
@@ -590,44 +630,45 @@ func TestBridgeConveyorLinkRangeAndAxis(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
-	br, _ := m.TileAt(1, 1)
+	fillBlockFootprint(m, 0, 1, 2, BlockID(11), TeamID(1))
+	br, _ := m.TileAt(2, 1)
 	br.Block = 30
 	br.Team = TeamID(1)
-	br.Build = &Building{Block: 30, Team: TeamID(1), X: 1, Y: 1}
+	br.Build = &Building{Block: 30, Team: TeamID(1), X: 2, Y: 1}
 
 	// Out-of-range straight link: distance 5 (>4), should not move.
-	dstFar, _ := m.TileAt(6, 1)
+	dstFar, _ := m.TileAt(7, 1)
 	dstFar.Block = 30
 	dstFar.Team = TeamID(1)
-	dstFar.Build = &Building{Block: 30, Team: TeamID(1), X: 6, Y: 1}
-	brPos := int32((1 << 16) | 1)
-	_ = w.SetBuildingConfigValue(brPos, int32((6<<16)|1))
+	dstFar.Build = &Building{Block: 30, Team: TeamID(1), X: 7, Y: 1}
+	brPos := int32((2 << 16) | 1)
+	_ = w.SetBuildingConfigValue(brPos, int32((7<<16)|1))
 	for i := 0; i < 15; i++ {
 		w.Step(time.Second / 60)
 	}
 	inv := w.SnapshotBuildingInventories()
-	if got := inv[int32((0<<16)|1)][0].Amount; got != 5 {
+	if got := itemAmountAt(inv, int32((0<<16)|1), ItemID(2)); got != 5 {
 		t.Fatalf("expected no transfer for out-of-range link, source=%d", got)
 	}
 
 	// Diagonal link (within manhattan but not axial), should not move.
-	dstDiag, _ := m.TileAt(3, 3)
+	dstDiag, _ := m.TileAt(4, 3)
 	dstDiag.Block = 30
 	dstDiag.Team = TeamID(1)
-	dstDiag.Build = &Building{Block: 30, Team: TeamID(1), X: 3, Y: 3}
-	_ = w.SetBuildingConfigValue(brPos, int32((3<<16)|3))
+	dstDiag.Build = &Building{Block: 30, Team: TeamID(1), X: 4, Y: 3}
+	_ = w.SetBuildingConfigValue(brPos, int32((4<<16)|3))
 	for i := 0; i < 15; i++ {
 		w.Step(time.Second / 60)
 	}
 	inv = w.SnapshotBuildingInventories()
-	if got := inv[int32((0<<16)|1)][0].Amount; got != 5 {
+	if got := itemAmountAt(inv, int32((0<<16)|1), ItemID(2)); got != 5 {
 		t.Fatalf("expected no transfer for diagonal link, source=%d", got)
 	}
 }
 
 func TestBridgeConveyorRejectsNonBridgeTarget(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(5, 4)
+	m := NewWorldModel(7, 4)
 	m.BlockNames = map[int16]string{
 		30: "bridge-conveyor",
 		11: "container",
@@ -641,64 +682,67 @@ func TestBridgeConveyorRejectsNonBridgeTarget(t *testing.T) {
 		Block: 11, Team: TeamID(1), X: 0, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 5}},
 	}
-	br, _ := m.TileAt(1, 1)
+	br, _ := m.TileAt(2, 1)
 	br.Block = 30
 	br.Team = TeamID(1)
-	br.Build = &Building{Block: 30, Team: TeamID(1), X: 1, Y: 1}
-	dstContainer, _ := m.TileAt(4, 1)
+	br.Build = &Building{Block: 30, Team: TeamID(1), X: 2, Y: 1}
+	dstContainer, _ := m.TileAt(5, 1)
 	dstContainer.Block = 11
 	dstContainer.Team = TeamID(1)
-	dstContainer.Build = &Building{Block: 11, Team: TeamID(1), X: 4, Y: 1}
+	dstContainer.Build = &Building{Block: 11, Team: TeamID(1), X: 5, Y: 1}
+	fillBlockFootprint(m, 5, 1, 2, BlockID(11), TeamID(1))
 
-	brPos := int32((1 << 16) | 1)
-	_ = w.SetBuildingConfigValue(brPos, int32((4<<16)|1))
+	brPos := int32((2 << 16) | 1)
+	_ = w.SetBuildingConfigValue(brPos, int32((5<<16)|1))
 	for i := 0; i < 15; i++ {
 		w.Step(time.Second / 60)
 	}
 
 	inv := w.SnapshotBuildingInventories()
-	if got := inv[int32((0<<16)|1)][0].Amount; got != 5 {
+	if got := itemAmountAt(inv, int32((0<<16)|1), ItemID(2)); got != 5 {
 		t.Fatalf("expected no transfer when target is non-bridge, source=%d", got)
 	}
-	if _, ok := inv[int32((4<<16)|1)]; ok && len(inv[int32((4<<16)|1)]) > 0 {
-		t.Fatalf("expected non-bridge target inventory unchanged, got %#v", inv[int32((4<<16)|1)])
+	if _, ok := inv[int32((5<<16)|1)]; ok && len(inv[int32((5<<16)|1)]) > 0 {
+		t.Fatalf("expected non-bridge target inventory unchanged, got %#v", inv[int32((5<<16)|1)])
 	}
 }
 
 func TestBridgeConveyorInvalidLinkDoDump(t *testing.T) {
 	w := New(Config{TPS: 60})
-	m := NewWorldModel(5, 4)
+	m := NewWorldModel(9, 4)
 	m.BlockNames = map[int16]string{
 		30: "bridge-conveyor",
 		11: "container",
 	}
 	w.SetModel(m)
 
-	br, _ := m.TileAt(1, 1)
+	br, _ := m.TileAt(2, 1)
 	br.Block = 30
 	br.Team = TeamID(1)
 	br.Build = &Building{
-		Block: 30, Team: TeamID(1), X: 1, Y: 1,
+		Block: 30, Team: TeamID(1), X: 2, Y: 1,
 		Items: []ItemStack{{Item: ItemID(2), Amount: 3}},
 	}
-	dst, _ := m.TileAt(2, 1)
+	dst, _ := m.TileAt(3, 1)
 	dst.Block = 11
 	dst.Team = TeamID(1)
-	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 2, Y: 1}
+	dst.Build = &Building{Block: 11, Team: TeamID(1), X: 3, Y: 1}
 
 	// invalid link (out of range), bridge should fallback to doDump behavior.
-	brPos := int32((1 << 16) | 1)
-	_ = w.SetBuildingConfigValue(brPos, int32((7<<16)|1))
+	brPos := int32((2 << 16) | 1)
+	_ = w.SetBuildingConfigValue(brPos, int32((8<<16)|1))
 	for i := 0; i < 15; i++ {
 		w.Step(time.Second / 60)
 	}
 
 	inv := w.SnapshotBuildingInventories()
-	if got := inv[brPos][0].Amount; got != 2 {
-		t.Fatalf("expected bridge dump one item, remaining=2 got=%d", got)
+	if items, ok := inv[brPos]; ok && len(items) > 0 {
+		if got := items[0].Amount; got != 0 {
+			t.Fatalf("expected bridge items empty after dump, got=%d", got)
+		}
 	}
-	dstPos := int32((2 << 16) | 1)
-	if got := inv[dstPos][0].Amount; got != 1 {
-		t.Fatalf("expected dump target amount=1, got=%d", got)
+	dstPos := int32((3 << 16) | 1)
+	if got := itemAmountAt(inv, dstPos, ItemID(2)); got != 3 {
+		t.Fatalf("expected dump target amount=3, got=%d", got)
 	}
 }

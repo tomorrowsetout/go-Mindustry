@@ -269,7 +269,7 @@ func DefaultRules() *Rules {
 		Fog:                         false, // 非战争迷雾
 		StaticFog:                   true,  // 静态迷雾
 		Lighting:                    false, // 非照明
-		CoreIncinerates:             true,  // 核心烧毁物品
+		CoreIncinerates:             false, // 核心烧毁物品
 		RandomWaveAI:                false, // 非随机波次AI
 		UnitPayloadUpdate:           false, // 单位有效载荷更新
 		UnitPayloadsExplode:         false, // 单位有效载荷不爆炸

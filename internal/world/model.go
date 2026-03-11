@@ -53,6 +53,29 @@ type Building struct {
 	Config    []byte
 	Payload   []byte
 	MaxHealth float32
+
+	// Item transport state for conveyors/ducts.
+	ConvItems [3]ItemID
+	ConvPos   [3]float32
+	ConvLen   int
+	ConvMin   float32
+
+	// Stack conveyor state (plastanium).
+	StackState    int
+	StackLink     int32
+	StackCooldown float32
+	StackLastItem ItemID
+	StackDumpIdx  int
+
+	// Overflow duct state.
+	OverflowProgress float32
+	OverflowCurrent  ItemID
+	OverflowDumpIdx  int8
+
+	// Duct state.
+	DuctProgress float32
+	DuctCurrent  ItemID
+	DuctRecDir   int8
 }
 
 // GetX 获取X坐标
@@ -181,6 +204,11 @@ type RawEntity struct {
 	AttackFragmentSpread  float32
 	AttackFragmentSpeed   float32
 	AttackFragmentLife    float32
+	AttackBurstShots      int32
+	AttackBurstSpacing    float32
+	AttackSpread          float32
+	AttackInaccuracy      float32
+	AttackVelocityRnd     float32
 	AttackTargetAir       bool
 	AttackTargetGround    bool
 	AttackTargetPriority  string

@@ -761,11 +761,13 @@ func main() {
 	srv.SetSnapshotLogSample(cfg.Logging.SnapshotLogSample)
 	srv.SetTileConfigForwardMode(cfg.Net.TileConfigForwardMode)
 	contentIDsPath := filepath.FromSlash("data/vanilla/content_ids.json")
+	var contentIDs *vanilla.ContentIDsFile
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
 	} else {
 		count := vanilla.ApplyContentIDs(srv.Content, ids)
 		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
+		contentIDs = ids
 	}
 	srv.SetServerName(cfg.Runtime.ServerName)
 	srv.SetServerDescription(cfg.Runtime.ServerDesc)
@@ -775,6 +777,11 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	wld.SetContentRegistry(srv.Content)
+	wld.SetTypeIO(srv.TypeIO)
+	if contentIDs != nil {
+		wld.SetLogicIDs(contentIDs)
+	}
 	weatherNamesByID := map[int16]string{}
 	weatherIDsByName := map[string]int16{}
 	srv.Content.IterateWeathers(func(w protocol.Weather) bool {
@@ -807,6 +814,16 @@ func main() {
 	})
 	wld.SetItemNamesByID(itemNamesByID)
 	wld.SetLiquidNamesByID(liquidNamesByID)
+	if err := wld.LoadItemProps(filepath.FromSlash("data/vanilla/item_props.json")); err != nil {
+		startup.warn("原版 item_props", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 item_props", "data/vanilla/item_props.json")
+	}
+	if err := wld.LoadLiquidProps(filepath.FromSlash("data/vanilla/liquid_props.json")); err != nil {
+		startup.warn("原版 liquid_props", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 liquid_props", "data/vanilla/liquid_props.json")
+	}
 	if err := wld.LoadRecipes(filepath.FromSlash("data/vanilla/recipes.json")); err != nil {
 		startup.warn("原版 recipes", fmt.Sprintf("加载失败: %v", err))
 	} else {
@@ -816,6 +833,21 @@ func main() {
 		startup.warn("原版 block_props", fmt.Sprintf("加载失败: %v", err))
 	} else {
 		startup.ok("原版 block_props", "data/vanilla/block_props.json")
+	}
+	if err := wld.LoadBlockSizes(filepath.FromSlash("data/vanilla/block_sizes.json")); err != nil {
+		startup.warn("原版 block_sizes", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 block_sizes", "data/vanilla/block_sizes.json")
+	}
+	if err := wld.LoadBlockKinds(filepath.FromSlash("data/vanilla/block_kinds.json")); err != nil {
+		startup.warn("原版 block_kinds", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 block_kinds", "data/vanilla/block_kinds.json")
+	}
+	if err := wld.LoadBlockBuild(filepath.FromSlash("data/vanilla/block_build.json")); err != nil {
+		startup.warn("原版 block_build", fmt.Sprintf("加载失败: %v", err))
+	} else {
+		startup.ok("原版 block_build", "data/vanilla/block_build.json")
 	}
 	srv.SetItemDepositCooldown(wld.GetRulesManager().Get().ItemDepositCooldown)
 	buildService := buildsvc.New(wld, buildsvc.Options{
@@ -1210,7 +1242,12 @@ func main() {
 				}
 			}
 		}
-		_ = buildService.ApplyPlansNow(world.TeamID(1), plans)
+		teamID := world.TeamID(srv.ConnTeamID(c))
+		buildSpeed := float32(1)
+		if wld != nil {
+			buildSpeed = wld.UnitBuildSpeed(c.UnitID())
+		}
+		_ = buildService.ApplyPlansNow(teamID, plans, buildSpeed)
 	}
 	srv.CanInteractBuildFn = func(c *netserver.Conn, buildPos int32, action string) bool {
 		if buildPos < 0 {
@@ -1900,6 +1937,37 @@ func main() {
 	}
 
 	var engine *sim.Engine
+	flushLogicEvents := func() {
+		if srv == nil {
+			return
+		}
+		for _, ev := range wld.DrainLogicClientData() {
+			pkt := &protocol.Remote_NetServer_clientLogicDataReliable_43{
+				Player:  protocol.UnitBox{IDValue: 0},
+				Channel: ev.Channel,
+				Value:   ev.Value,
+			}
+			if ev.Reliable {
+				srv.Broadcast(pkt)
+			} else {
+				srv.Broadcast(&protocol.Remote_NetServer_clientLogicDataUnreliable_44{
+					Player:  protocol.UnitBox{IDValue: 0},
+					Channel: ev.Channel,
+					Value:   ev.Value,
+				})
+			}
+		}
+		for _, ev := range wld.DrainLogicSyncVars() {
+			if ev.BuildPos == 0 {
+				continue
+			}
+			srv.Broadcast(&protocol.Remote_LExecutor_syncVariable_94{
+				Building: protocol.BuildingBox{PosValue: ev.BuildPos},
+				Variable: ev.VarID,
+				Value:    ev.Value,
+			})
+		}
+	}
 	if cfg.Runtime.SchedulerEnabled {
 		engine = sim.NewEngine(sim.Config{
 			TPS:        sim.DefaultTPS,
@@ -1912,6 +1980,7 @@ func main() {
 			if p.ID == 0 {
 				buildService.Tick()
 				wld.Step(ctx.Delta)
+				flushLogicEvents()
 			}
 		})
 		engine.Start()
@@ -1923,6 +1992,7 @@ func main() {
 			for range t.C {
 				buildService.Tick()
 				wld.Step(interval)
+				flushLogicEvents()
 			}
 		}()
 	}
