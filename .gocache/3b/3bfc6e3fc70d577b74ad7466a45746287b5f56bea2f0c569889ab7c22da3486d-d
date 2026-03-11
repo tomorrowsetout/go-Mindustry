@@ -1,6 +1,0 @@
-./executor.go
-./instructions.go
-./lexer.go
-./mlog.go
-./mlog_instructions.go
-./parser.go
