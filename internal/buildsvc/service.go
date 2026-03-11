@@ -81,7 +81,7 @@ func (s *Service) Reset() {
 }
 
 // EnqueuePlans validates and enqueues protocol build plans.
-func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
+func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan, buildSpeed float32) {
 	if s == nil || s.w == nil || len(plans) == 0 {
 		return
 	}
@@ -96,10 +96,11 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 		if p == nil {
 			continue
 		}
-		op, ok := sanitizePlan(model, p)
+		op, ok := sanitizePlan(model, p, buildSpeed)
 		if !ok {
 			continue
 		}
+		applyPlanConfig(s.w, p)
 		if _, ok := seen[op]; ok {
 			continue
 		}
@@ -163,7 +164,7 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 
 // ApplyPlansNow validates and applies plans immediately, bypassing batch queue.
 // This matches the original server's responsive build/deconstruct handling better.
-func (s *Service) ApplyPlansNow(team world.TeamID, plans []*protocol.BuildPlan) int {
+func (s *Service) ApplyPlansNow(team world.TeamID, plans []*protocol.BuildPlan, buildSpeed float32) int {
 	if s == nil || s.w == nil || len(plans) == 0 {
 		return 0
 	}
@@ -178,10 +179,11 @@ func (s *Service) ApplyPlansNow(team world.TeamID, plans []*protocol.BuildPlan) 
 		if p == nil {
 			continue
 		}
-		op, ok := sanitizePlan(model, p)
+		op, ok := sanitizePlan(model, p, buildSpeed)
 		if !ok {
 			continue
 		}
+		applyPlanConfig(s.w, p)
 		if _, ok := seen[op]; ok {
 			continue
 		}
@@ -256,7 +258,7 @@ func (s *Service) pushFront(b queuedBatch) {
 	s.queue[0] = b
 }
 
-func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan) (world.BuildPlanOp, bool) {
+func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan, buildSpeed float32) (world.BuildPlanOp, bool) {
 	if p == nil || model == nil {
 		return world.BuildPlanOp{}, false
 	}
@@ -267,9 +269,10 @@ func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan) (world.BuildPl
 	}
 	if p.Breaking {
 		return world.BuildPlanOp{
-			Breaking: true,
-			X:        p.X,
-			Y:        p.Y,
+			Breaking:   true,
+			X:          p.X,
+			Y:          p.Y,
+			BuildSpeed: buildSpeed,
 		}, true
 	}
 	if p.Block == nil {
@@ -282,11 +285,13 @@ func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan) (world.BuildPl
 		return world.BuildPlanOp{}, false
 	}
 	return world.BuildPlanOp{
-		Breaking: false,
-		X:        p.X,
-		Y:        p.Y,
-		Rotation: int8(p.Rotation & 0x03),
-		BlockID:  blockID,
+		Breaking:   false,
+		X:          p.X,
+		Y:          p.Y,
+		Rotation:   int8(p.Rotation & 0x03),
+		BlockID:    blockID,
+		Config:     p.Config,
+		BuildSpeed: buildSpeed,
 	}, true
 }
 
@@ -307,4 +312,23 @@ func sameOps(a, b []world.BuildPlanOp) bool {
 		}
 	}
 	return true
+}
+
+func applyPlanConfig(w *world.World, p *protocol.BuildPlan) {
+	if w == nil || p == nil {
+		return
+	}
+	if p.Breaking {
+		_ = w.SetBuildingConfigValue(protocol.PackPoint2(p.X, p.Y), nil)
+		return
+	}
+	if p.Config == nil {
+		return
+	}
+	pos := protocol.PackPoint2(p.X, p.Y)
+	if raw, ok := p.Config.([]byte); ok {
+		_ = w.SetBuildingConfigRaw(pos, raw)
+		return
+	}
+	_ = w.SetBuildingConfigValue(pos, p.Config)
 }

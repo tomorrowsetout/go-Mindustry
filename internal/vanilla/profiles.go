@@ -20,6 +20,9 @@ type UnitProfile struct {
 	BulletSpeed     float32 `json:"bullet_speed"`
 	SplashRadius    float32 `json:"splash_radius"`
 	Pierce          int32   `json:"pierce"`
+	BurstShots      int32   `json:"burst_shots"`
+	BurstSpacing    float32 `json:"burst_spacing"`
+	Spread          float32 `json:"spread"`
 	TargetAir       bool    `json:"target_air"`
 	TargetGround    bool    `json:"target_ground"`
 	TargetPriority  string  `json:"target_priority"`
@@ -104,6 +107,10 @@ var (
 	rePierceCap    = regexp.MustCompile(`(?m)\bpierceCap\s*=\s*([^;]+);`)
 	reWeaponDecl   = regexp.MustCompile(`(?m)new\s+Weapon\([^)]*\)\s*\{\{`)
 	reBulletCtor   = regexp.MustCompile(`(?m)new\s+[A-Za-z0-9_$.]*BulletType\s*\(([^)]*)\)`)
+	reShootShots   = regexp.MustCompile(`(?m)\bshoot\s*\.\s*shots\s*=\s*([^;]+);`)
+	reShootDelay   = regexp.MustCompile(`(?m)\bshoot\s*\.\s*shotDelay\s*=\s*([^;]+);`)
+	reShootSpread  = regexp.MustCompile(`(?m)\bshoot\s*\.\s*spread\s*=\s*([^;]+);`)
+	reShootCtor    = regexp.MustCompile(`(?m)new\s+ShootSpread\s*\(([^)]*)\)`)
 )
 
 func extractUnits(src string) []UnitProfile {
@@ -132,6 +139,9 @@ func extractUnits(src string) []UnitProfile {
 			BulletSpeed:     p.bulletSpeed,
 			SplashRadius:    p.splashRadius,
 			Pierce:          p.pierce,
+			BurstShots:      p.burstShots,
+			BurstSpacing:    p.burstSpacing,
+			Spread:          p.spread,
 			TargetAir:       p.targetAir,
 			TargetGround:    p.targetGround,
 			TargetPriority:  "nearest",
@@ -217,6 +227,15 @@ func mergeParsedProfiles(a, b parsedProfile) parsedProfile {
 	if b.pierce > a.pierce {
 		a.pierce = b.pierce
 	}
+	if b.burstShots > a.burstShots {
+		a.burstShots = b.burstShots
+	}
+	if b.burstSpacing > 0 && (a.burstSpacing <= 0 || b.burstSpacing < a.burstSpacing) {
+		a.burstSpacing = b.burstSpacing
+	}
+	if b.spread > a.spread {
+		a.spread = b.spread
+	}
 	a.targetAir = a.targetAir || b.targetAir
 	a.targetGround = a.targetGround || b.targetGround
 	if b.fireMode == "beam" {
@@ -270,6 +289,9 @@ type parsedProfile struct {
 	bulletSpeed  float32
 	splashRadius float32
 	pierce       int32
+	burstShots   int32
+	burstSpacing float32
+	spread       float32
 	targetAir    bool
 	targetGround bool
 }
@@ -329,6 +351,42 @@ func parseCommonProfile(body string) parsedProfile {
 	}
 	if m := reTargetGround.FindAllStringSubmatch(body, -1); len(m) > 0 {
 		p.targetGround = strings.EqualFold(m[len(m)-1][1], "true")
+	}
+	if v, ok := lastValue(body, reShootShots); ok {
+		if v > 0 {
+			p.burstShots = int32(v)
+		}
+	}
+	if v, ok := lastValue(body, reShootDelay); ok {
+		if v > 0 {
+			p.burstSpacing = v / 60
+		}
+	}
+	if v, ok := lastValue(body, reShootSpread); ok {
+		if v > 0 {
+			p.spread = v
+		}
+	}
+	if p.burstShots <= 0 || p.spread <= 0 {
+		if matches := reShootCtor.FindAllStringSubmatch(body, -1); len(matches) > 0 {
+			for _, m := range matches {
+				if len(m) < 2 {
+					continue
+				}
+				args := splitArgs(m[1])
+				if len(args) < 2 {
+					continue
+				}
+				shots, ok1 := evalNumericExpr(args[0])
+				spread, ok2 := evalNumericExpr(args[1])
+				if ok1 && shots > 0 && p.burstShots <= 0 {
+					p.burstShots = int32(shots)
+				}
+				if ok2 && spread > 0 && p.spread <= 0 {
+					p.spread = float32(spread)
+				}
+			}
+		}
 	}
 	return p
 }

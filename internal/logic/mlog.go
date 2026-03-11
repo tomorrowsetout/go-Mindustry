@@ -99,8 +99,59 @@ func (v *MlogVar) SetConst(val any) {
 	if v == nil {
 		return
 	}
-	v.ObjVal = val
-	v.IsObj = true
+	switch t := val.(type) {
+	case float64:
+		v.NumVal = t
+		v.ObjVal = nil
+		v.IsObj = false
+	case float32:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case int:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case int8:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case int16:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case int32:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case int64:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case uint:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case uint8:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case uint16:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case uint32:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	case uint64:
+		v.NumVal = float64(t)
+		v.ObjVal = nil
+		v.IsObj = false
+	default:
+		v.ObjVal = val
+		v.IsObj = true
+	}
 }
 
 func (v *MlogVar) Set(other *MlogVar) {
@@ -169,9 +220,11 @@ type MlogHost interface {
 	Apply(status any, target any, duration float64) bool
 	Explosion(x, y float64, damage, radius float64, team int) bool
 	Status(target any) (health, maxHealth float64, team int, ok bool)
-	Fetch(kind string, idx int) (any, bool)
-	SyncVar(name string, value any) bool
+	Fetch(kind string, team any, extra any, idx int) (any, bool)
+	SyncVar(id int, value any) bool
 	PrintFlush(target any, text string) bool
+	DrawFlush(target any, buffer []uint64) bool
+	ClientData(channel string, value any, reliable bool) bool
 }
 
 // MlogInstruction executes a single instruction.
@@ -183,6 +236,7 @@ type MlogInstruction interface {
 type MlogProgram struct {
 	Instructions []MlogInstruction
 	Vars         []*MlogVar
+	VarByName    map[string]*MlogVar
 	Counter      *MlogVar
 	Unit         *MlogVar
 	This         *MlogVar
@@ -337,12 +391,29 @@ func (a *MlogAssembler) Assemble(code string) (*MlogProgram, error) {
 	prog := &MlogProgram{
 		Instructions: instructions,
 		Vars:         a.Vars,
+		VarByName:    a.VarByName,
 		Counter:      a.VarByName["@counter"],
 		Unit:         a.VarByName["@unit"],
 		This:         a.VarByName["@this"],
 		Ipt:          a.PutConst("@ipt", 0),
 	}
 	return prog, nil
+}
+
+func (p *MlogProgram) EnsureVar(name string) *MlogVar {
+	if p == nil {
+		return nil
+	}
+	if p.VarByName == nil {
+		p.VarByName = map[string]*MlogVar{}
+	}
+	if v, ok := p.VarByName[name]; ok {
+		return v
+	}
+	v := newMlogVar(name, len(p.Vars), false)
+	p.Vars = append(p.Vars, v)
+	p.VarByName[name] = v
+	return v
 }
 
 func (a *MlogAssembler) parseInstruction(tokens []string) (MlogInstruction, error) {
@@ -387,12 +458,24 @@ func (a *MlogAssembler) parseInstruction(tokens []string) (MlogInstruction, erro
 		}
 		return &MlogPrintFlushI{Target: a.Var(tokens[1])}, nil
 	case "draw":
-		return &MlogDrawI{Args: tokens[1:]}, nil
+		if len(tokens) < 2 {
+			return nil, errors.New("draw requires args")
+		}
+		args := make([]*MlogVar, 0, 6)
+		for i := 2; i < len(tokens) && len(args) < 6; i++ {
+			args = append(args, a.Var(tokens[i]))
+		}
+		return &MlogDrawI{Cmd: tokens[1], Args: args}, nil
 	case "drawflush":
 		if len(tokens) < 2 {
 			return nil, errors.New("drawflush requires 1 arg")
 		}
 		return &MlogDrawFlushI{Target: a.Var(tokens[1])}, nil
+	case "clientdata":
+		if len(tokens) < 4 {
+			return nil, errors.New("clientdata requires 3 args")
+		}
+		return &MlogClientDataI{Channel: a.Var(tokens[1]), Value: a.Var(tokens[2]), Reliable: a.Var(tokens[3])}, nil
 	case "wait":
 		if len(tokens) < 2 {
 			return nil, errors.New("wait requires 1 arg")
@@ -471,7 +554,10 @@ func (a *MlogAssembler) parseInstruction(tokens []string) (MlogInstruction, erro
 		return &MlogULocateI{Locate: tokens[1], Flag: tokens[2], Enemy: a.Var(tokens[3]), Ore: a.Var(tokens[4]), OutX: a.Var(tokens[5]), OutY: a.Var(tokens[6]), OutFound: a.Var(tokens[7])}, nil
 	case "fetch":
 		if len(tokens) < 4 {
-			return nil, errors.New("fetch requires 3 args")
+			return nil, errors.New("fetch requires 3+ args")
+		}
+		if len(tokens) >= 6 {
+			return &MlogFetchI{Out: a.Var(tokens[1]), Kind: tokens[2], Team: a.Var(tokens[3]), Extra: a.Var(tokens[4]), Index: a.Var(tokens[5])}, nil
 		}
 		return &MlogFetchI{Out: a.Var(tokens[1]), Kind: tokens[2], Index: a.Var(tokens[3])}, nil
 	case "sync":

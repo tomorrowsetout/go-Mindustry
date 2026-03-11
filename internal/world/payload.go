@@ -387,7 +387,7 @@ func (w *World) payloadFromBlockLocked(team TeamID, blockID int16) []byte {
 	if blockID <= 0 {
 		return nil
 	}
-		return encodePayloadBuild(w, &Tile{Build: &Building{Block: BlockID(blockID), Team: team, Rotation: 0, Health: 100, MaxHealth: 100}})
+	return encodePayloadBuild(w, &Tile{Build: &Building{Block: BlockID(blockID), Team: team, Rotation: 0, Health: 100, MaxHealth: 100}})
 }
 
 func (w *World) payloadFromUnitLocked(team TeamID, typeID int16) []byte {
@@ -429,17 +429,17 @@ type payloadUnitData struct {
 }
 
 type payloadBuildData struct {
-	BlockID  int16
-	Team     TeamID
-	Rotation int8
-	Health   float32
-	MaxHealth float32
-	Config   []byte
-	Items    []ItemStack
-	Liquids  []LiquidStack
-	Payload  []byte
+	BlockID     int16
+	Team        TeamID
+	Rotation    int8
+	Health      float32
+	MaxHealth   float32
+	Config      []byte
+	Items       []ItemStack
+	Liquids     []LiquidStack
+	Payload     []byte
 	PowerStatus float32
-	Extra   []byte
+	Extra       []byte
 }
 
 func encodePayloadUnit(ent RawEntity) []byte {
@@ -700,16 +700,16 @@ func encodePayloadBuildVanilla(w *World, t *Tile) []byte {
 }
 
 type vanillaBuildBase struct {
-	Health       float32
-	Rotation     int8
-	Team         TeamID
-	Items        []ItemStack
-	Liquids      []LiquidStack
-	PowerStatus  float32
-	Enabled      bool
-	Efficiency   float32
-	OptionalEff  float32
-	Extra        []byte
+	Health      float32
+	Rotation    int8
+	Team        TeamID
+	Items       []ItemStack
+	Liquids     []LiquidStack
+	PowerStatus float32
+	Enabled     bool
+	Efficiency  float32
+	OptionalEff float32
+	Extra       []byte
 }
 
 func decodePayloadBuildVanilla(payload []byte) (payloadBuildData, bool) {
@@ -782,20 +782,20 @@ func decodePayloadUnitVanilla(payload []byte) (payloadUnitData, bool) {
 
 func addEntityFromPayloadLocked(w *World, data payloadUnitData) RawEntity {
 	ent := RawEntity{
-		TypeID:    data.TypeID,
-		ID:        data.ID,
-		X:         data.X,
-		Y:         data.Y,
-		Rotation:  data.Rotation,
-		VelX:      data.VelX,
-		VelY:      data.VelY,
-		RotVel:    data.RotVel,
-		Health:    data.Health,
-		MaxHealth: data.MaxHealth,
-		Shield:    data.Shield,
-		ShieldMax: data.ShieldMax,
-		Team:      data.Team,
-		Payload:   append([]byte(nil), data.Payload...),
+		TypeID:      data.TypeID,
+		ID:          data.ID,
+		X:           data.X,
+		Y:           data.Y,
+		Rotation:    data.Rotation,
+		VelX:        data.VelX,
+		VelY:        data.VelY,
+		RotVel:      data.RotVel,
+		Health:      data.Health,
+		MaxHealth:   data.MaxHealth,
+		Shield:      data.Shield,
+		ShieldMax:   data.ShieldMax,
+		Team:        data.Team,
+		Payload:     append([]byte(nil), data.Payload...),
 		RuntimeInit: true,
 	}
 	w.applyUnitTypeDef(&ent)
@@ -831,10 +831,17 @@ func placeBuildingLocked(w *World, t *Tile, data payloadBuildData) {
 		pos := packTilePos(t.X, t.Y)
 		if name, ok := w.blockNamesByID[int16(t.Block)]; ok {
 			n := strings.ToLower(strings.TrimSpace(name))
-			if props, ok := w.blockPropsByName[n]; ok && props.PowerCapacity > 0 {
-				state := w.buildStates[pos]
-				state.Power = data.PowerStatus * props.PowerCapacity
-				w.buildStates[pos] = state
+			if props, ok := w.blockPropsByName[n]; ok {
+				if w.powerStatusByPos == nil {
+					w.powerStatusByPos = map[int32]float32{}
+				}
+				w.powerStatusByPos[pos] = data.PowerStatus
+				if props.PowerCapacity > 0 {
+					if w.powerStoredByPos == nil {
+						w.powerStoredByPos = map[int32]float32{}
+					}
+					w.powerStoredByPos[pos] = data.PowerStatus * props.PowerCapacity
+				}
 			}
 		}
 	}
@@ -863,13 +870,19 @@ func writeBuildingBaseVanilla(wr *protocol.Writer, w *World, t *Tile) bool {
 				if props.LiquidCapacity > 0 {
 					hasLiquids = true
 				}
-				if props.PowerCapacity > 0 || props.PowerUse > 0 || props.PowerProduction > 0 {
+				if props.PowerCapacity > 0 || props.PowerUse > 0 || props.PowerProduction > 0 || props.LinkRangeTiles > 0 ||
+					strings.Contains(n, "power-node") || strings.Contains(n, "surge-tower") ||
+					strings.Contains(n, "beam-link") || strings.Contains(n, "power-diode") {
 					hasPower = true
 				}
-				if hasPower && props.PowerCapacity > 0 {
+				if hasPower {
 					pos := packTilePos(t.X, t.Y)
-					if net := w.powerNetByPos[pos]; net != nil && net.Capacity > 0 {
-						status = net.Energy / net.Capacity
+					if props.PowerCapacity > 0 {
+						if w.powerStoredByPos != nil && props.PowerCapacity > 0 {
+							status = w.powerStoredByPos[pos] / props.PowerCapacity
+						}
+					} else if w.powerStatusByPos != nil {
+						status = w.powerStatusByPos[pos]
 					}
 				}
 			}

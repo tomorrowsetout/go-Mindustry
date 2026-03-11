@@ -1,0 +1,15 @@
+./content_registry.go
+./entity_player.go
+./entity_unit.go
+./framework.go
+./io.go
+./packet.go
+./packets.go
+./registry.go
+./remote_packets.go
+./typeio.go
+./typeio_advanced.go
+./typeio_commands.go
+./typeio_controller.go
+./typeio_objects.go
+./typeio_plans.go
