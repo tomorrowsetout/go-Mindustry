@@ -16,9 +16,14 @@
   },
   "storage": {
     "mode": "file",
-    "directory": "data/events",
+    "backend": "file",
+    "directory": "data/storage",
     "database_enabled": false,
-    "dsn": ""
+    "dsn": "",
+    "file_format": "json",
+    "log_dir": "data/storage/logs",
+    "log_max_mb": 5,
+    "log_max_files": 50
   },
   "net": {
     "udp_retry_count": 2,
@@ -26,6 +31,9 @@
     "udp_fallback_tcp": true,
     "sync_entity_ms": 100,
     "sync_state_ms": 250,
+    "strict_mode": false,
+    "position_correction": true,
+    "position_max_dist": 112,
     "world_data_preload": true,
     "world_data_preload_max_mb": 30,
     "post_connect_replay_mode": "async",
@@ -38,7 +46,11 @@
     "interval_sec": 30,
     "save_msav": true,
     "msav_dir": "data/snapshots",
-    "msav_file": ""
+    "msav_file": "",
+    "version_dir": "data/snapshots/versions",
+    "version_max": 20,
+    "version_state": true,
+    "version_msav": true
   },
   "mods": {
     "enabled": false,

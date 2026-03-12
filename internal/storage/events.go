@@ -15,6 +15,7 @@ type Event struct {
 	Detail    string    `json:"detail,omitempty"`
 	ConnID    int32     `json:"conn_id,omitempty"`
 	UUID      string    `json:"uuid,omitempty"`
+	USID      string    `json:"usid,omitempty"`
 	IP        string    `json:"ip,omitempty"`
 	Name      string    `json:"name,omitempty"`
 }

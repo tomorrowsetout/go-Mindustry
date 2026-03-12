@@ -1181,14 +1181,19 @@ func (w *World) stepLogistics(dt float32) {
 	if w.model == nil || len(w.model.Tiles) == 0 || w.blockNamesByID == nil {
 		return
 	}
-	doTransport := w.tick%5 == 0
-	doAux := w.tick%15 == 0
-	doPayload := w.tick%6 == 0
-	if !doTransport && !doAux && !doPayload {
+	tickDelta := dt * ticksPerSecond(w.tps)
+	if tickDelta <= 0 {
 		return
 	}
+	doTransport := true
+	doAux := true
+	doPayload := true
 	moves := 0
-	const maxMovesPerStep = 220
+	const baseMovesPerTick = 44
+	maxMovesPerStep := int(math.Ceil(float64(baseMovesPerTick) * float64(tickDelta)))
+	if maxMovesPerStep < 1 {
+		maxMovesPerStep = 1
+	}
 	movedPos := map[int32]struct{}{}
 	payloadMoved := map[int32]struct{}{}
 	for i := range w.model.Tiles {

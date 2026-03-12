@@ -48,32 +48,50 @@ type APIConfig struct {
 }
 
 type StorageConfig struct {
-	Mode            string `json:"mode"`
+	// Mode is kept for backward compatibility. Prefer Backend.
+	Mode string `json:"mode"`
+	// Backend selects the storage backend. Examples:
+	// file | file-json | file-txt | redis | redis-cluster | postgres | postgres-cluster |
+	// mysql | mysql-cluster | keydb | keydb-cluster | sqlite
+	Backend         string `json:"backend"`
 	Directory       string `json:"directory"`
 	DatabaseEnabled bool   `json:"database_enabled"`
 	DSN             string `json:"dsn"`
+	// FileFormat controls local file formatting: json | txt
+	FileFormat string `json:"file_format"`
+	// LogDir stores rotating logs in a separate folder.
+	LogDir      string `json:"log_dir"`
+	LogMaxMB    int    `json:"log_max_mb"`
+	LogMaxFiles int    `json:"log_max_files"`
 }
 
 type NetConfig struct {
-	UdpRetryCount   int  `json:"udp_retry_count"`
-	UdpRetryDelayMs int  `json:"udp_retry_delay_ms"`
-	UdpFallbackTCP  bool `json:"udp_fallback_tcp"`
-	SyncEntityMs    int  `json:"sync_entity_ms"`
-	SyncStateMs     int  `json:"sync_state_ms"`
-	WorldDataPreload      bool   `json:"world_data_preload"`
-	WorldDataPreloadMaxMB int    `json:"world_data_preload_max_mb"`
-	PostConnectReplayMode string `json:"post_connect_replay_mode"` // async | sync
-	TileConfigForwardMode string `json:"tile_config_forward_mode"`  // async | sync
+	UdpRetryCount         int     `json:"udp_retry_count"`
+	UdpRetryDelayMs       int     `json:"udp_retry_delay_ms"`
+	UdpFallbackTCP        bool    `json:"udp_fallback_tcp"`
+	SyncEntityMs          int     `json:"sync_entity_ms"`
+	SyncStateMs           int     `json:"sync_state_ms"`
+	StrictMode            bool    `json:"strict_mode"`
+	PositionCorrection    bool    `json:"position_correction"`
+	PositionMaxDist       float32 `json:"position_max_dist"`
+	WorldDataPreload      bool    `json:"world_data_preload"`
+	WorldDataPreloadMaxMB int     `json:"world_data_preload_max_mb"`
+	PostConnectReplayMode string  `json:"post_connect_replay_mode"` // async | sync
+	TileConfigForwardMode string  `json:"tile_config_forward_mode"` // async | sync
 }
 
 type PersistConfig struct {
-	Enabled     bool   `json:"enabled"`
-	Directory   string `json:"directory"`
-	File        string `json:"file"`
-	IntervalSec int    `json:"interval_sec"`
-	SaveMSAV    bool   `json:"save_msav"`
-	MSAVDir     string `json:"msav_dir"`
-	MSAVFile    string `json:"msav_file"`
+	Enabled      bool   `json:"enabled"`
+	Directory    string `json:"directory"`
+	File         string `json:"file"`
+	IntervalSec  int    `json:"interval_sec"`
+	SaveMSAV     bool   `json:"save_msav"`
+	MSAVDir      string `json:"msav_dir"`
+	MSAVFile     string `json:"msav_file"`
+	VersionDir   string `json:"version_dir"`
+	VersionMax   int    `json:"version_max"`
+	VersionState bool   `json:"version_state"`
+	VersionMSAV  bool   `json:"version_msav"`
 }
 
 type ModsConfig struct {
@@ -156,29 +174,41 @@ func Default() Config {
 		},
 		Storage: StorageConfig{
 			Mode:            "file",
-			Directory:       "data/events",
+			Backend:         "file",
+			Directory:       "data/storage",
 			DatabaseEnabled: false,
 			DSN:             "",
+			FileFormat:      "json",
+			LogDir:          "data/storage/logs",
+			LogMaxMB:        5,
+			LogMaxFiles:     50,
 		},
 		Net: NetConfig{
-			UdpRetryCount:   2,
-			UdpRetryDelayMs: 5,
-			UdpFallbackTCP:  true,
-			SyncEntityMs:    100,
-			SyncStateMs:     250,
+			UdpRetryCount:         2,
+			UdpRetryDelayMs:       5,
+			UdpFallbackTCP:        true,
+			SyncEntityMs:          100,
+			SyncStateMs:           250,
+			StrictMode:            false,
+			PositionCorrection:    true,
+			PositionMaxDist:       112,
 			WorldDataPreload:      true,
 			WorldDataPreloadMaxMB: 30,
 			PostConnectReplayMode: "async",
 			TileConfigForwardMode: "async",
 		},
 		Persist: PersistConfig{
-			Enabled:     true,
-			Directory:   "data/state",
-			File:        "server-state.json",
-			IntervalSec: 30,
-			SaveMSAV:    true,
-			MSAVDir:     "data/snapshots",
-			MSAVFile:    "",
+			Enabled:      true,
+			Directory:    "data/state",
+			File:         "server-state.json",
+			IntervalSec:  30,
+			SaveMSAV:     true,
+			MSAVDir:      "data/snapshots",
+			MSAVFile:     "",
+			VersionDir:   "data/snapshots/versions",
+			VersionMax:   20,
+			VersionState: true,
+			VersionMSAV:  true,
 		},
 		Mods: ModsConfig{
 			Enabled:   false,
@@ -235,6 +265,9 @@ func Load(path string) (Config, error) {
 	if cfg.Net.SyncStateMs <= 0 {
 		cfg.Net.SyncStateMs = 250
 	}
+	if cfg.Net.PositionMaxDist <= 0 {
+		cfg.Net.PositionMaxDist = 112
+	}
 	if cfg.Net.WorldDataPreloadMaxMB <= 0 {
 		cfg.Net.WorldDataPreloadMaxMB = 30
 	}
@@ -262,6 +295,56 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Logging.EventPacketSample <= 0 {
 		cfg.Logging.EventPacketSample = 20
+	}
+	if strings.TrimSpace(cfg.Storage.Backend) == "" {
+		mode := strings.ToLower(strings.TrimSpace(cfg.Storage.Mode))
+		if mode == "" {
+			mode = "file"
+		}
+		cfg.Storage.Backend = mode
+	}
+	if strings.TrimSpace(cfg.Storage.Directory) == "" {
+		cfg.Storage.Directory = filepath.Join("data", "storage")
+	}
+	if strings.TrimSpace(cfg.Storage.LogDir) == "" {
+		cfg.Storage.LogDir = filepath.Join("data", "storage", "logs")
+	}
+	if cfg.Storage.LogMaxMB <= 0 {
+		cfg.Storage.LogMaxMB = 5
+	}
+	if cfg.Storage.LogMaxFiles <= 0 {
+		cfg.Storage.LogMaxFiles = 50
+	}
+	if strings.TrimSpace(cfg.Storage.FileFormat) == "" {
+		mode := strings.ToLower(strings.TrimSpace(cfg.Storage.Mode))
+		switch {
+		case strings.Contains(mode, "txt"):
+			cfg.Storage.FileFormat = "txt"
+		default:
+			cfg.Storage.FileFormat = "json"
+		}
+	}
+	if strings.TrimSpace(cfg.Persist.Directory) == "" {
+		cfg.Persist.Directory = filepath.Join("data", "state")
+	}
+	if strings.TrimSpace(cfg.Persist.File) == "" {
+		cfg.Persist.File = "server-state.json"
+	}
+	if cfg.Persist.IntervalSec <= 0 {
+		cfg.Persist.IntervalSec = 30
+	}
+	if strings.TrimSpace(cfg.Persist.MSAVDir) == "" {
+		cfg.Persist.MSAVDir = filepath.Join("data", "snapshots")
+	}
+	if strings.TrimSpace(cfg.Persist.VersionDir) == "" {
+		cfg.Persist.VersionDir = filepath.Join("data", "snapshots", "versions")
+	}
+	if cfg.Persist.VersionMax <= 0 {
+		cfg.Persist.VersionMax = 20
+	}
+	if !cfg.Persist.VersionState && !cfg.Persist.VersionMSAV {
+		cfg.Persist.VersionState = true
+		cfg.Persist.VersionMSAV = true
 	}
 	// Keep compatibility with old runtime.devlog_enabled while centralizing in logging.
 	cfg.Runtime.DevLogEnabled = cfg.Logging.DevLogEnabled

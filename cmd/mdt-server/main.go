@@ -758,6 +758,23 @@ func main() {
 	fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 
 	srv := netserver.NewServer(*addr, *buildVersion)
+	srv.ModsFn = func() []string {
+		if modMgr == nil {
+			return nil
+		}
+		mods := modMgr.Mods()
+		if len(mods) == 0 {
+			return nil
+		}
+		out := make([]string, 0, len(mods))
+		for _, m := range mods {
+			if strings.TrimSpace(m.Name) == "" {
+				continue
+			}
+			out = append(out, m.Name)
+		}
+		return out
+	}
 	srv.SetSnapshotLogSample(cfg.Logging.SnapshotLogSample)
 	srv.SetTileConfigForwardMode(cfg.Net.TileConfigForwardMode)
 	contentIDsPath := filepath.FromSlash("data/vanilla/content_ids.json")
@@ -775,6 +792,9 @@ func main() {
 	srv.UdpRetryCount = cfg.Net.UdpRetryCount
 	srv.UdpRetryDelay = time.Duration(cfg.Net.UdpRetryDelayMs) * time.Millisecond
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
+	srv.StrictMode = cfg.Net.StrictMode
+	srv.PositionCorrection = cfg.Net.PositionCorrection
+	srv.PositionMaxDist = cfg.Net.PositionMaxDist
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
 	wld.SetContentRegistry(srv.Content)
@@ -918,6 +938,7 @@ func main() {
 			MaxHealth: ent.MaxHealth,
 			TeamID:    byte(ent.Team),
 			TypeID:    ent.TypeID,
+			MoveSpeed: ent.MoveSpeed,
 		}, true
 	}
 	srv.SyncUnitStateFn = func(unitID int32, x, y, rotation, vx, vy float32) {
@@ -1023,6 +1044,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "事件存储初始化失败: %v\n", rerr)
 		os.Exit(1)
 	}
+	var store storage.Store
+	if st, ok := recorder.(storage.Store); ok {
+		store = st
+	}
 	var eventPacketCounter atomic.Int64
 	srv.OnEvent = func(ev netserver.NetEvent) {
 		if !cfg.Logging.EventStoreEnabled {
@@ -1051,9 +1076,32 @@ func main() {
 			Detail:    stableString(ev.Detail),
 			ConnID:    ev.ConnID,
 			UUID:      stableString(ev.UUID),
+			USID:      stableString(ev.USID),
 			IP:        stableString(ev.IP),
 			Name:      stableString(ev.Name),
 		})
+		if store != nil {
+			switch strings.ToLower(strings.TrimSpace(ev.Kind)) {
+			case "connect_packet":
+				_ = store.UpsertPlayer(storage.PlayerRecord{
+					UUID:        stableString(ev.UUID),
+					USID:        stableString(ev.USID),
+					Name:        stableString(ev.Name),
+					IP:          stableString(ev.IP),
+					TimesJoined: 1,
+				})
+			case "kick":
+				if ev.UUID != "" {
+					_ = store.UpsertPlayer(storage.PlayerRecord{
+						UUID:        stableString(ev.UUID),
+						USID:        stableString(ev.USID),
+						Name:        stableString(ev.Name),
+						IP:          stableString(ev.IP),
+						TimesKicked: 1,
+					})
+				}
+			}
+		}
 	}
 	if ops, ok, err := persist.LoadOps(cfg.Admin); err != nil {
 		log.Warn("ops load failed", logging.Field{Key: "error", Value: err.Error()})
@@ -1246,6 +1294,34 @@ func main() {
 		buildSpeed := float32(1)
 		if wld != nil {
 			buildSpeed = wld.UnitBuildSpeed(c.UnitID())
+		}
+		if store != nil {
+			uuid := c.UUID()
+			usid := c.USID()
+			name := c.Name()
+			ip := c.RemoteIP()
+			for _, p := range plans {
+				if p == nil {
+					continue
+				}
+				blockID := int16(0)
+				if p.Block != nil {
+					blockID = p.Block.ID()
+				}
+				_ = store.Log("build_plan", map[string]any{
+					"ts":       time.Now().UTC().Format(time.RFC3339Nano),
+					"uuid":     uuid,
+					"usid":     usid,
+					"name":     name,
+					"ip":       ip,
+					"team":     teamID,
+					"breaking": p.Breaking,
+					"x":        p.X,
+					"y":        p.Y,
+					"rot":      p.Rotation,
+					"block":    blockID,
+				})
+			}
 		}
 		_ = buildService.ApplyPlansNow(teamID, plans, buildSpeed)
 	}
@@ -1539,6 +1615,17 @@ func main() {
 					}
 					runtimeTileMu.Unlock()
 					broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
+					if store != nil {
+						_ = store.Log("build", map[string]any{
+							"ts":     time.Now().UTC().Format(time.RFC3339Nano),
+							"action": "placed",
+							"pos":    ev.BuildPos,
+							"block":  ev.BuildBlock,
+							"team":   ev.BuildTeam,
+							"rot":    ev.BuildRot,
+							"hp":     ev.BuildHP,
+						})
+					}
 				case world.EntityEventBuildDestroyed:
 					runtimeTileMu.Lock()
 					delete(runtimeTiles, ev.BuildPos)
@@ -1548,6 +1635,17 @@ func main() {
 						_ = wld.RefundToTeamCore(ev.BuildTeam, ev.BuildItems)
 					}
 					broadcastBuildDestroyed(srv, ev.BuildPos)
+					if store != nil {
+						_ = store.Log("build", map[string]any{
+							"ts":     time.Now().UTC().Format(time.RFC3339Nano),
+							"action": "destroyed",
+							"pos":    ev.BuildPos,
+							"block":  ev.BuildBlock,
+							"team":   ev.BuildTeam,
+							"rot":    ev.BuildRot,
+							"hp":     ev.BuildHP,
+						})
+					}
 				case world.EntityEventBuildHealth:
 					runtimeTileMu.Lock()
 					if st, ok := runtimeTiles[ev.BuildPos]; ok {
@@ -1999,10 +2097,11 @@ func main() {
 
 	monitor := newStatusMonitor(srv, cfg, engine)
 	saveState = func() {}
+	autoSave := func() {}
 	if cfg.Persist.Enabled {
-		saveState = func() {
+		buildPersistState := func() (persist.State, world.Snapshot) {
 			snap := wld.Snapshot()
-			_ = persist.Save(cfg.Persist, persist.State{
+			st := persist.State{
 				MapPath:  state.get(),
 				WaveTime: snap.WaveTime,
 				Wave:     snap.Wave,
@@ -2010,8 +2109,20 @@ func main() {
 				TimeData: snap.TimeData,
 				Rand0:    snap.Rand0,
 				Rand1:    snap.Rand1,
-			})
-			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), state.get())
+			}
+			return st, snap
+		}
+		saveState = func() {
+			st, snap := buildPersistState()
+			_ = persist.Save(cfg.Persist, st)
+			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), st.MapPath)
+		}
+		autoSave = func() {
+			st, snap := buildPersistState()
+			_ = persist.Save(cfg.Persist, st)
+			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), st.MapPath)
+			_ = persist.SaveVersionedState(cfg.Persist, st)
+			_ = persist.SaveVersionedMSAVFromModel(cfg.Persist, snap, wld.Model(), st.MapPath)
 		}
 		interval := time.Duration(cfg.Persist.IntervalSec) * time.Second
 		if interval <= 0 {
@@ -2021,7 +2132,7 @@ func main() {
 			t := time.NewTicker(interval)
 			defer t.Stop()
 			for range t.C {
-				saveState()
+				autoSave()
 			}
 		}()
 	}
@@ -2215,6 +2326,10 @@ func runConsole(
 	name, _, _ := srv.ServerMeta()
 	printConsoleIntro(name, state.get(), listenAddr, cfg.API.Bind, cfg.API.Enabled)
 	printHelp(*cfg)
+	var store storage.Store
+	if st, ok := recorder.(storage.Store); ok {
+		store = st
+	}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -2283,6 +2398,7 @@ func runConsole(
 				fmt.Println("用法: host random | host <地图名> | host <.msav 文件路径>")
 				continue
 			}
+			prev := state.get()
 			next, err := resolveWorldSelection(parts[1])
 			if err != nil {
 				fmt.Printf("切图失败: %v\n", err)
@@ -2290,6 +2406,14 @@ func runConsole(
 			}
 			state.set(next)
 			loadWorldModel(next)
+			if store != nil {
+				_ = store.Log("map_change", map[string]any{
+					"ts":   time.Now().UTC().Format(time.RFC3339Nano),
+					"from": prev,
+					"to":   next,
+					"by":   "console",
+				})
+			}
 			fmt.Printf("地图已切换: %s\n", next)
 			reloaded, failed := srv.ReloadWorldLiveForAll()
 			if reloaded == 0 && failed == 0 {

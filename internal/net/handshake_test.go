@@ -60,7 +60,7 @@ func TestValidateConnect_VersionAndTypeRules(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateConnect(tc.pkt, 155)
+			err := ValidateConnect(tc.pkt, 155, true)
 			if tc.want == nil {
 				if err != nil {
 					t.Fatalf("expected nil err, got %v", err)
@@ -74,11 +74,33 @@ func TestValidateConnect_VersionAndTypeRules(t *testing.T) {
 	}
 }
 
+func TestValidateConnect_NonStrictAllowsCustom(t *testing.T) {
+	p := baseConnectPacket()
+	p.VersionType = ""
+	if err := ValidateConnect(p, 155, false); err != nil {
+		t.Fatalf("expected empty versionType accepted in non-strict, got %v", err)
+	}
+
+	p = baseConnectPacket()
+	p.Version = -1
+	p.VersionType = "custom"
+	if err := ValidateConnect(p, 155, false); err != nil {
+		t.Fatalf("expected modded build accepted in non-strict, got %v", err)
+	}
+
+	p = baseConnectPacket()
+	p.Version = 154
+	p.VersionType = "custom"
+	if err := ValidateConnect(p, 155, false); !errors.Is(err, ErrClientOutdated) {
+		t.Fatalf("expected outdated error in non-strict, got %v", err)
+	}
+}
+
 func TestValidateConnect_BuildMinusOneRelaxed(t *testing.T) {
 	p := baseConnectPacket()
 	p.Version = -1
 	p.VersionType = "custom"
-	if err := ValidateConnect(p, -1); err != nil {
+	if err := ValidateConnect(p, -1, true); err != nil {
 		t.Fatalf("expected relaxed validation on build=-1, got %v", err)
 	}
 }
