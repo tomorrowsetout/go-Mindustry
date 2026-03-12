@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +31,7 @@ type NetEvent struct {
 	Detail    string
 	ConnID    int32
 	UUID      string
+	USID      string
 	IP        string
 	Name      string
 }
@@ -62,6 +65,9 @@ type Server struct {
 	// EventManager 事件管理器
 	EventManager *storage.EventManager
 
+	// Optional provider: list of server-side mods for ArcNet compatibility checks.
+	ModsFn func() []string
+
 	BuildVersion  int
 	WorldDataFn   func(*Conn, *protocol.ConnectPacket) ([]byte, error)
 	OnEvent       func(NetEvent)
@@ -79,10 +85,10 @@ type Server struct {
 	// Optional hook: apply client build plans from snapshot.
 	OnBuildPlans func(*Conn, []*protocol.BuildPlan)
 	// Optional hooks: keep building inventories/config synced with world model.
-	OnSetItem      func(buildPos int32, itemID int16, amount int32)
-	OnSetItems     func(buildPos int32, items []protocol.ItemStack)
-	OnSetTileItems func(itemID int16, amount int32, positions []int32)
-	OnClearItems   func(buildPos int32)
+	OnSetItem        func(buildPos int32, itemID int16, amount int32)
+	OnSetItems       func(buildPos int32, items []protocol.ItemStack)
+	OnSetTileItems   func(itemID int16, amount int32, positions []int32)
+	OnClearItems     func(buildPos int32)
 	OnSetLiquid      func(buildPos int32, liquidID int16, amount float32)
 	OnSetLiquids     func(buildPos int32, liquids []protocol.LiquidStack)
 	OnSetTileLiquids func(liquidID int16, amount float32, positions []int32)
@@ -100,17 +106,17 @@ type Server struct {
 	OnRequestItem func(c *Conn, buildPos int32, itemID int16, amount int32) int32
 	// Optional interaction guard. Returns whether this connection can interact
 	// with the target building for the specified action.
-	CanInteractBuildFn   func(c *Conn, buildPos int32, action string) bool
-	OnRemoveQueueBlock   func(x, y int32, breaking bool)
-	OnRotateBlock        func(buildPos int32, direction bool)
+	CanInteractBuildFn    func(c *Conn, buildPos int32, action string) bool
+	OnRemoveQueueBlock    func(x, y int32, breaking bool)
+	OnRotateBlock         func(buildPos int32, direction bool)
 	OnRequestUnitPayload  func(c *Conn, unitID int32, targetID int32) bool
 	OnRequestBuildPayload func(c *Conn, unitID int32, buildPos int32) bool
 	OnPickedUnitPayload   func(c *Conn, unitID int32, targetID int32) bool
 	OnPickedBuildPayload  func(c *Conn, unitID int32, buildPos int32, onGround bool) bool
 	OnRequestDropPayload  func(c *Conn, x, y float32) bool
-	OnPayloadDropped     func(c *Conn, unitID int32, x, y float32)
-	OnUnitEnteredPayload func(c *Conn, unitID int32, buildPos int32)
-	OnTileConfig         func(buildPos int32, value any)
+	OnPayloadDropped      func(c *Conn, unitID int32, x, y float32)
+	OnUnitEnteredPayload  func(c *Conn, unitID int32, buildPos int32)
+	OnTileConfig          func(buildPos int32, value any)
 	// Optional hook: validate/apply player team change from team editor packet.
 	// Return true to allow applying the requested team.
 	OnSetPlayerTeamEditor func(c *Conn, teamID byte) bool
@@ -133,9 +139,12 @@ type Server struct {
 	// Return value is appended entity count.
 	ExtraEntitySnapshotFn func(w *protocol.Writer) (int16, error)
 
-	UdpRetryCount  int
-	UdpRetryDelay  time.Duration
-	UdpFallbackTCP bool
+	UdpRetryCount      int
+	UdpRetryDelay      time.Duration
+	UdpFallbackTCP     bool
+	StrictMode         bool
+	PositionCorrection bool
+	PositionMaxDist    float32
 
 	entitySnapshotIntervalNs atomic.Int64
 	stateSnapshotIntervalNs  atomic.Int64
@@ -198,6 +207,9 @@ func NewServer(addr string, buildVersion int) *Server {
 		UdpRetryCount:       2,
 		UdpRetryDelay:       5 * time.Millisecond,
 		UdpFallbackTCP:      true,
+		StrictMode:          false,
+		PositionCorrection:  true,
+		PositionMaxDist:     48,
 		RespawnDelayFrames:  60,
 		itemDepositCooldown: 500 * time.Millisecond,
 		featureWarned:       map[string]struct{}{},
@@ -324,6 +336,10 @@ func (s *Server) Serve() error {
 			return err
 		}
 		conn := NewConn(c, s.Serial)
+		conn.strictMode = s.StrictMode
+		conn.acceptedAt = time.Now()
+		conn.handshakeDeadline = conn.acceptedAt.Add(15 * time.Second)
+		_ = conn.Conn.SetReadDeadline(conn.handshakeDeadline)
 		conn.id = s.nextID()
 		conn.snapshotLogSampleN.Store(int64(s.SnapshotLogSample()))
 		conn.onSend = func(obj any, packetID int, frameworkID int, size int) {
@@ -367,6 +383,11 @@ func (s *Server) handleConn(c *Conn) {
 	}()
 
 	for {
+		if !c.hasBegunConnecting && !c.handshakeDeadline.IsZero() && time.Now().After(c.handshakeDeadline) {
+			fmt.Printf("[net] handshake timeout id=%d remote=%s\n", c.id, c.RemoteAddr().String())
+			s.emitEvent(c, "handshake_timeout", "", "")
+			return
+		}
 		obj, err := c.ReadObject()
 		if err != nil {
 			if !c.hasConnected && c.hasBegunConnecting && strings.Contains(err.Error(), "item stack length") {
@@ -504,7 +525,83 @@ func (s *Server) isWhitelisted(uuid, usid string) bool {
 	return okUUID || okUSID
 }
 
+func (s *Server) modCompatibilityCheck(clientMods []string) (missing []string, extra []string, incompatible bool) {
+	if s == nil || s.ModsFn == nil {
+		return nil, nil, false
+	}
+	serverMods := s.ModsFn()
+	if len(serverMods) == 0 && len(clientMods) == 0 {
+		return nil, nil, false
+	}
+	missing, extra = diffMods(serverMods, clientMods)
+	return missing, extra, len(missing) > 0 || len(extra) > 0
+}
+
+func diffMods(serverMods, clientMods []string) (missing []string, extra []string) {
+	serverSet := map[string]string{}
+	clientSet := map[string]string{}
+	for _, m := range serverMods {
+		n := normalizeModName(m)
+		if n == "" {
+			continue
+		}
+		if _, ok := serverSet[n]; !ok {
+			serverSet[n] = m
+		}
+	}
+	for _, m := range clientMods {
+		n := normalizeModName(m)
+		if n == "" {
+			continue
+		}
+		if _, ok := clientSet[n]; !ok {
+			clientSet[n] = m
+		}
+	}
+	for n, original := range serverSet {
+		if _, ok := clientSet[n]; !ok {
+			missing = append(missing, original)
+		}
+	}
+	for n, original := range clientSet {
+		if _, ok := serverSet[n]; !ok {
+			extra = append(extra, original)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+	return missing, extra
+}
+
+func normalizeModName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func buildModsKickReason(missing, extra []string) string {
+	var b strings.Builder
+	b.WriteString("[accent]Incompatible mods![]\n\n")
+	if len(missing) > 0 {
+		b.WriteString("Missing:[lightgray]\n> ")
+		b.WriteString(strings.Join(missing, "\n> "))
+		b.WriteString("[]\n")
+	}
+	if len(extra) > 0 {
+		b.WriteString("Unnecessary mods:[lightgray]\n> ")
+		b.WriteString(strings.Join(extra, "\n> "))
+		b.WriteString("[]")
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
+	if c != nil && s.StrictMode && !c.hasBegunConnecting {
+		switch obj.(type) {
+		case *protocol.ConnectPacket, protocol.FrameworkMessage:
+		default:
+			s.emitEvent(c, "strict_preconnect_drop", fmt.Sprintf("%T", obj), "")
+			return
+		}
+	}
 	detail := ""
 	if fromTCP {
 		if c.lastRecvPacketID >= 0 {
@@ -605,6 +702,10 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			return
 		}
+		if !c.handshakeDeadline.IsZero() {
+			_ = c.Conn.SetReadDeadline(time.Time{})
+			c.handshakeDeadline = time.Time{}
+		}
 		v.Name = strings.TrimSpace(v.Name)
 		v.UUID = strings.TrimSpace(v.UUID)
 		v.USID = strings.TrimSpace(v.USID)
@@ -613,7 +714,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if v.Locale == "" {
 			v.Locale = "en"
 		}
-		if err := ValidateConnect(v, s.BuildVersion); err != nil {
+		if err := ValidateConnect(v, s.BuildVersion, s.StrictMode); err != nil {
 			switch {
 			case errors.Is(err, ErrTypeMismatch):
 				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonTypeMismatch})
@@ -681,15 +782,17 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			return
 		}
-		if reason, dup := s.hasDuplicateIdentity(c, v.Name, v.UUID, v.USID); dup {
-			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: reason})
-			if s.DevLogger != nil {
-				s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
-					devlog.StringFld("reason", "duplicate_identity"))
-			} else {
-				fmt.Printf("[net] connect rejected id=%d reason=duplicate_identity kick=%d\n", c.id, reason)
+		if s.StrictMode {
+			if reason, dup := s.hasDuplicateIdentity(c, v.Name, v.UUID, v.USID); dup {
+				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: reason})
+				if s.DevLogger != nil {
+					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
+						devlog.StringFld("reason", "duplicate_identity"))
+				} else {
+					fmt.Printf("[net] connect rejected id=%d reason=duplicate_identity kick=%d\n", c.id, reason)
+				}
+				return
 			}
-			return
 		}
 		ip := c.remoteIP()
 		if s.isRecentlyKicked(v.UUID, ip) {
@@ -700,6 +803,13 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if limit := s.PlayerLimit(); limit > 0 && s.onlinePlayersCount() >= limit && !s.IsOp(v.UUID) {
 			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonPlayerLimit})
 			fmt.Printf("[net] connect rejected id=%d reason=playerLimit current=%d limit=%d\n", c.id, s.onlinePlayersCount(), limit)
+			return
+		}
+		if modsMissing, modsExtra, ok := s.modCompatibilityCheck(v.Mods); ok {
+			reason := buildModsKickReason(modsMissing, modsExtra)
+			_ = c.Send(&protocol.Remote_NetClient_kick_22{Reason: reason})
+			fmt.Printf("[net] connect rejected id=%d reason=mod_incompatible missing=%d extra=%d\n",
+				c.id, len(modsMissing), len(modsExtra))
 			return
 		}
 		if !s.isWhitelisted(v.UUID, v.USID) {
@@ -716,8 +826,18 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// non-official/custom clients.
 		vt := strings.ToLower(strings.TrimSpace(c.versionType))
 		isOfficial := vt == "" || vt == "official" || strings.Contains(vt, "official")
-		c.recvCompatIDs = !isOfficial
-		c.sendCompatIDs = !isOfficial
+		if s.StrictMode && !isOfficial {
+			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonTypeMismatch})
+			fmt.Printf("[net] connect rejected id=%d reason=strictTypeMismatch versionType=%q\n", c.id, v.VersionType)
+			return
+		}
+		if s.StrictMode {
+			c.recvCompatIDs = false
+			c.sendCompatIDs = false
+		} else {
+			c.recvCompatIDs = !isOfficial
+			c.sendCompatIDs = !isOfficial
+		}
 		if c.playerID == 0 {
 			c.playerID = s.nextPlayerID()
 		}
@@ -748,6 +868,14 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		}
 		fmt.Printf("[net] world handshake sent id=%d\n", c.id)
 		s.emitEvent(c, "world_handshake_sent", "", "")
+	case *protocol.Disconnect:
+		reason := strings.TrimSpace(v.Reason)
+		if reason == "" {
+			reason = "client_disconnect"
+		}
+		s.emitEvent(c, "client_disconnect", fmt.Sprintf("%T", v), reason)
+		_ = c.Close()
+		return
 	case *protocol.Remote_NetServer_connectConfirm_47:
 		c.hasConnected = true
 		fmt.Printf("[net] connect confirm id=%d\n", c.id)
@@ -760,16 +888,30 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			s.emitEvent(c, "connect_confirm_client_snapshot", fmt.Sprintf("%T", v), "")
 			s.ensurePostConnectStarted(c)
 		}
-		c.snapX = v.X
-		c.snapY = v.Y
+		if v.SnapshotID < c.lastClientSnapshotID {
+			return
+		}
+		now := time.Now()
+		elapsed := now.Sub(c.lastClientSnapshotAt)
+		if c.lastClientSnapshotAt.IsZero() {
+			elapsed = 16 * time.Millisecond
+		}
+		if elapsed > 1500*time.Millisecond {
+			elapsed = 1500 * time.Millisecond
+		}
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		rawX := v.X
+		rawY := v.Y
+		rawRot := v.Rotation
+		rawVelX := v.XVelocity
+		rawVelY := v.YVelocity
 		c.pointerX = v.PointerX
 		c.pointerY = v.PointerY
 		c.shooting = v.Shooting
 		c.boosting = v.Boosting
 		c.typing = v.Chatting
-		c.snapRotation = v.Rotation
-		c.snapVelX = v.XVelocity
-		c.snapVelY = v.YVelocity
 		prevUnitID := c.unitID
 		if v.Dead {
 			// Only honor client-dead when server agrees the unit is missing or dead.
@@ -819,6 +961,61 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if prevUnitID != 0 && prevUnitID != c.unitID {
 			s.dropPlayerUnitEntity(c, prevUnitID)
 		}
+		ignorePosition := v.Dead || c.unitID == 0
+		if !ignorePosition && v.UnitID != 0 && v.UnitID != c.unitID {
+			ignorePosition = true
+		}
+		applyX := rawX
+		applyY := rawY
+		applyVelX := rawVelX
+		applyVelY := rawVelY
+		corrected := false
+		verifyPosition := s.StrictMode && s.PositionCorrection
+		if !ignorePosition && s.UnitInfoFn != nil {
+			if info, ok := s.UnitInfoFn(c.unitID); ok {
+				maxSpeed := info.MoveSpeed
+				if maxSpeed <= 0 {
+					maxSpeed = 18
+				}
+				maxMove := float32(elapsed.Seconds()) * 60 * maxSpeed * 1.1
+				if maxMove < 0 {
+					maxMove = 0
+				}
+				if verifyPosition {
+					vlen := float32(math.Hypot(float64(applyVelX), float64(applyVelY)))
+					if vlen > maxSpeed && vlen > 0 {
+						scale := maxSpeed / vlen
+						applyVelX *= scale
+						applyVelY *= scale
+					}
+					dx := rawX - info.X
+					dy := rawY - info.Y
+					dist := float32(math.Hypot(float64(dx), float64(dy)))
+					if maxMove > 0 && dist > maxMove {
+						scale := maxMove / dist
+						applyX = info.X + dx*scale
+						applyY = info.Y + dy*scale
+					} else {
+						applyX = rawX
+						applyY = rawY
+					}
+					correctDist := s.PositionMaxDist
+					if correctDist <= 0 {
+						correctDist = 112
+					}
+					ddx := rawX - applyX
+					ddy := rawY - applyY
+					if ddx*ddx+ddy*ddy > correctDist*correctDist {
+						corrected = true
+					}
+				}
+			}
+		}
+		c.snapX = applyX
+		c.snapY = applyY
+		c.snapRotation = rawRot
+		c.snapVelX = applyVelX
+		c.snapVelY = applyVelY
 		c.building = v.Building
 		c.selectedRotation = v.SelectedRotation
 		c.selectedBlockID = -1
@@ -830,9 +1027,18 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				s.OnBuildPlans(c, plans)
 			}
 		}
-		if s.SyncUnitStateFn != nil && c.unitID != 0 {
-			s.SyncUnitStateFn(c.unitID, c.snapX, c.snapY, v.Rotation, v.XVelocity, v.YVelocity)
+		if s.SyncUnitStateFn != nil && c.unitID != 0 && !ignorePosition {
+			s.SyncUnitStateFn(c.unitID, applyX, applyY, rawRot, applyVelX, applyVelY)
 		}
+		if corrected {
+			s.emitEvent(c, "position_correction", "*protocol.Remote_NetServer_clientSnapshot_45",
+				fmt.Sprintf("dx=%.2f dy=%.2f max=%.2f", rawX-applyX, rawY-applyY, s.PositionMaxDist))
+			if u := s.playerUnitEntity(c); u != nil {
+				_ = s.sendEntitySyncTo(c, u)
+			}
+		}
+		c.lastClientSnapshotID = v.SnapshotID
+		c.lastClientSnapshotAt = now
 	case *protocol.Remote_NetClient_sendChatMessage_16:
 		msg := sanitizeChatMessage(v.Message)
 		if msg == "" {
@@ -1433,6 +1639,12 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				m.IsReply = true
 				_ = c.Send(m)
 			}
+		case *protocol.RegisterTCP:
+			// Client-side ACK for RegisterTCP; ignore in server mode.
+		case *protocol.RegisterUDP:
+			// Some clients may send RegisterUDP over TCP; ignore.
+		case *protocol.KeepAlive:
+			// keepalive from client; ignore
 		default:
 			// ignore keepalive
 		}
@@ -1897,9 +2109,6 @@ func (s *Server) SendStatusTo(c *Conn) {
 }
 
 func (s *Server) emitEvent(c *Conn, kind, packet, detail string) {
-	if s.OnEvent == nil {
-		return
-	}
 	stable := func(v string) string {
 		if v == "" {
 			return ""
@@ -1917,10 +2126,38 @@ func (s *Server) emitEvent(c *Conn, kind, packet, detail string) {
 	if c != nil {
 		ev.ConnID = c.id
 		ev.UUID = stable(c.uuid)
+		ev.USID = stable(c.usid)
 		ev.IP = stable(c.remoteIP())
 		ev.Name = stable(c.name)
 	}
-	s.OnEvent(ev)
+	s.emitEventRaw(ev)
+}
+
+func (s *Server) emitAdminEvent(kind, detail, uuid, usid, ip, name string) {
+	stable := func(v string) string {
+		if v == "" {
+			return ""
+		}
+		b := make([]byte, len(v))
+		copy(b, v)
+		return string(b)
+	}
+	ev := NetEvent{
+		Timestamp: time.Now().UTC(),
+		Kind:      stable(kind),
+		Detail:    stable(detail),
+		UUID:      stable(uuid),
+		USID:      stable(usid),
+		IP:        stable(ip),
+		Name:      stable(name),
+	}
+	s.emitEventRaw(ev)
+}
+
+func (s *Server) emitEventRaw(ev NetEvent) {
+	if s.OnEvent != nil {
+		s.OnEvent(ev)
+	}
 
 	// 也分发到事件管理器
 	if s.EventManager != nil {
@@ -1932,6 +2169,7 @@ func (s *Server) emitEvent(c *Conn, kind, packet, detail string) {
 			Detail:    ev.Detail,
 			ConnID:    ev.ConnID,
 			UUID:      ev.UUID,
+			USID:      ev.USID,
 			IP:        ev.IP,
 			Name:      ev.Name,
 		}
@@ -1982,6 +2220,9 @@ type Conn struct {
 	versionType            string
 	color                  int32
 	teamID                 byte
+	strictMode             bool
+	acceptedAt             time.Time
+	handshakeDeadline      time.Time
 	snapX                  float32
 	snapY                  float32
 	pointerX               float32
@@ -2004,6 +2245,8 @@ type Conn struct {
 	snapRotation           float32
 	snapVelX               float32
 	snapVelY               float32
+	lastClientSnapshotID   int32
+	lastClientSnapshotAt   time.Time
 	lastRecvPacketID       int
 	lastRecvFrameworkID    int
 	closed                 chan struct{}
@@ -2043,6 +2286,7 @@ type UnitInfo struct {
 	MaxHealth float32
 	TeamID    byte
 	TypeID    int16
+	MoveSpeed float32
 }
 
 func NewConn(c net.Conn, serial *Serializer) *Conn {
@@ -2090,7 +2334,7 @@ func (c *Conn) ReadObject() (any, error) {
 		obj, err := c.serial.ReadObjectMode(r, c.recvCompatIDs)
 		if err != nil {
 			// Early auto-fallback: probe opposite decode mode for mixed-ID clients.
-			if !c.hasConnected {
+			if !c.hasConnected && !c.strictMode {
 				if altObj, altErr := c.serial.ReadObjectMode(bytesReader(payload), !c.recvCompatIDs); altErr == nil {
 					c.recvCompatIDs = !c.recvCompatIDs
 					fmt.Printf("[net] rx mode switch id=%d recvCompat=%v packet_id=%d\n", c.id, c.recvCompatIDs, c.lastRecvPacketID)
@@ -2102,7 +2346,7 @@ func (c *Conn) ReadObject() (any, error) {
 				return nil, err
 			}
 		}
-		if ignored, ok := obj.(*CompatIgnoredPacket); ok && !c.hasConnected {
+		if ignored, ok := obj.(*CompatIgnoredPacket); ok && !c.hasConnected && !c.strictMode {
 			if altObj, altErr := c.serial.ReadObjectMode(bytesReader(payload), !c.recvCompatIDs); altErr == nil {
 				c.recvCompatIDs = !c.recvCompatIDs
 				fmt.Printf("[net] rx mode switch(id=ignored) id=%d recvCompat=%v packet_id=%d ignored=%d\n", c.id, c.recvCompatIDs, c.lastRecvPacketID, ignored.ID)
@@ -2252,6 +2496,14 @@ func (c *Conn) UUID() string {
 
 func (c *Conn) USID() string {
 	return c.usid
+}
+
+func (c *Conn) Name() string {
+	return c.name
+}
+
+func (c *Conn) RemoteIP() string {
+	return c.remoteIP()
 }
 
 func (c *Conn) VersionType() string {
@@ -3438,6 +3690,16 @@ func (s *Server) broadcastEntitySync(entity protocol.UnitSyncEntity) {
 	}
 }
 
+func (s *Server) sendEntitySyncTo(c *Conn, entity protocol.UnitSyncEntity) error {
+	if s == nil || c == nil || entity == nil {
+		return nil
+	}
+	return c.Send(&protocol.Remote_NetClient_entitySnapshot_32{
+		Amount: 1,
+		Data:   s.serializeEntity(entity),
+	})
+}
+
 // serializeEntity 序列化实体为字节数组
 func (s *Server) serializeEntity(entity protocol.UnitSyncEntity) []byte {
 	w := protocol.NewWriter()
@@ -3662,6 +3924,7 @@ func (s *Server) KickByID(id int32, reason string) bool {
 	if reason == "" {
 		reason = "kicked by admin"
 	}
+	s.emitEvent(target, "kick", "", reason)
 	_ = target.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
 	s.registerRecentKick(target.uuid, target.remoteIP(), 30*time.Second)
 	s.closeConnLater(target, 250*time.Millisecond)
@@ -3708,6 +3971,7 @@ func (s *Server) BanUUID(uuid, reason string) int {
 	if reason == "" {
 		reason = "banned by admin"
 	}
+	s.emitAdminEvent("ban_uuid", reason, uuid, "", "", "")
 	s.mu.Lock()
 	s.banUUID[uuid] = reason
 	var targets []*Conn
@@ -3732,6 +3996,7 @@ func (s *Server) BanIP(ip, reason string) int {
 	if reason == "" {
 		reason = "banned by admin"
 	}
+	s.emitAdminEvent("ban_ip", reason, "", "", ip, "")
 	s.mu.Lock()
 	s.banIP[ip] = reason
 	var targets []*Conn
@@ -3751,21 +4016,25 @@ func (s *Server) BanIP(ip, reason string) int {
 
 func (s *Server) UnbanUUID(uuid string) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if _, ok := s.banUUID[uuid]; !ok {
+		s.mu.Unlock()
 		return false
 	}
 	delete(s.banUUID, uuid)
+	s.mu.Unlock()
+	s.emitAdminEvent("unban_uuid", "", uuid, "", "", "")
 	return true
 }
 
 func (s *Server) UnbanIP(ip string) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if _, ok := s.banIP[ip]; !ok {
+		s.mu.Unlock()
 		return false
 	}
 	delete(s.banIP, ip)
+	s.mu.Unlock()
+	s.emitAdminEvent("unban_ip", "", "", "", ip, "")
 	return true
 }
 
