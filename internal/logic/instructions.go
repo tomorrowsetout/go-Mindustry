@@ -39,6 +39,18 @@ const (
 	NOT
 	// CMP compares two values.
 	CMP
+	// EQ compares equality (1 if equal else 0).
+	EQ
+	// NEQ compares inequality (1 if not equal else 0).
+	NEQ
+	// LT compares less-than (1 if a < b else 0).
+	LT
+	// LE compares less-or-equal (1 if a <= b else 0).
+	LE
+	// GT compares greater-than (1 if a > b else 0).
+	GT
+	// GE compares greater-or-equal (1 if a >= b else 0).
+	GE
 	// JMP jumps to a label.
 	JMP
 	// JZ jumps if zero.
@@ -82,6 +94,12 @@ var instructionNames = map[Opcode]string{
 	XOR:    "xor",
 	NOT:    "not",
 	CMP:    "cmp",
+	EQ:     "eq",
+	NEQ:    "neq",
+	LT:     "lt",
+	LE:     "le",
+	GT:     "gt",
+	GE:     "ge",
 	JMP:    "jmp",
 	JZ:     "jz",
 	JNZ:    "jnz",
@@ -107,8 +125,8 @@ func (op Opcode) String() string {
 
 // Instruction represents a single VM instruction.
 type Instruction struct {
-	Opcode Opcode   // The operation code
-	Args   []int32  // Operation arguments (register indices or values)
+	Opcode Opcode  // The operation code
+	Args   []int32 // Operation arguments (register indices or values)
 }
 
 // String returns a string representation of the instruction.
@@ -131,6 +149,19 @@ type VM struct {
 	Outputs      map[string]int32 // Output values
 	Halted       bool             // Whether the VM has halted
 	Error        error            // Last error
+}
+
+const regRefBase int32 = -1 << 30
+
+func encodeRegRef(idx int32) int32 {
+	return regRefBase - idx
+}
+
+func decodeRegRef(arg int32) (int32, bool) {
+	if arg <= regRefBase {
+		return regRefBase - arg, true
+	}
+	return 0, false
 }
 
 // NewVM creates a new virtual machine.
@@ -245,7 +276,78 @@ func (vm *VM) Step() error {
 		if len(inst.Args) >= 2 {
 			val1 := vm.getValue(inst.Args[0])
 			val2 := vm.getValue(inst.Args[1])
-			vm.SetRegister("_cmp", cmp(val1, val2))
+			if len(inst.Args) >= 3 {
+				reg := vm.getRegisterName(inst.Args[2])
+				vm.SetRegister(reg, cmp(val1, val2))
+			} else {
+				vm.SetRegister("_cmp", cmp(val1, val2))
+			}
+		}
+	case EQ:
+		if len(inst.Args) >= 3 {
+			reg := vm.getRegisterName(inst.Args[0])
+			val1 := vm.getValue(inst.Args[1])
+			val2 := vm.getValue(inst.Args[2])
+			if val1 == val2 {
+				vm.SetRegister(reg, 1)
+			} else {
+				vm.SetRegister(reg, 0)
+			}
+		}
+	case NEQ:
+		if len(inst.Args) >= 3 {
+			reg := vm.getRegisterName(inst.Args[0])
+			val1 := vm.getValue(inst.Args[1])
+			val2 := vm.getValue(inst.Args[2])
+			if val1 != val2 {
+				vm.SetRegister(reg, 1)
+			} else {
+				vm.SetRegister(reg, 0)
+			}
+		}
+	case LT:
+		if len(inst.Args) >= 3 {
+			reg := vm.getRegisterName(inst.Args[0])
+			val1 := vm.getValue(inst.Args[1])
+			val2 := vm.getValue(inst.Args[2])
+			if val1 < val2 {
+				vm.SetRegister(reg, 1)
+			} else {
+				vm.SetRegister(reg, 0)
+			}
+		}
+	case LE:
+		if len(inst.Args) >= 3 {
+			reg := vm.getRegisterName(inst.Args[0])
+			val1 := vm.getValue(inst.Args[1])
+			val2 := vm.getValue(inst.Args[2])
+			if val1 <= val2 {
+				vm.SetRegister(reg, 1)
+			} else {
+				vm.SetRegister(reg, 0)
+			}
+		}
+	case GT:
+		if len(inst.Args) >= 3 {
+			reg := vm.getRegisterName(inst.Args[0])
+			val1 := vm.getValue(inst.Args[1])
+			val2 := vm.getValue(inst.Args[2])
+			if val1 > val2 {
+				vm.SetRegister(reg, 1)
+			} else {
+				vm.SetRegister(reg, 0)
+			}
+		}
+	case GE:
+		if len(inst.Args) >= 3 {
+			reg := vm.getRegisterName(inst.Args[0])
+			val1 := vm.getValue(inst.Args[1])
+			val2 := vm.getValue(inst.Args[2])
+			if val1 >= val2 {
+				vm.SetRegister(reg, 1)
+			} else {
+				vm.SetRegister(reg, 0)
+			}
 		}
 
 	case JMP:
@@ -343,10 +445,8 @@ func (vm *VM) Step() error {
 
 // getValue returns the value for an argument (register or immediate).
 func (vm *VM) getValue(arg int32) int32 {
-	// If negative, it's a register index; otherwise it's an immediate value
-	if arg < 0 {
-		// Convert to register name
-		regName := fmt.Sprintf("r%d", -arg)
+	if idx, ok := decodeRegRef(arg); ok {
+		regName := fmt.Sprintf("r%d", idx)
 		return vm.GetRegister(regName)
 	}
 	return arg

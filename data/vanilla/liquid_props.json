@@ -18,8 +18,19 @@
     "temperature": 0.25
   },
   {
+    "liquid": "neoplasm",
+    "heatCapacity": 0.4,
+    "temperature": 0.54,
+    "flammability": 0,
+    "blockReactive": false
+  },
+  {
     "liquid": "arkycite",
     "flammability": 0.4
+  },
+  {
+    "liquid": "gallium",
+    "coolant": false
   },
   {
     "liquid": "ozone",

@@ -2173,8 +2173,23 @@ func (s *Server) emitEventRaw(ev NetEvent) {
 			IP:        ev.IP,
 			Name:      ev.Name,
 		}
-		// todo: 映射 kind 到 Trigger
+		if trg, ok := mapEventKindToTrigger(ev.Kind); ok {
+			stgEv.Trigger = trg
+		}
 		s.EventManager.Dispatch(stgEv)
+	}
+}
+
+func mapEventKindToTrigger(kind string) (storage.Trigger, bool) {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "tcp_accept", "connect_packet", "world_handshake_sent":
+		return storage.TriggerPlayerConnect, true
+	case "connect_confirm", "connect_confirm_client_snapshot":
+		return storage.TriggerPlayerJoin, true
+	case "client_disconnect", "tcp_closed", "handshake_timeout", "kick":
+		return storage.TriggerPlayerLeave, true
+	default:
+		return 0, false
 	}
 }
 

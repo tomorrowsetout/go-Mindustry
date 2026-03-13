@@ -2231,6 +2231,55 @@ func main() {
 		apiSrv.SetOpsChangedFunc(func() {
 			saveOps()
 		})
+		apiSrv.SetConfigFunc(func() any {
+			out := cfg
+			out.API.Key = ""
+			out.API.Keys = nil
+			out.Storage.DSN = ""
+			return out
+		})
+		apiSrv.SetMapListFunc(func() ([]string, error) {
+			return listWorldMaps()
+		})
+		apiSrv.SetMapStatusFunc(func() map[string]any {
+			cur := state.get()
+			name := worldstream.TrimMapName(filepath.Base(cur))
+			return map[string]any{
+				"path": cur,
+				"name": name,
+			}
+		})
+		apiSrv.SetMapLoadFunc(func(choice string) (map[string]any, error) {
+			prev := state.get()
+			next, err := resolveWorldSelection(choice)
+			if err != nil {
+				return nil, err
+			}
+			state.set(next)
+			loadWorldModel(next)
+			if st, ok := recorder.(storage.Store); ok && st != nil {
+				_ = st.Log("map_change", map[string]any{
+					"ts":   time.Now().UTC().Format(time.RFC3339Nano),
+					"from": prev,
+					"to":   next,
+					"by":   "api",
+				})
+			}
+			reloaded, failed := srv.ReloadWorldLiveForAll()
+			return map[string]any{
+				"from":     prev,
+				"to":       next,
+				"reloaded": reloaded,
+				"failed":   failed,
+			}, nil
+		})
+		apiSrv.SetKeysChangedFunc(func(keys []string) {
+			cfg.API.Keys = keys
+			cfg.API.Key = ""
+			if err := saveConfig(); err != nil {
+				log.Error("save api keys failed", logging.Field{Key: "error", Value: err.Error()})
+			}
+		})
 	}
 	removeEntityByID := func(id int32) bool {
 		_, ok := wld.RemoveEntity(id)

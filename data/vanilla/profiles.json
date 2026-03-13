@@ -381,6 +381,25 @@
       "prefer_buildings": false
     },
     {
+      "name": "mono",
+      "fire_mode": "default",
+      "range": 0,
+      "damage": 0,
+      "interval": 0,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "burst_shots": 0,
+      "burst_spacing": 0,
+      "spread": 0,
+      "target_air": false,
+      "target_ground": false,
+      "target_priority": "none",
+      "hit_buildings": false,
+      "prefer_buildings": false
+    },
+    {
       "name": "poly",
       "fire_mode": "projectile",
       "range": 130,
@@ -435,6 +454,25 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "oct",
+      "fire_mode": "default",
+      "range": 0,
+      "damage": 0,
+      "interval": 0,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "burst_shots": 0,
+      "burst_spacing": 0,
+      "spread": 0,
+      "target_air": false,
+      "target_ground": false,
+      "target_priority": "none",
+      "hit_buildings": false,
       "prefer_buildings": false
     },
     {
@@ -682,6 +720,25 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "block",
+      "fire_mode": "default",
+      "range": 0,
+      "damage": 0,
+      "interval": 0,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "burst_shots": 0,
+      "burst_spacing": 0,
+      "spread": 0,
+      "target_air": false,
+      "target_ground": false,
+      "target_priority": "none",
+      "hit_buildings": false,
       "prefer_buildings": false
     }
   ],

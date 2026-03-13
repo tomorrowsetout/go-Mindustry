@@ -4656,16 +4656,37 @@ func (w *World) stepLiquids(dt float32) {
 	if w.model == nil || w.blockNamesByID == nil || dt <= 0 {
 		return
 	}
-	if w.tick%2 != 0 {
+	tickDelta := dt * ticksPerSecond(w.tps)
+	if tickDelta <= 0 {
 		return
 	}
 	changes := map[int32]struct{}{}
-	moves := 0
-	const maxMovesPerStep = 240
-	for i := range w.model.Tiles {
-		if moves >= maxMovesPerStep {
-			break
+	fullSteps := int(tickDelta)
+	frac := tickDelta - float32(fullSteps)
+	for i := 0; i < fullSteps; i++ {
+		w.stepLiquidsTick(1, changes)
+	}
+	if frac > 0 {
+		w.stepLiquidsTick(frac, changes)
+	}
+	for pos := range changes {
+		t, ok := w.tileForPosLocked(pos)
+		if !ok || t == nil || t.Build == nil {
+			continue
 		}
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:         EntityEventBuildLiquids,
+			BuildPos:     pos,
+			BuildLiquids: append([]LiquidStack(nil), t.Build.Liquids...),
+		})
+	}
+}
+
+func (w *World) stepLiquidsTick(scale float32, changes map[int32]struct{}) {
+	if w.model == nil || w.blockNamesByID == nil || scale <= 0 {
+		return
+	}
+	for i := range w.model.Tiles {
 		t := &w.model.Tiles[i]
 		if t == nil || t.Block == 0 || t.Build == nil || t.Build.Health <= 0 {
 			continue
@@ -4713,6 +4734,10 @@ func (w *World) stepLiquids(dt float32) {
 			}
 			continue
 		}
+		if isJunction {
+			// junctions are passive pass-through blocks; do not actively push liquids.
+			continue
+		}
 		if len(t.Build.Liquids) == 0 {
 			continue
 		}
@@ -4722,45 +4747,46 @@ func (w *World) stepLiquids(dt float32) {
 		}
 		if isBridge {
 			if props.PowerUse > 0 {
-				if !w.consumePowerAtLocked(pos, powerUseAmount(props.PowerUse, dt)) {
+				if !w.consumePowerAtLocked(pos, powerUseAmount(props.PowerUse, scale/ticksPerSecond(w.tps))) {
 					continue
 				}
 			}
 			if dst := w.liquidBridgeTargetLocked(t); dst != nil {
-				moved := w.moveLiquidToLocked(t, dst, srcLiquid, props, w.liquidPropsForTileLocked(dst))
+				moved := w.moveLiquidToLocked(t, dst, srcLiquid, props, w.liquidPropsForTileLocked(dst), scale)
 				if moved > 0 {
 					changes[pos] = struct{}{}
 					changes[packTilePos(dst.X, dst.Y)] = struct{}{}
-					moves++
 				}
-				continue
-			}
-		}
-		if isConduit {
-			if dst := w.liquidConduitForwardLocked(t); dst != nil {
-				moved := w.moveLiquidToLocked(t, dst, srcLiquid, props, w.liquidPropsForTileLocked(dst))
-				if moved > 0 {
-					changes[pos] = struct{}{}
-					changes[packTilePos(dst.X, dst.Y)] = struct{}{}
-					moves++
-				}
-			} else if !isArmoredConduitName(blockName) && srcAmt > 0 {
-				// leak when unconnected
-				leak := minf(srcAmt, props.LiquidCapacity*0.05*dt)
-				if leak > 0 {
-					_ = w.removeBuildingLiquidLocked(pos, int16(srcLiquid), leak)
-					changes[pos] = struct{}{}
+			} else {
+				neighbors := w.adjacentBuildingsLocked(t.X, t.Y)
+				for _, nb := range neighbors {
+					moved := w.dumpLiquidToLocked(t, nb, srcLiquid, props, w.liquidPropsForTileLocked(nb), 1.0, scale)
+					if moved > 0 {
+						changes[pos] = struct{}{}
+						changes[packTilePos(nb.X, nb.Y)] = struct{}{}
+					}
 				}
 			}
 			continue
 		}
-		if isJunction {
-			if dst := w.liquidJunctionForwardLocked(t); dst != nil {
-				moved := w.moveLiquidToLocked(t, dst, srcLiquid, props, w.liquidPropsForTileLocked(dst))
+		if isConduit {
+			if dst := w.liquidConduitForwardLocked(t); dst != nil {
+				moved := w.moveLiquidToLocked(t, dst, srcLiquid, props, w.liquidPropsForTileLocked(dst), scale)
 				if moved > 0 {
 					changes[pos] = struct{}{}
 					changes[packTilePos(dst.X, dst.Y)] = struct{}{}
-					moves++
+				}
+			} else if !isArmoredConduitName(blockName) {
+				dir := int(t.Build.Rotation)
+				if forward := w.tileAtDirLocked(t, dir); forward != nil && forward.Build == nil && forward.Block == 0 && w.floorLiquidAtLocked(forward) == 0 {
+					leak := srcAmt / 1.5 * scale
+					if leak > srcAmt {
+						leak = srcAmt
+					}
+					if leak > 0 {
+						_ = w.removeBuildingLiquidLocked(pos, int16(srcLiquid), leak)
+						changes[pos] = struct{}{}
+					}
 				}
 			}
 			continue
@@ -4770,27 +4796,12 @@ func (w *World) stepLiquids(dt float32) {
 			continue
 		}
 		for _, nb := range neighbors {
-			if moves >= maxMovesPerStep {
-				break
-			}
-			moved := w.dumpLiquidToLocked(t, nb, srcLiquid, props, w.liquidPropsForTileLocked(nb), 2.0)
+			moved := w.dumpLiquidToLocked(t, nb, srcLiquid, props, w.liquidPropsForTileLocked(nb), 2.0, scale)
 			if moved > 0 {
 				changes[pos] = struct{}{}
 				changes[packTilePos(nb.X, nb.Y)] = struct{}{}
-				moves++
 			}
 		}
-	}
-	for pos := range changes {
-		t, ok := w.tileForPosLocked(pos)
-		if !ok || t == nil || t.Build == nil {
-			continue
-		}
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:         EntityEventBuildLiquids,
-			BuildPos:     pos,
-			BuildLiquids: append([]LiquidStack(nil), t.Build.Liquids...),
-		})
 	}
 }
 
@@ -5499,6 +5510,18 @@ func (w *World) liquidPropsForTileLocked(t *Tile) BlockProps {
 	return defaultLiquidPropsForName(blockName)
 }
 
+func (w *World) liquidPropsForIDLocked(id LiquidID) LiquidProps {
+	if id <= 0 {
+		return defaultLiquidProps()
+	}
+	if w != nil && w.liquidPropsByID != nil {
+		if p, ok := w.liquidPropsByID[int16(id)]; ok {
+			return p
+		}
+	}
+	return defaultLiquidProps()
+}
+
 func (w *World) blockNameForTileLocked(t *Tile) string {
 	if t == nil {
 		return ""
@@ -5546,8 +5569,8 @@ func (w *World) liquidDestinationLocked(source *Tile, start *Tile, liquidID Liqu
 	return cur
 }
 
-func (w *World) dumpLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcProps BlockProps, dstProps BlockProps, scaling float32) float32 {
-	if src == nil || dst == nil || liquidID == 0 || srcProps.LiquidCapacity <= 0 || dstProps.LiquidCapacity <= 0 {
+func (w *World) dumpLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcProps BlockProps, dstProps BlockProps, scaling float32, tickScale float32) float32 {
+	if src == nil || dst == nil || liquidID == 0 || srcProps.LiquidCapacity <= 0 || dstProps.LiquidCapacity <= 0 || tickScale <= 0 {
 		return 0
 	}
 	if scaling <= 0 {
@@ -5571,6 +5594,7 @@ func (w *World) dumpLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcP
 		return 0
 	}
 	amount := (srcFill - dstFill) * srcProps.LiquidCapacity / scaling
+	amount *= tickScale
 	if amount <= 0 {
 		return 0
 	}
@@ -5597,8 +5621,8 @@ func (w *World) dumpLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcP
 	return added
 }
 
-func (w *World) moveLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcProps BlockProps, dstProps BlockProps) float32 {
-	if src == nil || dst == nil || liquidID == 0 || srcProps.LiquidCapacity <= 0 || dstProps.LiquidCapacity <= 0 {
+func (w *World) moveLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcProps BlockProps, dstProps BlockProps, tickScale float32) float32 {
+	if src == nil || dst == nil || liquidID == 0 || srcProps.LiquidCapacity <= 0 || dstProps.LiquidCapacity <= 0 || tickScale <= 0 {
 		return 0
 	}
 	dst = w.liquidDestinationLocked(src, dst, liquidID)
@@ -5612,14 +5636,23 @@ func (w *World) moveLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcP
 	dstAmt := w.buildingLiquidAmountLocked(dst, int16(liquidID))
 	if !w.liquidAcceptsLocked(dst, src, "", w.blockNameForTileLocked(dst), liquidID) {
 		// reactive interaction when incompatible liquids are present
-		if dstAmt > 0 {
+		otherLiquid, otherAmt := liquidCurrentLocked(dst)
+		if otherLiquid != 0 && otherLiquid != liquidID {
 			srcFill := srcAmt / srcProps.LiquidCapacity
-			dstFill := dstAmt / dstProps.LiquidCapacity
+			dstFill := otherAmt / dstProps.LiquidCapacity
 			if srcFill > 0.1 && dstFill > 0.1 {
-				react := minf(srcAmt, dstAmt) * 0.02
-				if react > 0 {
-					_ = w.removeBuildingLiquidLocked(packTilePos(src.X, src.Y), int16(liquidID), react)
-					_ = w.removeBuildingLiquidLocked(packTilePos(dst.X, dst.Y), int16(liquidID), react)
+				srcL := w.liquidPropsForIDLocked(liquidID)
+				dstL := w.liquidPropsForIDLocked(otherLiquid)
+				if srcL.BlockReactive && dstL.BlockReactive {
+					if (dstL.Flammability > 0.3 && srcL.Temperature > 0.7) || (srcL.Flammability > 0.3 && dstL.Temperature > 0.7) {
+						w.applyDamageToBuilding(packTilePos(src.X, src.Y), 1*tickScale)
+						w.applyDamageToBuilding(packTilePos(dst.X, dst.Y), 1*tickScale)
+					} else if (srcL.Temperature > 0.7 && dstL.Temperature < 0.55) || (dstL.Temperature > 0.7 && srcL.Temperature < 0.55) {
+						react := minf(srcAmt, 0.7*tickScale)
+						if react > 0 {
+							_ = w.removeBuildingLiquidLocked(packTilePos(src.X, src.Y), int16(liquidID), react)
+						}
+					}
 				}
 			}
 		}
@@ -5632,7 +5665,7 @@ func (w *World) moveLiquidToLocked(src *Tile, dst *Tile, liquidID LiquidID, srcP
 	ofract := dstAmt / dstProps.LiquidCapacity
 	fract := (srcAmt / srcProps.LiquidCapacity) * pressure
 	diff := clampf(fract-ofract, 0, 1)
-	flow := diff * srcProps.LiquidCapacity
+	flow := diff * srcProps.LiquidCapacity * tickScale
 	if flow > srcAmt {
 		flow = srcAmt
 	}
@@ -6790,6 +6823,22 @@ func (w *World) nearbyDirLocked(t *Tile, dir int) *Tile {
 	return nil
 }
 
+func (w *World) tileAtDirLocked(t *Tile, dir int) *Tile {
+	if t == nil || w.model == nil {
+		return nil
+	}
+	dx, dy := dirToDelta(dir)
+	nx, ny := t.X+dx, t.Y+dy
+	if !w.model.InBounds(nx, ny) {
+		return nil
+	}
+	nt, err := w.model.TileAt(nx, ny)
+	if err != nil {
+		return nil
+	}
+	return nt
+}
+
 func rangesOverlap(minA, maxA, minB, maxB int) bool {
 	return maxA >= minB && maxB >= minA
 }
@@ -7718,7 +7767,39 @@ func mergeUnitProfile(p *weaponProfile, u vanillaUnitProfile) {
 		return
 	}
 	if strings.TrimSpace(u.FireMode) != "" {
-		p.FireMode = strings.TrimSpace(u.FireMode)
+		mode := strings.TrimSpace(u.FireMode)
+		if strings.EqualFold(mode, "default") {
+			// Keep defaults and allow map overrides to apply later.
+			return
+		}
+		p.FireMode = mode
+		if strings.EqualFold(mode, "none") {
+			// Explicitly clear weapon stats for units with no weapons.
+			p.Range = 0
+			p.Damage = 0
+			p.Interval = 0
+			p.BulletType = 0
+			p.BulletSpeed = 0
+			p.SplashRadius = 0
+			p.SlowSec = 0
+			p.SlowMul = 0
+			p.Pierce = 0
+			p.ChainCount = 0
+			p.ChainRange = 0
+			p.FragmentCount = 0
+			p.FragmentSpread = 0
+			p.FragmentSpeed = 0
+			p.FragmentLife = 0
+			p.BurstShots = 0
+			p.BurstSpacing = 0
+			p.Spread = 0
+			p.PreferBuildings = false
+			p.TargetAir = false
+			p.TargetGround = false
+			p.TargetPriority = "none"
+			p.HitBuildings = false
+			return
+		}
 	}
 	if u.Range > 0 {
 		p.Range = u.Range

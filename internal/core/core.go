@@ -17,23 +17,27 @@ import (
 // Core1 - Game Loop 核心（主线程）
 // 必须运行在单个核心上，处理 60 TPS 的实时游戏逻辑
 type Core1 struct {
-	name      string
-	config    Config
-	running   atomic.Bool
-	tickFn    func(tick uint64, delta time.Duration)
+	name    string
+	config  Config
+	running atomic.Bool
+	tickFn  func(tick uint64, delta time.Duration)
 }
 
 // Core2 - IO Core（第二核心）
 // 处理所有 IO 密集型任务：网络、存档、Mod、Storage、WorldStream
 type Core2 struct {
-	name      string
-	messages  chan Message
-	workerCount int
-	wg        sync.WaitGroup
-	running   atomic.Bool
-	stats     *Stats
-	serverCore atomic.Value // *ServerCore
-	recorder  storage.Recorder
+	name              string
+	messages          chan Message
+	workerCount       int
+	wg                sync.WaitGroup
+	running           atomic.Bool
+	stats             *Stats
+	serverCore        atomic.Value // *ServerCore
+	recorder          storage.Recorder
+	onPacketIncoming  func(*PacketMessage)
+	onPacketOutgoing  func(*PacketMessage)
+	onConnectionOpen  func(*ConnectionMessage)
+	onConnectionClose func(*ConnectionMessage)
 }
 
 // Config 是核心配置（简化版，只用于Core2）
@@ -173,6 +177,18 @@ func (c2 *Core2) Start() {
 	}
 }
 
+// SetPacketHandlers sets optional handlers for packet messages.
+func (c2 *Core2) SetPacketHandlers(incoming, outgoing func(*PacketMessage)) {
+	c2.onPacketIncoming = incoming
+	c2.onPacketOutgoing = outgoing
+}
+
+// SetConnectionHandlers sets optional handlers for connection messages.
+func (c2 *Core2) SetConnectionHandlers(open, close func(*ConnectionMessage)) {
+	c2.onConnectionOpen = open
+	c2.onConnectionClose = close
+}
+
 // worker IO Core 的工作协程
 func (c2 *Core2) worker(id int) {
 	defer c2.wg.Done()
@@ -227,17 +243,21 @@ func (c2 *Core2) handleConnectionMessage(m *ConnectionMessage) {
 
 // handleConnectionOpen 处理连接打开
 func (c2 *Core2) handleConnectionOpen(m *ConnectionMessage) {
-	// TODO: 实现连接打开逻辑
-	// 例如：记录连接事件、初始化连接状态等
-	fmt.Printf("[Core2 %s] Connection opened: connID=%d, UUID=%s, IP=%s\n", 
+	if c2.onConnectionOpen != nil {
+		c2.onConnectionOpen(m)
+		return
+	}
+	fmt.Printf("[Core2 %s] Connection opened: connID=%d, UUID=%s, IP=%s\n",
 		c2.name, m.ConnID, m.UUID, m.IP)
 }
 
 // handleConnectionClose 处理连接关闭
 func (c2 *Core2) handleConnectionClose(m *ConnectionMessage) {
-	// TODO: 实现连接关闭逻辑
-	// 例如：清理连接资源、记录断开事件等
-	fmt.Printf("[Core2 %s] Connection closed: connID=%d, UUID=%s, IP=%s\n", 
+	if c2.onConnectionClose != nil {
+		c2.onConnectionClose(m)
+		return
+	}
+	fmt.Printf("[Core2 %s] Connection closed: connID=%d, UUID=%s, IP=%s\n",
 		c2.name, m.ConnID, m.UUID, m.IP)
 }
 
@@ -270,7 +290,7 @@ func (c2 *Core2) handleModLoad(m *ModMessage) {
 
 	// TODO: 实现 Mod 加载逻辑
 	// 根据 ModType (java/js/go/node) 加载不同的 Mod
-	fmt.Printf("[Core2 %s] Loading mod: name=%s, type=%s, path=%s\n", 
+	fmt.Printf("[Core2 %s] Loading mod: name=%s, type=%s, path=%s\n",
 		c2.name, m.Name, m.ModType, m.Path)
 
 	// 模拟加载成功
@@ -288,7 +308,7 @@ func (c2 *Core2) handleModUnload(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 卸载逻辑
-	fmt.Printf("[Core2 %s] Unloading mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Unloading mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟卸载成功
@@ -305,7 +325,7 @@ func (c2 *Core2) handleModStart(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 启动逻辑
-	fmt.Printf("[Core2 %s] Starting mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Starting mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟启动成功
@@ -322,7 +342,7 @@ func (c2 *Core2) handleModStop(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 停止逻辑
-	fmt.Printf("[Core2 %s] Stopping mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Stopping mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟停止成功
@@ -339,7 +359,7 @@ func (c2 *Core2) handleModReload(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 重新加载逻辑
-	fmt.Printf("[Core2 %s] Reloading mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Reloading mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟重新加载成功
@@ -446,17 +466,21 @@ func (c2 *Core2) handlePacketMessage(m *PacketMessage) {
 
 // handlePacketIncoming 处理 incoming 包
 func (c2 *Core2) handlePacketIncoming(m *PacketMessage) {
-	// TODO: 实现 incoming 包处理
-	// 例如：解码包、分发到游戏逻辑等
-	fmt.Printf("[Core2 %s] Incoming packet: connID=%d, packet=%T\n", 
+	if c2.onPacketIncoming != nil {
+		c2.onPacketIncoming(m)
+		return
+	}
+	fmt.Printf("[Core2 %s] Incoming packet: connID=%d, packet=%T\n",
 		c2.name, m.ConnID, m.Packet)
 }
 
 // handlePacketOutgoing 处理 outgoing 包
 func (c2 *Core2) handlePacketOutgoing(m *PacketMessage) {
-	// TODO: 实现 outgoing 包处理
-	// 例如：编码包、发送到网络等
-	fmt.Printf("[Core2 %s] Outgoing packet: connID=%d, packet=%T\n", 
+	if c2.onPacketOutgoing != nil {
+		c2.onPacketOutgoing(m)
+		return
+	}
+	fmt.Printf("[Core2 %s] Outgoing packet: connID=%d, packet=%T\n",
 		c2.name, m.ConnID, m.Packet)
 }
 

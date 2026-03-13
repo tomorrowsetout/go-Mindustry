@@ -12,21 +12,30 @@ import (
 
 // LogicExecutor executes Mindustry logic programs.
 type LogicExecutor struct {
-	Program     *Program        // Parsed program
-	VM          *VM             // Virtual machine
-	Instructions []Instruction   // Generated instructions
-	inputs      map[string]int32 // Input values
-	outputs     []string        // Output log
+	Program      *Program         // Parsed program
+	VM           *VM              // Virtual machine
+	Instructions []Instruction    // Generated instructions
+	inputs       map[string]int32 // Input values
+	outputs      []string         // Output log
+	regIndex     map[string]int32
+	nextReg      int32
+	labels       map[string]int
+	pendingJumps []pendingJump
+	labelSeq     int32
 }
 
 // NewLogicExecutor creates a new logic executor.
 func NewLogicExecutor() *LogicExecutor {
 	return &LogicExecutor{
-		Program:     nil,
-		VM:          NewVM(),
+		Program:      nil,
+		VM:           NewVM(),
 		Instructions: make([]Instruction, 0),
-		inputs:      make(map[string]int32),
-		outputs:     make([]string, 0),
+		inputs:       make(map[string]int32),
+		outputs:      make([]string, 0),
+		regIndex:     make(map[string]int32),
+		nextReg:      1,
+		labels:       make(map[string]int),
+		pendingJumps: make([]pendingJump, 0),
 	}
 }
 
@@ -52,6 +61,7 @@ func (e *LogicExecutor) Compile(source string) error {
 
 // generateInstructions generates VM instructions from the parsed program.
 func (e *LogicExecutor) generateInstructions(program *Program) {
+	e.resetCompilerState()
 	e.Instructions = make([]Instruction, 0, len(program.Statements)*2)
 
 	for _, stmt := range program.Statements {
@@ -81,80 +91,304 @@ func (e *LogicExecutor) generateInstructions(program *Program) {
 		Opcode: HALT,
 		Args:   []int32{},
 	})
+
+	e.resolveLabels()
+}
+
+type pendingJump struct {
+	index  int
+	argPos int
+	label  string
+}
+
+func (e *LogicExecutor) resetCompilerState() {
+	e.regIndex = make(map[string]int32)
+	e.nextReg = 1
+	e.labels = make(map[string]int)
+	e.pendingJumps = make([]pendingJump, 0)
+	e.labelSeq = 0
+}
+
+func (e *LogicExecutor) newTempReg() int32 {
+	idx := e.nextReg
+	e.nextReg++
+	return idx
+}
+
+func regRef(idx int32) int32 {
+	return encodeRegRef(idx)
 }
 
 // generateAssign generates instructions for an assignment statement.
 func (e *LogicExecutor) generateAssign(stmt *AssignStatement) {
+	if stmt == nil || stmt.Name == nil {
+		return
+	}
+	dest := e.getOrSetRegister(stmt.Name.Value)
+	if stmt.Value == nil {
+		e.Instructions = append(e.Instructions, Instruction{
+			Opcode: MOV,
+			Args:   []int32{dest, 0},
+		})
+		return
+	}
+	if call, ok := stmt.Value.(*CallExpr); ok {
+		switch strings.ToLower(strings.TrimSpace(call.Name)) {
+		case "input":
+			e.Instructions = append(e.Instructions, Instruction{
+				Opcode: INPUT,
+				Args:   []int32{dest, 0},
+			})
+			return
+		default:
+			e.Instructions = append(e.Instructions, Instruction{
+				Opcode: MOV,
+				Args:   []int32{dest, 0},
+			})
+			return
+		}
+	}
+	src := e.compileExprToReg(stmt.Value)
 	e.Instructions = append(e.Instructions, Instruction{
 		Opcode: MOV,
-		Args:   []int32{0, e.getOrSetRegister(stmt.Name.Value)},
+		Args:   []int32{dest, regRef(src)},
 	})
 }
 
 // generatePrint generates instructions for a print statement.
 func (e *LogicExecutor) generatePrint(stmt *PrintStatement) {
+	if stmt == nil || stmt.Value == nil {
+		return
+	}
+	valReg := e.compileExprToReg(stmt.Value)
+	if stmt.Token.Type == Output {
+		e.Instructions = append(e.Instructions, Instruction{
+			Opcode: OUTPUT,
+			Args:   []int32{valReg, regRef(valReg)},
+		})
+		return
+	}
 	e.Instructions = append(e.Instructions, Instruction{
-		Opcode: OUTPUT,
-		Args:   []int32{0, 0},
+		Opcode: PRINT,
+		Args:   []int32{regRef(valReg)},
 	})
 }
 
 // generateJump generates instructions for a jump statement.
 func (e *LogicExecutor) generateJump(stmt *JumpStatement) {
-	// For now, use a placeholder - labels will be expanded later
+	if stmt == nil {
+		return
+	}
+	op := JMP
+	switch stmt.Token.Type {
+	case Jz:
+		op = JZ
+	case Jnz:
+		op = JNZ
+	}
+	args := []int32{0}
+	if op == JZ || op == JNZ {
+		// Use register r0 (default) if no explicit condition is encoded.
+		args = []int32{regRef(e.getOrSetRegister("r0")), 0}
+	}
+	idx := len(e.Instructions)
 	e.Instructions = append(e.Instructions, Instruction{
-		Opcode: JMP,
-		Args:   []int32{0},
+		Opcode: op,
+		Args:   args,
 	})
+	argPos := 0
+	if op == JZ || op == JNZ {
+		argPos = 1
+	}
+	e.pendingJumps = append(e.pendingJumps, pendingJump{index: idx, argPos: argPos, label: stmt.Target})
 }
 
 // generateLabel generates instructions for a label statement.
 func (e *LogicExecutor) generateLabel(stmt *LabelStatement) {
-	// Labels are represented as markers in the instruction stream
-	// For now, we'll just note the label position
-	e.Instructions = append(e.Instructions, Instruction{
-		Opcode: NoOp,
-		Args:   []int32{0},
-	})
+	if stmt == nil {
+		return
+	}
+	e.labels[stmt.Name] = len(e.Instructions)
 }
 
 // generateIf generates instructions for an if statement.
 func (e *LogicExecutor) generateIf(stmt *IfStatement) {
-	// For now, skip condition evaluation (in real implementation, this would generate compare ops)
-	_ = stmt.Condition
-
-	// Jump if false (zero)
+	if stmt == nil || stmt.Condition == nil {
+		return
+	}
+	condReg := e.compileExprToReg(stmt.Condition)
+	jzIdx := len(e.Instructions)
 	e.Instructions = append(e.Instructions, Instruction{
 		Opcode: JZ,
-		Args:   []int32{0, 0}, // Will be updated later
+		Args:   []int32{regRef(condReg), 0},
 	})
+	endLabel := e.newLabel()
 
-	// Generate body
 	for _, bodyStmt := range stmt.Body {
 		switch s := bodyStmt.(type) {
 		case *AssignStatement:
 			e.generateAssign(s)
-
 		case *PrintStatement:
 			e.generatePrint(s)
-
+		case *IfStatement:
+			e.generateIf(s)
 		default:
-			// Skip unknown statement types
 		}
 	}
 
-	// After body, jump over else if exists (for now just continue)
-	e.Instructions = append(e.Instructions, Instruction{
-		Opcode: JMP,
-		Args:   []int32{0},
-	})
+	e.labels[endLabel] = len(e.Instructions)
+	e.pendingJumps = append(e.pendingJumps, pendingJump{index: jzIdx, argPos: 1, label: endLabel})
 }
 
 // getOrSetRegister gets or sets a register value.
 func (e *LogicExecutor) getOrSetRegister(name string) int32 {
-	// In a real implementation, this would track register allocation
-	// For now, just return a fixed value
-	return 0
+	if name == "" {
+		return 0
+	}
+	if idx, ok := e.regIndex[name]; ok {
+		return idx
+	}
+	idx := e.nextReg
+	e.nextReg++
+	e.regIndex[name] = idx
+	return idx
+}
+
+func (e *LogicExecutor) newLabel() string {
+	e.labelSeq++
+	return fmt.Sprintf("__lbl_%d", e.labelSeq)
+}
+
+func (e *LogicExecutor) resolveLabels() {
+	for _, j := range e.pendingJumps {
+		pos, ok := e.labels[j.label]
+		if !ok || j.index < 0 || j.index >= len(e.Instructions) {
+			continue
+		}
+		inst := e.Instructions[j.index]
+		if j.argPos >= 0 && j.argPos < len(inst.Args) {
+			inst.Args[j.argPos] = int32(pos)
+			e.Instructions[j.index] = inst
+		}
+	}
+}
+
+func (e *LogicExecutor) compileExprToReg(expr Expression) int32 {
+	switch v := expr.(type) {
+	case *IdentExpr:
+		return e.getOrSetRegister(v.Value)
+	case *IntExpr:
+		reg := e.newTempReg()
+		e.Instructions = append(e.Instructions, Instruction{
+			Opcode: MOV,
+			Args:   []int32{reg, int32(v.Value)},
+		})
+		return reg
+	case *FloatExpr:
+		reg := e.newTempReg()
+		e.Instructions = append(e.Instructions, Instruction{
+			Opcode: MOV,
+			Args:   []int32{reg, int32(v.Value)},
+		})
+		return reg
+	case *BoolExpr:
+		reg := e.newTempReg()
+		val := int32(0)
+		if v.Value {
+			val = 1
+		}
+		e.Instructions = append(e.Instructions, Instruction{
+			Opcode: MOV,
+			Args:   []int32{reg, val},
+		})
+		return reg
+	case *UnaryExpr:
+		operand := e.compileExprToReg(v.Operand)
+		switch v.Operator {
+		case Minus:
+			reg := e.newTempReg()
+			e.Instructions = append(e.Instructions, Instruction{
+				Opcode: SUB,
+				Args:   []int32{reg, 0, regRef(operand)},
+			})
+			return reg
+		case Not:
+			reg := e.newTempReg()
+			e.Instructions = append(e.Instructions, Instruction{
+				Opcode: EQ,
+				Args:   []int32{reg, regRef(operand), 0},
+			})
+			return reg
+		default:
+			return operand
+		}
+	case *BinaryExpr:
+		left := e.compileExprToReg(v.Left)
+		right := e.compileExprToReg(v.Right)
+		reg := e.newTempReg()
+		switch v.Operator {
+		case Plus:
+			e.emitBinary(ADD, reg, left, right)
+		case Minus:
+			e.emitBinary(SUB, reg, left, right)
+		case Multiply:
+			e.emitBinary(MUL, reg, left, right)
+		case Divide:
+			e.emitBinary(DIV, reg, left, right)
+		case Mod:
+			e.emitBinary(MOD, reg, left, right)
+		case And:
+			e.emitBinary(AND, reg, left, right)
+		case Or:
+			e.emitBinary(OR, reg, left, right)
+		case Equal:
+			e.emitBinary(EQ, reg, left, right)
+		case NotEqual:
+			e.emitBinary(NEQ, reg, left, right)
+		case LessThan:
+			e.emitBinary(LT, reg, left, right)
+		case LessEqual:
+			e.emitBinary(LE, reg, left, right)
+		case GreaterThan:
+			e.emitBinary(GT, reg, left, right)
+		case GreaterEqual:
+			e.emitBinary(GE, reg, left, right)
+		default:
+			e.emitBinary(ADD, reg, left, right)
+		}
+		return reg
+	case *CallExpr:
+		name := strings.ToLower(strings.TrimSpace(v.Name))
+		reg := e.newTempReg()
+		switch name {
+		case "input":
+			e.Instructions = append(e.Instructions, Instruction{
+				Opcode: INPUT,
+				Args:   []int32{reg, 0},
+			})
+			return reg
+		default:
+			e.Instructions = append(e.Instructions, Instruction{
+				Opcode: MOV,
+				Args:   []int32{reg, 0},
+			})
+			return reg
+		}
+	default:
+		reg := e.newTempReg()
+		e.Instructions = append(e.Instructions, Instruction{
+			Opcode: MOV,
+			Args:   []int32{reg, 0},
+		})
+		return reg
+	}
+}
+
+func (e *LogicExecutor) emitBinary(op Opcode, dest, left, right int32) {
+	e.Instructions = append(e.Instructions, Instruction{
+		Opcode: op,
+		Args:   []int32{dest, regRef(left), regRef(right)},
+	})
 }
 
 // Run runs the compiled program.
@@ -168,7 +402,11 @@ func (e *LogicExecutor) Run() error {
 
 	// Set initial inputs
 	for key, val := range e.inputs {
-		e.VM.SetInput(key, val)
+		if idx, ok := e.regIndex[key]; ok {
+			e.VM.SetInput(fmt.Sprintf("r%d", idx), val)
+		} else {
+			e.VM.SetInput(key, val)
+		}
 	}
 
 	// Run the VM
@@ -188,7 +426,11 @@ func (e *LogicExecutor) Step() error {
 
 	// Set initial inputs
 	for key, val := range e.inputs {
-		e.VM.SetInput(key, val)
+		if idx, ok := e.regIndex[key]; ok {
+			e.VM.SetInput(fmt.Sprintf("r%d", idx), val)
+		} else {
+			e.VM.SetInput(key, val)
+		}
 	}
 
 	return e.VM.Step()
@@ -1182,6 +1424,12 @@ func stringToOpcode(name string) Opcode {
 		"xor":    XOR,
 		"not":    NOT,
 		"cmp":    CMP,
+		"eq":     EQ,
+		"neq":    NEQ,
+		"lt":     LT,
+		"le":     LE,
+		"gt":     GT,
+		"ge":     GE,
 		"jmp":    JMP,
 		"jz":     JZ,
 		"jnz":    JNZ,

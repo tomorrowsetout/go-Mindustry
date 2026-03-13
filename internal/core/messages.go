@@ -46,12 +46,12 @@ const (
 
 // GameTickMessage - Core1: 世界 tick
 type GameTickMessage struct {
-	Tick       uint64
-	Delta      time.Duration
-	Wave       int32
-	WaveTime   float32
-	Time       float32
-	Defeated   bool
+	Tick     uint64
+	Delta    time.Duration
+	Wave     int32
+	WaveTime float32
+	Time     float32
+	Defeated bool
 }
 
 func (m *GameTickMessage) Type() MessageType {
@@ -71,8 +71,8 @@ func (m *WaveUpdateMessage) Type() MessageType {
 
 // EntityBroadcastMessage - Core1: 实体同步广播
 type EntityBroadcastMessage struct {
-	Tick       uint64
-	Entities   []protocol.UnitSyncEntity
+	Tick     uint64
+	Entities []protocol.UnitSyncEntity
 }
 
 func (m *EntityBroadcastMessage) Type() MessageType {
@@ -81,10 +81,10 @@ func (m *EntityBroadcastMessage) Type() MessageType {
 
 // PlayerUpdateMessage - Core1: 玩家更新（Game Loop 相关）
 type PlayerUpdateMessage struct {
-	PlayerID   int32
-	UnitID     int32
-	Position   protocol.Point2
-	Control    bool
+	PlayerID int32
+	UnitID   int32
+	Position protocol.Point2
+	Control  bool
 }
 
 func (m *PlayerUpdateMessage) Type() MessageType {
@@ -93,8 +93,8 @@ func (m *PlayerUpdateMessage) Type() MessageType {
 
 // BuildQueueProcessMessage - Core1: 建筑队列处理
 type BuildQueueProcessMessage struct {
-	Plans      []*protocol.BuildPlan
-	 deadlines []time.Time
+	Plans     []*protocol.BuildPlan
+	deadlines []time.Time
 }
 
 func (m *BuildQueueProcessMessage) Type() MessageType {
@@ -103,8 +103,8 @@ func (m *BuildQueueProcessMessage) Type() MessageType {
 
 // LogicCompileMessage - Core1: 逻辑编译
 type LogicCompileMessage struct {
-	Source     string
-	UserID     int32
+	Source string
+	UserID int32
 }
 
 func (m *LogicCompileMessage) Type() MessageType {
@@ -113,9 +113,9 @@ func (m *LogicCompileMessage) Type() MessageType {
 
 // LogicRunMessage - Core1: 逻辑执行
 type LogicRunMessage struct {
-	ID         int64
-	Program    []byte
-	Inputs     map[string]int32
+	ID      int64
+	Program []byte
+	Inputs  map[string]int32
 }
 
 func (m *LogicRunMessage) Type() MessageType {
@@ -124,28 +124,31 @@ func (m *LogicRunMessage) Type() MessageType {
 
 // PacketMessage - Core2: 网络包
 type PacketMessage struct {
-	ConnID     int32
-	Kind       string // "incoming" or "outgoing"
-	Packet     protocol.Packet
-	Data       []byte
-	IdleTime   time.Duration
+	ConnID   int32
+	Kind     string // "incoming" or "outgoing"
+	Packet   any
+	Data     []byte
+	IdleTime time.Duration
 }
 
 func (m *PacketMessage) Type() MessageType {
+	if m.Kind == "outgoing" {
+		return MessagePacketOutgoing
+	}
 	return MessagePacketIncoming
 }
 
 // ConnectionMessage - Core2: 连接事件
 type ConnectionMessage struct {
-	ConnID     int32
-	UserID     int32
-	UUID       string
-	IP         string
-	Name       string
-	proto      *protocol.ConnectPacket
-	TCPAddr    string
-	UDPAddr    string
-	IsOpen     bool
+	ConnID  int32
+	UserID  int32
+	UUID    string
+	IP      string
+	Name    string
+	proto   *protocol.ConnectPacket
+	TCPAddr string
+	UDPAddr string
+	IsOpen  bool
 }
 
 func (m *ConnectionMessage) Type() MessageType {
@@ -171,9 +174,9 @@ func (m *PersistenceMessage) Type() MessageType {
 
 // PersistenceResult - Core2: 存档结果
 type PersistenceResult struct {
-	StateData  []byte
-	WorldData  []byte
-	Error      error
+	StateData []byte
+	WorldData []byte
+	Error     error
 }
 
 // ModMessage - Core2: Mod 操作
@@ -192,11 +195,11 @@ func (m *ModMessage) Type() MessageType {
 
 // ModResult - Core2: Mod 结果
 type ModResult struct {
-	ID         int64
-	Success    bool
-	ModID      int64
-	Name       string
-	Error      error
+	ID      int64
+	Success bool
+	ModID   int64
+	Name    string
+	Error   error
 }
 
 // StorageMessage - Core2: 存储事件
