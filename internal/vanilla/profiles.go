@@ -126,11 +126,61 @@ func extractUnits(src string) []UnitProfile {
 		p := parseCommonProfile(body)
 		wp := parseWeaponsProfile(body)
 		p = mergeParsedProfiles(p, wp)
-		if p.damage <= 0 || p.interval <= 0 {
+		unitName := strings.ToLower(strings.TrimSpace(name))
+		if unitName == "" {
 			continue
 		}
+
+		// Repair beam units have non-damaging weapons; include them with beam profile.
+		if (p.damage <= 0 || p.interval <= 0) && strings.Contains(body, "RepairBeamWeapon") {
+			out = append(out, UnitProfile{
+				Name:            unitName,
+				FireMode:        "beam",
+				Range:           p.rangeV,
+				Damage:          0,
+				Interval:        p.interval,
+				BulletType:      0,
+				BulletSpeed:     p.bulletSpeed,
+				SplashRadius:    p.splashRadius,
+				Pierce:          0,
+				BurstShots:      0,
+				BurstSpacing:    0,
+				Spread:          0,
+				TargetAir:       false,
+				TargetGround:    true,
+				TargetPriority:  "nearest",
+				HitBuildings:    true,
+				PreferBuildings: true,
+			})
+			continue
+		}
+
+		// Units with no weapons get a marker to keep defaults (map overrides may apply).
+		if p.damage <= 0 || p.interval <= 0 {
+			out = append(out, UnitProfile{
+				Name:            unitName,
+				FireMode:        "default",
+				Range:           0,
+				Damage:          0,
+				Interval:        0,
+				BulletType:      0,
+				BulletSpeed:     0,
+				SplashRadius:    0,
+				Pierce:          0,
+				BurstShots:      0,
+				BurstSpacing:    0,
+				Spread:          0,
+				TargetAir:       false,
+				TargetGround:    false,
+				TargetPriority:  "none",
+				HitBuildings:    false,
+				PreferBuildings: false,
+			})
+			continue
+		}
+
 		out = append(out, UnitProfile{
-			Name:            strings.ToLower(strings.TrimSpace(name)),
+			Name:            unitName,
 			FireMode:        p.fireMode,
 			Range:           p.rangeV,
 			Damage:          p.damage,

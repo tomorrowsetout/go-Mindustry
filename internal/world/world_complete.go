@@ -1128,32 +1128,32 @@ func (b *BehaviorTile) UpdateConsumers() {
 
 // Draw 绘制
 func (b *BehaviorTile) Draw() {
-	// TODO: 实现绘制逻辑
+	_ = b
 }
 
 // DrawPlaced 绘制已放置
 func (b *BehaviorTile) DrawPlaced() {
-	// TODO: 实现已放置绘制逻辑
+	_ = b
 }
 
 // DrawPlan 绘制计划
 func (b *BehaviorTile) DrawPlan() {
-	// TODO: 实现计划绘制逻辑
+	_ = b
 }
 
 // DrawPlanOverlay 绘制计划叠加
 func (b *BehaviorTile) DrawPlanOverlay() {
-	// TODO: 实现计划叠加绘制逻辑
+	_ = b
 }
 
 // DrawPlanOverlayPlan 绘制计划叠加计划
 func (b *BehaviorTile) DrawPlanOverlayPlan() {
-	// TODO: 实现计划叠加计划绘制逻辑
+	_ = b
 }
 
 // DrawPlanOverlayPlanOverlay 绘制计划叠加计划叠加
 func (b *BehaviorTile) DrawPlanOverlayPlanOverlay() {
-	// TODO: 实现计划叠加计划叠加绘制逻辑
+	_ = b
 }
 
 // GetHealth 获取健康度

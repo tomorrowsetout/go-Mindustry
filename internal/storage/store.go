@@ -45,17 +45,17 @@ type LogEntry struct {
 
 // FileStore implements Store using local files.
 type FileStore struct {
-	baseDir string
-	logDir  string
-	format  string
-	maxSize int64
+	baseDir  string
+	logDir   string
+	format   string
+	maxSize  int64
 	maxFiles int
 
-	logsMu  sync.Mutex
-	logs    map[string]*rotatingLog
+	logsMu   sync.Mutex
+	logs     map[string]*rotatingLog
 	playerMu sync.Mutex
-	closed  atomic.Bool
-	lastErr atomic.Value
+	closed   atomic.Bool
+	lastErr  atomic.Value
 }
 
 func NewStore(cfg config.StorageConfig) (Store, error) {
@@ -113,6 +113,11 @@ func normalizeBackend(cfg config.StorageConfig) (backend, format string) {
 	}
 	if backend == "" {
 		backend = "file"
+	}
+	if !cfg.DatabaseEnabled {
+		if backend != "file" && backend != "file-json" && backend != "file-txt" {
+			backend = "file"
+		}
 	}
 	format = strings.ToLower(strings.TrimSpace(cfg.FileFormat))
 	if strings.Contains(backend, "txt") {

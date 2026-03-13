@@ -11,12 +11,13 @@ import (
 )
 
 type liquidPropsDef struct {
-	Liquid       string  `json:"liquid"`
-	Coolant      bool    `json:"coolant,omitempty"`
-	HeatCapacity float32 `json:"heatCapacity,omitempty"`
-	Temperature  float32 `json:"temperature,omitempty"`
-	Flammability float32 `json:"flammability,omitempty"`
-	Gas          bool    `json:"gas,omitempty"`
+	Liquid        string   `json:"liquid"`
+	Coolant       *bool    `json:"coolant,omitempty"`
+	HeatCapacity  *float32 `json:"heatCapacity,omitempty"`
+	Temperature   *float32 `json:"temperature,omitempty"`
+	Flammability  *float32 `json:"flammability,omitempty"`
+	Gas           *bool    `json:"gas,omitempty"`
+	BlockReactive *bool    `json:"blockReactive,omitempty"`
 }
 
 func main() {
@@ -57,12 +58,13 @@ func filepathDir(path string) string {
 	return path[:idx]
 }
 
-var liquidDeclRe = regexp.MustCompile(`(?m)new\s+Liquid\("([^"]+)"[^{]*\{\{`)
+var liquidDeclRe = regexp.MustCompile(`(?m)new\s+[A-Za-z0-9_$.]*Liquid\("([^"]+)"[^{]*\{\{`)
 var coolantRe = regexp.MustCompile(`(?m)\bcoolant\s*=\s*(true|false)\s*;`)
 var heatCapRe = regexp.MustCompile(`(?m)\bheatCapacity\s*=\s*([^;]+);`)
 var tempRe = regexp.MustCompile(`(?m)\btemperature\s*=\s*([^;]+);`)
 var flamRe = regexp.MustCompile(`(?m)\bflammability\s*=\s*([^;]+);`)
 var gasRe = regexp.MustCompile(`(?m)\bgas\s*=\s*(true|false)\s*;`)
+var blockReactiveRe = regexp.MustCompile(`(?m)\bblockReactive\s*=\s*(true|false)\s*;`)
 
 func parseLiquids(src string) []liquidPropsDef {
 	out := []liquidPropsDef{}
@@ -87,27 +89,33 @@ func parseLiquids(src string) []liquidPropsDef {
 		}
 		def := liquidPropsDef{Liquid: name}
 		if m := coolantRe.FindStringSubmatch(body); len(m) > 1 {
-			def.Coolant = strings.TrimSpace(m[1]) == "true"
+			v := strings.TrimSpace(m[1]) == "true"
+			def.Coolant = &v
 		}
 		if m := heatCapRe.FindStringSubmatch(body); len(m) > 1 {
 			if v, ok := evalExpr(m[1]); ok {
-				def.HeatCapacity = v
+				def.HeatCapacity = &v
 			}
 		}
 		if m := tempRe.FindStringSubmatch(body); len(m) > 1 {
 			if v, ok := evalExpr(m[1]); ok {
-				def.Temperature = v
+				def.Temperature = &v
 			}
 		}
 		if m := flamRe.FindStringSubmatch(body); len(m) > 1 {
 			if v, ok := evalExpr(m[1]); ok {
-				def.Flammability = v
+				def.Flammability = &v
 			}
 		}
 		if m := gasRe.FindStringSubmatch(body); len(m) > 1 {
-			def.Gas = strings.TrimSpace(m[1]) == "true"
+			v := strings.TrimSpace(m[1]) == "true"
+			def.Gas = &v
 		}
-		if def.Coolant || def.HeatCapacity != 0 || def.Temperature != 0 || def.Flammability != 0 || def.Gas {
+		if m := blockReactiveRe.FindStringSubmatch(body); len(m) > 1 {
+			v := strings.TrimSpace(m[1]) == "true"
+			def.BlockReactive = &v
+		}
+		if def.Coolant != nil || def.HeatCapacity != nil || def.Temperature != nil || def.Flammability != nil || def.Gas != nil || def.BlockReactive != nil {
 			out = append(out, def)
 		}
 		seen[name] = true

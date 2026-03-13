@@ -7,20 +7,22 @@ import (
 )
 
 type LiquidPropsDef struct {
-	Liquid       string  `json:"liquid"`
-	Coolant      bool    `json:"coolant,omitempty"`
-	HeatCapacity float32 `json:"heatCapacity,omitempty"`
-	Temperature  float32 `json:"temperature,omitempty"`
-	Flammability float32 `json:"flammability,omitempty"`
-	Gas          bool    `json:"gas,omitempty"`
+	Liquid        string   `json:"liquid"`
+	Coolant       *bool    `json:"coolant,omitempty"`
+	HeatCapacity  *float32 `json:"heatCapacity,omitempty"`
+	Temperature   *float32 `json:"temperature,omitempty"`
+	Flammability  *float32 `json:"flammability,omitempty"`
+	Gas           *bool    `json:"gas,omitempty"`
+	BlockReactive *bool    `json:"blockReactive,omitempty"`
 }
 
 type LiquidProps struct {
-	Coolant      bool
-	HeatCapacity float32
-	Temperature  float32
-	Flammability float32
-	Gas          bool
+	Coolant       bool
+	HeatCapacity  float32
+	Temperature   float32
+	Flammability  float32
+	Gas           bool
+	BlockReactive bool
 }
 
 func (w *World) LoadLiquidProps(path string) error {
@@ -53,13 +55,26 @@ func (w *World) resolveLiquidPropsLocked() {
 		if name == "" {
 			continue
 		}
-		w.liquidPropsByName[name] = LiquidProps{
-			Coolant:      def.Coolant,
-			HeatCapacity: def.HeatCapacity,
-			Temperature:  def.Temperature,
-			Flammability: def.Flammability,
-			Gas:          def.Gas,
+		props := defaultLiquidProps()
+		if def.Coolant != nil {
+			props.Coolant = *def.Coolant
 		}
+		if def.HeatCapacity != nil {
+			props.HeatCapacity = *def.HeatCapacity
+		}
+		if def.Temperature != nil {
+			props.Temperature = *def.Temperature
+		}
+		if def.Flammability != nil {
+			props.Flammability = *def.Flammability
+		}
+		if def.Gas != nil {
+			props.Gas = *def.Gas
+		}
+		if def.BlockReactive != nil {
+			props.BlockReactive = *def.BlockReactive
+		}
+		w.liquidPropsByName[name] = props
 	}
 	w.resolveLiquidPropsByIDLocked()
 }
@@ -77,7 +92,20 @@ func (w *World) resolveLiquidPropsByIDLocked() {
 		}
 		if p, ok := w.liquidPropsByName[n]; ok {
 			out[id] = p
+			continue
 		}
+		out[id] = defaultLiquidProps()
 	}
 	w.liquidPropsByID = out
+}
+
+func defaultLiquidProps() LiquidProps {
+	return LiquidProps{
+		Coolant:       true,
+		HeatCapacity:  0.5,
+		Temperature:   0.5,
+		Flammability:  0,
+		Gas:           false,
+		BlockReactive: true,
+	}
 }

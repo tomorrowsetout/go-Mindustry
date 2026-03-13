@@ -1,6 +1,6 @@
 package storage
 
-// TODO:
-// - Default append-only file event log (block placement/updates)
-// - Optional DB adapters: PostgreSQL, MySQL, Redis
-// - Async writer with backpressure + retry
+// Implemented:
+// - File/JSON/TXT event logs with rotation
+// - SQL backends (PostgreSQL/MySQL/SQLite) and Redis/KeyDB
+// - Async file recorder and structured store APIs

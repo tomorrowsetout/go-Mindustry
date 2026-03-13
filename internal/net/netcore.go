@@ -15,12 +15,14 @@ import (
 
 // NetworkCore 是网络核心（运行在 Core2 的 IO Core 中）
 type NetworkCore struct {
-	core     *core.Core2
-	server   *Server
+	core       *core.Core2
+	server     *Server
 	serverCore *core.ServerCore
-	recorder storage.Recorder
-	connMap  map[int32]*Conn
-	connMu   sync.RWMutex
+	recorder   storage.Recorder
+	connMap    map[int32]*Conn
+	connMu     sync.RWMutex
+	modMu      sync.RWMutex
+	modHandler func(action string, msg *core.ModMessage) core.ModResult
 }
 
 // NewNetworkCore 创建网络核心
@@ -31,11 +33,14 @@ func NewNetworkCore(server *Server) *NetworkCore {
 		WorkerCount: 4,
 	}
 
-	return &NetworkCore{
+	nc := &NetworkCore{
 		core:    core.NewCore2(cfg),
 		server:  server,
 		connMap: make(map[int32]*Conn),
 	}
+	nc.core.SetPacketHandlers(nc.HandlePacketIncoming, nc.HandlePacketOutgoing)
+	nc.core.SetConnectionHandlers(nc.HandleConnectionOpen, nc.HandleConnectionClose)
+	return nc
 }
 
 // Start 启动网络核心
@@ -60,6 +65,13 @@ func (nc *NetworkCore) SetRecorder(rec storage.Recorder) {
 	nc.core.SetRecorder(rec)
 }
 
+// SetModHandler sets an optional mod handler for load/unload/start/stop/reload/scan.
+func (nc *NetworkCore) SetModHandler(fn func(action string, msg *core.ModMessage) core.ModResult) {
+	nc.modMu.Lock()
+	nc.modHandler = fn
+	nc.modMu.Unlock()
+}
+
 // ProcessPacket 处理数据包（从网络读取）
 // 这个方法应该在 IO Core 的 worker 中调用
 func (nc *NetworkCore) ProcessPacket(conn *Conn, obj any, err error) {
@@ -73,12 +85,11 @@ func (nc *NetworkCore) ProcessPacket(conn *Conn, obj any, err error) {
 	}
 
 	// 发送包消息到 Core2
-	// 注意：这里不直接发送 obj，因为 obj 可能不是 protocol.Packet 类型
 	nc.core.Send(&core.PacketMessage{
 		ConnID: conn.id,
 		Kind:   "incoming",
-		Packet: nil, // obj, // 暂时不发送，等待类型转换
-		Data:   nil, // 可以序列化包数据
+		Packet: obj,
+		Data:   nil,
 	})
 }
 
@@ -90,7 +101,7 @@ func (nc *NetworkCore) SendPacket(conn *Conn, packet protocol.Packet) error {
 		ConnID: conn.id,
 		Kind:   "outgoing",
 		Packet: packet,
-		Data:   nil, // 可以序列化包数据
+		Data:   nil,
 	})
 	return nil
 }
@@ -161,7 +172,9 @@ func (nc *NetworkCore) BroadcastPacket(packet protocol.Packet) {
 func (nc *NetworkCore) BroadcastToTeam(packet protocol.Packet, teamID byte) {
 	conns := nc.GetAllConnections()
 	for _, conn := range conns {
-		// TODO: 检查队伍ID
+		if conn != nil && conn.teamID != teamID {
+			continue
+		}
 		_ = nc.SendPacket(conn, packet)
 	}
 }
@@ -206,8 +219,12 @@ func (nc *NetworkCore) HandlePacketOutgoing(m *core.PacketMessage) {
 	fmt.Printf("[NetworkCore] Outgoing packet: connID=%d, packet=%T\n",
 		m.ConnID, m.Packet)
 
-	// TODO: 发送到网络
-	// _ = conn.WriteObject(m.Packet)
+	if m.Packet == nil {
+		return
+	}
+	if err := conn.Send(m.Packet); err != nil {
+		fmt.Printf("[NetworkCore] send failed connID=%d err=%v\n", m.ConnID, err)
+	}
 }
 
 // HandleConnectionOpen 处理连接打开（在 Core2 worker 中调用）
@@ -393,33 +410,63 @@ func (nc *NetworkCore) HandleModMessage(m *core.ModMessage) {
 }
 
 func (nc *NetworkCore) handleModLoad(m *core.ModMessage) {
-	// TODO: 实现 Mod 加载逻辑
-	fmt.Printf("[NetworkCore] Loading mod: name=%s, type=%s\n", m.Name, m.ModType)
+	result := nc.runModAction("load", m)
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleModUnload(m *core.ModMessage) {
-	// TODO: 实现 Mod 卸载逻辑
-	fmt.Printf("[NetworkCore] Unloading mod: name=%s, type=%s\n", m.Name, m.ModType)
+	result := nc.runModAction("unload", m)
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleModStart(m *core.ModMessage) {
-	// TODO: 实现 Mod 启动逻辑
-	fmt.Printf("[NetworkCore] Starting mod: name=%s, type=%s\n", m.Name, m.ModType)
+	result := nc.runModAction("start", m)
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleModStop(m *core.ModMessage) {
-	// TODO: 实现 Mod 停止逻辑
-	fmt.Printf("[NetworkCore] Stopping mod: name=%s, type=%s\n", m.Name, m.ModType)
+	result := nc.runModAction("stop", m)
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleModReload(m *core.ModMessage) {
-	// TODO: 实现 Mod 重新加载逻辑
-	fmt.Printf("[NetworkCore] Reloading mod: name=%s, type=%s\n", m.Name, m.ModType)
+	result := nc.runModAction("reload", m)
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
 }
 
 func (nc *NetworkCore) handleModScan(m *core.ModMessage) {
-	// TODO: 实现 Mod 扫描逻辑
-	fmt.Printf("[NetworkCore] Scanning mods directory\n")
+	result := nc.runModAction("scan", m)
+	if m.ResultChan != nil {
+		m.ResultChan <- result
+	}
+}
+
+func (nc *NetworkCore) runModAction(action string, m *core.ModMessage) core.ModResult {
+	nc.modMu.RLock()
+	handler := nc.modHandler
+	nc.modMu.RUnlock()
+	if handler == nil {
+		err := fmt.Errorf("mod handler not configured")
+		return core.ModResult{ID: m.ID, Name: m.Name, Success: false, Error: err}
+	}
+	out := handler(action, m)
+	if out.ID == 0 {
+		out.ID = m.ID
+	}
+	if out.Name == "" {
+		out.Name = m.Name
+	}
+	return out
 }
 
 // HandleWorldStreamMessage 处理 WorldStream 操作（在 Core2 worker 中调用）
