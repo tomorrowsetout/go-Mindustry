@@ -3218,7 +3218,7 @@ func (w *World) stepDefense(dt float32) {
 				continue
 			}
 			phase := w.projectorPhaseHeatLocked(t, props, pos, dt)
-			r := props.EffectRange + phase*props.PhaseRangeBoost
+			r := props.EffectRange + phase*props.OverdrivePhaseRng
 			healBoost := props.PhaseBoost * phase
 			cx := float32(t.X*8 + 4)
 			cy := float32(t.Y*8 + 4)
@@ -8143,7 +8143,6 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 			BuildCost:  buildCost,
 			Req:        req,
 			Spent:      spent,
-			Config:     op.Config,
 			BuildSpeed: buildSpeed,
 		}
 		addChanged(pos)
@@ -9830,7 +9829,7 @@ func (w *World) stepBuildingCombat(dt float32) {
 		var targetX, targetY float32
 		track := targetTrackState{TargetID: state.TargetID, RetargetCD: state.RetargetCD}
 		retargetDelay := maxf(prof.Interval*0.55, 0.22)
-		if tid, ok := w.acquireTrackedEntityTarget(*src, ents, idToIndex, prof.Range, prof.TargetAir, prof.TargetGround, prof.TargetPriority, &track, dt, retargetDelay); ok {
+		if tid, ok := w.acquireTrackedEntityTarget(src, ents, idToIndex, prof.Range, prof.TargetAir, prof.TargetGround, prof.TargetPriority, &track, dt, retargetDelay); ok {
 			if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(ents) {
 				target := &ents[idx]
 				ax, ay := target.X, target.Y
@@ -9844,7 +9843,7 @@ func (w *World) stepBuildingCombat(dt float32) {
 				hasTarget = true
 			}
 		} else if prof.TargetBuilds {
-			if bpos, bx, by, ok := w.findNearestEnemyBuildingPriority(*src, prof.Range, minRange, prof.TargetPriority); ok {
+			if bpos, bx, by, ok := w.findNearestEnemyBuildingPriority(src, prof.Range, minRange, prof.TargetPriority); ok {
 				desiredAngle = lookAt(src.X, src.Y, bx, by)
 				targetPos = bpos
 				targetX, targetY = bx, by
@@ -9901,15 +9900,15 @@ func (w *World) stepBuildingCombat(dt float32) {
 				if src.AttackFireMode == "beam" {
 					w.applyDamageToEntity(target, src.AttackDamage)
 					applySlow(target, src.AttackSlowSec, src.AttackSlowMul)
-					w.applyBeamChain(*src, targetIdx)
+					w.applyBeamChain(src, targetIdx)
 				} else {
-					w.spawnBulletAngle(*src, angle, targetX, targetY)
+					w.spawnBulletAngle(src, angle, targetX, targetY)
 				}
 			} else if targetPos != 0 && prof.HitBuildings {
 				if src.AttackFireMode == "beam" {
 					_ = w.applyDamageToBuilding(targetPos, src.AttackDamage)
 				} else {
-					w.spawnBulletAngle(*src, angle, targetX, targetY)
+					w.spawnBulletAngle(src, angle, targetX, targetY)
 				}
 			}
 			if state.BurstRemain > 0 {

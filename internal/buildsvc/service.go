@@ -290,7 +290,6 @@ func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan, buildSpeed flo
 		Y:          p.Y,
 		Rotation:   int8(p.Rotation & 0x03),
 		BlockID:    blockID,
-		Config:     p.Config,
 		BuildSpeed: buildSpeed,
 	}, true
 }
