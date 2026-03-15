@@ -29,8 +29,8 @@ type Serializer struct {
 // CompatIgnoredPacket is returned for client packets that are intentionally
 // ignored under custom-client compatibility mode.
 type CompatIgnoredPacket struct {
-	ID     byte
-	Length int
+	ID      byte
+	Length  int
 	Payload []byte
 }
 
@@ -227,6 +227,16 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 		// This avoids accidental decoding into wrong packet classes when registry
 		// ordering differs from the target client build.
 		switch id {
+		case 127: // BeginBreakCallPacket (official build 155+)
+			if msg, err := readBeginBreakCompat(payload, s.Ctx); err == nil {
+				return msg, nil
+			}
+			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
+		case 128: // BeginPlaceCallPacket (official build 155+)
+			if msg, err := readBeginPlaceCompat(payload, s.Ctx); err == nil {
+				return msg, nil
+			}
+			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
 		case 9, 13: // BeginBreak call packet variants
 			if msg, err := readBeginBreakCompat(payload, s.Ctx); err == nil {
 				return msg, nil

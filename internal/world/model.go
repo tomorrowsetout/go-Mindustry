@@ -39,6 +39,11 @@ type Tile struct {
 	Rotation int8
 	Con      ConID
 	Build    *Building
+	// Raw tile data from MSAV (data/floorData/overlayData/extraData).
+	Data        byte
+	FloorData   byte
+	OverlayData byte
+	ExtraData   int32
 }
 
 type Building struct {
@@ -76,6 +81,13 @@ type Building struct {
 	DuctProgress float32
 	DuctCurrent  ItemID
 	DuctRecDir   int8
+
+	// Raw serialized building payload from MSAV (opaque).
+	RawData []byte
+
+	// Decoded (best-effort) state.
+	PowerStatus float32
+	PowerLinks  []int32
 }
 
 // GetX 获取X坐标
