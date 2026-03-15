@@ -1,0 +1,2380 @@
+[
+  {
+    "block": "cliff",
+    "class": "Cliff",
+    "group": "other"
+  },
+  {
+    "block": "deep-water",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "shallow-water",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "tainted-water",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "deep-tainted-water",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "darksand-tainted-water",
+    "class": "ShallowLiquid",
+    "group": "liquid",
+    "kind": "liquid",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "sand-water",
+    "class": "ShallowLiquid",
+    "group": "liquid",
+    "kind": "liquid",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "darksand-water",
+    "class": "ShallowLiquid",
+    "group": "liquid",
+    "kind": "liquid",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "tar",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "pooled-cryofluid",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "molten-slag",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "space",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "crater-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "char",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "basalt",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "hotrock",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "magmarock",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "sand-floor",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "darksand",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "mud",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "rhyolite",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "rhyolite-crater",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "rough-rhyolite",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "regolith",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "yellow-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "carbon-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "ferric-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "ferric-craters",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "beryllic-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "crystalline-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "crystal-floor",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "yellow-stone-plates",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "red-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "dense-red-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "red-ice",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "arkycite-floor",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "arkyic-stone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "rhyolite-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "carbon-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "arkyic-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "yellow-stone-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "red-stone-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "crystalline-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "stone-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "basalt-vent",
+    "class": "SteamVent",
+    "group": "other"
+  },
+  {
+    "block": "grass",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "salt",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "snow",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "ice",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "ice-snow",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "shale",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "moss",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "core-zone",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "spore-moss",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "stone-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "spore-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "ice-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "dune-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "regolith-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "yellow-stone-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "rhyolite-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "carbon-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "ferric-stone-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "beryllic-stone-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "arkyic-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "crystalline-stone-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "red-ice-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "red-stone-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "red-diamond-wall",
+    "class": "StaticTree",
+    "group": "other"
+  },
+  {
+    "block": "sand-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "spore-pine",
+    "class": "StaticTree",
+    "group": "other"
+  },
+  {
+    "block": "spore-cluster",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "redweed",
+    "class": "Seaweed",
+    "group": "other"
+  },
+  {
+    "block": "pur-bush",
+    "class": "SeaBush",
+    "group": "other"
+  },
+  {
+    "block": "yellowcoral",
+    "class": "SeaBush",
+    "group": "other"
+  },
+  {
+    "block": "boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "snow-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "shale-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "sand-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "dacite-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "basalt-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "carbon-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "ferric-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "beryllic-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "yellow-stone-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "arkyic-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "crystal-cluster",
+    "class": "TallBlock",
+    "group": "other"
+  },
+  {
+    "block": "vibrant-crystal-cluster",
+    "class": "TallBlock",
+    "group": "other"
+  },
+  {
+    "block": "crystal-blocks",
+    "class": "TallBlock",
+    "group": "other"
+  },
+  {
+    "block": "crystal-orbs",
+    "class": "TallBlock",
+    "group": "other"
+  },
+  {
+    "block": "crystalline-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "red-ice-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "rhyolite-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "red-stone-boulder",
+    "class": "Prop",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-1",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-2",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-3",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-4",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-5",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-6",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-7",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-8",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-9",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-10",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-11",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-12",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-tiles-13",
+    "class": "Floor",
+    "group": "other"
+  },
+  {
+    "block": "metal-wall-1",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "metal-wall-2",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "metal-wall-3",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "colored-floor",
+    "class": "ColoredFloor",
+    "group": "other"
+  },
+  {
+    "block": "colored-wall",
+    "class": "ColoredWall",
+    "group": "other"
+  },
+  {
+    "block": "character-overlay",
+    "class": "CharacterOverlay",
+    "group": "other"
+  },
+  {
+    "block": "character-overlay-white",
+    "class": "CharacterOverlay",
+    "group": "other"
+  },
+  {
+    "block": "rune-overlay",
+    "class": "RuneOverlay",
+    "group": "other"
+  },
+  {
+    "block": "graphitic-wall",
+    "class": "StaticWall",
+    "group": "other"
+  },
+  {
+    "block": "graphite-press",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "multi-press",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "silicon-smelter",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "silicon-crucible",
+    "class": "AttributeCrafter",
+    "group": "other"
+  },
+  {
+    "block": "kiln",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "plastanium-compressor",
+    "class": "GenericCrafter",
+    "group": "other",
+    "flags": [
+      "stack"
+    ]
+  },
+  {
+    "block": "phase-weaver",
+    "class": "GenericCrafter",
+    "group": "other",
+    "flags": [
+      "phase"
+    ]
+  },
+  {
+    "block": "surge-smelter",
+    "class": "GenericCrafter",
+    "group": "other",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "cryofluid-mixer",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "pyratite-mixer",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "blast-mixer",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "melter",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "separator",
+    "class": "Separator",
+    "group": "other"
+  },
+  {
+    "block": "disassembler",
+    "class": "Separator",
+    "group": "other"
+  },
+  {
+    "block": "spore-press",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "pulverizer",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "-rotator",
+    "class": "DrawRegion",
+    "group": "other"
+  },
+  {
+    "block": "coal-centrifuge",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "incinerator",
+    "class": "Incinerator",
+    "group": "other"
+  },
+  {
+    "block": "silicon-arc-furnace",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "electrolyzer",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "atmospheric-concentrator",
+    "class": "HeatCrafter",
+    "group": "other"
+  },
+  {
+    "block": "oxidation-chamber",
+    "class": "HeatProducer",
+    "group": "other"
+  },
+  {
+    "block": "electric-heater",
+    "class": "HeatProducer",
+    "group": "other"
+  },
+  {
+    "block": "slag-heater",
+    "class": "HeatProducer",
+    "group": "other"
+  },
+  {
+    "block": "phase-heater",
+    "class": "HeatProducer",
+    "group": "other",
+    "flags": [
+      "phase"
+    ]
+  },
+  {
+    "block": "heat-redirector",
+    "class": "HeatConductor",
+    "group": "distribution",
+    "kind": "duct"
+  },
+  {
+    "block": "small-heat-redirector",
+    "class": "HeatConductor",
+    "group": "distribution",
+    "kind": "duct"
+  },
+  {
+    "block": "heat-router",
+    "class": "HeatConductor",
+    "group": "distribution",
+    "kind": "duct"
+  },
+  {
+    "block": "slag-incinerator",
+    "class": "ItemIncinerator",
+    "group": "other"
+  },
+  {
+    "block": "carbide-crucible",
+    "class": "HeatCrafter",
+    "group": "other"
+  },
+  {
+    "block": "slag-centrifuge",
+    "class": "GenericCrafter",
+    "group": "other"
+  },
+  {
+    "block": "surge-crucible",
+    "class": "HeatCrafter",
+    "group": "other",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "-vents",
+    "class": "DrawHeatRegion",
+    "group": "other"
+  },
+  {
+    "block": "cyanogen-synthesizer",
+    "class": "HeatCrafter",
+    "group": "other"
+  },
+  {
+    "block": "phase-synthesizer",
+    "class": "HeatCrafter",
+    "group": "other",
+    "flags": [
+      "phase"
+    ]
+  },
+  {
+    "block": "heat-reactor",
+    "class": "HeatProducer",
+    "group": "other"
+  },
+  {
+    "block": "copper-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "copper-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "titanium-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "titanium-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "plastanium-wall",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "stack"
+    ]
+  },
+  {
+    "block": "plastanium-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "stack",
+      "large"
+    ]
+  },
+  {
+    "block": "thorium-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "thorium-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "phase-wall",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "phase"
+    ]
+  },
+  {
+    "block": "phase-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "phase",
+      "large"
+    ]
+  },
+  {
+    "block": "surge-wall",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "surge-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "surge",
+      "large"
+    ]
+  },
+  {
+    "block": "door",
+    "class": "Door",
+    "group": "other"
+  },
+  {
+    "block": "door-large",
+    "class": "Door",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "scrap-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "scrap-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "scrap-wall-huge",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "scrap-wall-gigantic",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "thruster",
+    "class": "Thruster",
+    "group": "other"
+  },
+  {
+    "block": "beryllium-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "beryllium-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "tungsten-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "tungsten-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "blast-door",
+    "class": "AutoDoor",
+    "group": "other"
+  },
+  {
+    "block": "reinforced-surge-wall",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "surge",
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-surge-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "surge",
+      "armored",
+      "large"
+    ]
+  },
+  {
+    "block": "carbide-wall",
+    "class": "Wall",
+    "group": "other"
+  },
+  {
+    "block": "carbide-wall-large",
+    "class": "Wall",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "shielded-wall",
+    "class": "ShieldWall",
+    "group": "other"
+  },
+  {
+    "block": "mender",
+    "class": "MendProjector",
+    "group": "other"
+  },
+  {
+    "block": "mend-projector",
+    "class": "MendProjector",
+    "group": "other"
+  },
+  {
+    "block": "overdrive-projector",
+    "class": "OverdriveProjector",
+    "group": "other"
+  },
+  {
+    "block": "overdrive-dome",
+    "class": "OverdriveProjector",
+    "group": "other"
+  },
+  {
+    "block": "force-projector",
+    "class": "ForceProjector",
+    "group": "other"
+  },
+  {
+    "block": "shock-mine",
+    "class": "ShockMine",
+    "group": "other"
+  },
+  {
+    "block": "radar",
+    "class": "Radar",
+    "group": "other"
+  },
+  {
+    "block": "build-tower",
+    "class": "BuildTurret",
+    "group": "other"
+  },
+  {
+    "block": "regen-projector",
+    "class": "RegenProjector",
+    "group": "other"
+  },
+  {
+    "block": "barrier-projector",
+    "class": "DirectionalForceProjector",
+    "group": "other"
+  },
+  {
+    "block": "shockwave-tower",
+    "class": "ShockwaveTower",
+    "group": "other"
+  },
+  {
+    "block": "shield-projector",
+    "class": "BaseShield",
+    "group": "other"
+  },
+  {
+    "block": "large-shield-projector",
+    "class": "BaseShield",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "conveyor",
+    "class": "Conveyor",
+    "speed": 0.03,
+    "group": "distribution",
+    "kind": "conveyor"
+  },
+  {
+    "block": "titanium-conveyor",
+    "class": "Conveyor",
+    "speed": 0.08,
+    "group": "distribution",
+    "kind": "conveyor"
+  },
+  {
+    "block": "plastanium-conveyor",
+    "class": "StackConveyor",
+    "speed": 0.06666667,
+    "group": "distribution",
+    "kind": "conveyor",
+    "flags": [
+      "stack"
+    ]
+  },
+  {
+    "block": "armored-conveyor",
+    "class": "ArmoredConveyor",
+    "speed": 0.08,
+    "group": "distribution",
+    "kind": "armored-conveyor",
+    "flags": [
+      "armored"
+    ]
+  },
+  {
+    "block": "junction",
+    "class": "Junction",
+    "speed": 26,
+    "group": "distribution",
+    "kind": "junction"
+  },
+  {
+    "block": "bridge-conveyor",
+    "class": "BufferedItemBridge",
+    "speed": 74,
+    "group": "distribution",
+    "kind": "bridge",
+    "flags": [
+      "bridge"
+    ]
+  },
+  {
+    "block": "phase-conveyor",
+    "class": "ItemBridge",
+    "group": "distribution",
+    "kind": "bridge",
+    "flags": [
+      "phase"
+    ]
+  },
+  {
+    "block": "sorter",
+    "class": "Sorter",
+    "group": "other"
+  },
+  {
+    "block": "inverted-sorter",
+    "class": "Sorter",
+    "group": "other"
+  },
+  {
+    "block": "router",
+    "class": "Router",
+    "group": "distribution",
+    "kind": "router"
+  },
+  {
+    "block": "distributor",
+    "class": "Router",
+    "group": "distribution",
+    "kind": "router"
+  },
+  {
+    "block": "overflow-gate",
+    "class": "OverflowGate",
+    "group": "distribution",
+    "kind": "overflow"
+  },
+  {
+    "block": "underflow-gate",
+    "class": "OverflowGate",
+    "group": "distribution",
+    "kind": "overflow"
+  },
+  {
+    "block": "unloader",
+    "class": "Unloader",
+    "speed": 5.4545455,
+    "group": "other"
+  },
+  {
+    "block": "mass-driver",
+    "class": "MassDriver",
+    "group": "other"
+  },
+  {
+    "block": "duct",
+    "class": "Duct",
+    "speed": 4,
+    "group": "distribution",
+    "kind": "duct",
+    "flags": [
+      "duct"
+    ]
+  },
+  {
+    "block": "armored-duct",
+    "class": "Duct",
+    "speed": 4,
+    "group": "distribution",
+    "kind": "duct",
+    "flags": [
+      "armored",
+      "duct"
+    ]
+  },
+  {
+    "block": "duct-router",
+    "class": "DuctRouter",
+    "speed": 4,
+    "group": "distribution",
+    "kind": "duct-router",
+    "flags": [
+      "duct"
+    ]
+  },
+  {
+    "block": "overflow-duct",
+    "class": "OverflowDuct",
+    "speed": 4,
+    "group": "distribution",
+    "kind": "overflow-duct",
+    "flags": [
+      "duct"
+    ]
+  },
+  {
+    "block": "underflow-duct",
+    "class": "OverflowDuct",
+    "speed": 4,
+    "group": "distribution",
+    "kind": "overflow-duct",
+    "flags": [
+      "duct"
+    ]
+  },
+  {
+    "block": "duct-bridge",
+    "class": "DuctBridge",
+    "speed": 4,
+    "group": "distribution",
+    "kind": "duct-bridge",
+    "flags": [
+      "bridge",
+      "duct"
+    ]
+  },
+  {
+    "block": "duct-unloader",
+    "class": "DirectionalUnloader",
+    "speed": 4,
+    "group": "other",
+    "kind": "duct-unloader",
+    "flags": [
+      "duct"
+    ]
+  },
+  {
+    "block": "surge-conveyor",
+    "class": "StackConveyor",
+    "speed": 0.083333336,
+    "group": "distribution",
+    "kind": "conveyor",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "surge-router",
+    "class": "StackRouter",
+    "speed": 6,
+    "group": "distribution",
+    "kind": "router",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "unit-cargo-loader",
+    "class": "UnitCargoLoader",
+    "group": "other"
+  },
+  {
+    "block": "unit-cargo-unload-point",
+    "class": "UnitCargoUnloadPoint",
+    "group": "other"
+  },
+  {
+    "block": "mechanical-pump",
+    "class": "Pump",
+    "group": "other"
+  },
+  {
+    "block": "rotary-pump",
+    "class": "Pump",
+    "group": "other"
+  },
+  {
+    "block": "impulse-pump",
+    "class": "Pump",
+    "group": "other"
+  },
+  {
+    "block": "conduit",
+    "class": "Conduit",
+    "group": "liquid",
+    "kind": "conduit",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "pulse-conduit",
+    "class": "Conduit",
+    "group": "liquid",
+    "kind": "pulse-conduit",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "plated-conduit",
+    "class": "ArmoredConduit",
+    "group": "liquid",
+    "kind": "plated-conduit",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "liquid-router",
+    "class": "LiquidRouter",
+    "group": "liquid",
+    "kind": "liquid-router",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "liquid-container",
+    "class": "LiquidRouter",
+    "group": "liquid",
+    "kind": "liquid-container",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "liquid-tank",
+    "class": "LiquidRouter",
+    "group": "liquid",
+    "kind": "liquid-tank",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "liquid-junction",
+    "class": "LiquidJunction",
+    "group": "liquid",
+    "kind": "liquid-junction",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "bridge-conduit",
+    "class": "LiquidBridge",
+    "group": "liquid",
+    "kind": "bridge-conduit",
+    "flags": [
+      "liquid",
+      "bridge"
+    ]
+  },
+  {
+    "block": "phase-conduit",
+    "class": "LiquidBridge",
+    "group": "liquid",
+    "kind": "phase-conduit",
+    "flags": [
+      "liquid",
+      "phase"
+    ]
+  },
+  {
+    "block": "reinforced-pump",
+    "class": "Pump",
+    "group": "other",
+    "flags": [
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-conduit",
+    "class": "ArmoredConduit",
+    "group": "liquid",
+    "kind": "armored-conduit",
+    "flags": [
+      "liquid",
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-liquid-junction",
+    "class": "LiquidJunction",
+    "group": "liquid",
+    "kind": "liquid-junction",
+    "flags": [
+      "liquid",
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-bridge-conduit",
+    "class": "DirectionLiquidBridge",
+    "group": "liquid",
+    "kind": "bridge-conduit",
+    "flags": [
+      "liquid",
+      "armored",
+      "bridge"
+    ]
+  },
+  {
+    "block": "reinforced-liquid-router",
+    "class": "LiquidRouter",
+    "group": "liquid",
+    "kind": "liquid-router",
+    "flags": [
+      "liquid",
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-liquid-container",
+    "class": "LiquidRouter",
+    "group": "liquid",
+    "kind": "liquid-container",
+    "flags": [
+      "liquid",
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-liquid-tank",
+    "class": "LiquidRouter",
+    "group": "liquid",
+    "kind": "liquid-tank",
+    "flags": [
+      "liquid",
+      "armored"
+    ]
+  },
+  {
+    "block": "power-node",
+    "class": "PowerNode",
+    "group": "other"
+  },
+  {
+    "block": "power-node-large",
+    "class": "PowerNode",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "surge-tower",
+    "class": "PowerNode",
+    "group": "other",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "diode",
+    "class": "PowerDiode",
+    "group": "other"
+  },
+  {
+    "block": "battery",
+    "class": "Battery",
+    "group": "other"
+  },
+  {
+    "block": "battery-large",
+    "class": "Battery",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "combustion-generator",
+    "class": "ConsumeGenerator",
+    "group": "other"
+  },
+  {
+    "block": "thermal-generator",
+    "class": "ThermalGenerator",
+    "group": "other"
+  },
+  {
+    "block": "steam-generator",
+    "class": "ConsumeGenerator",
+    "group": "other"
+  },
+  {
+    "block": "-turbine",
+    "class": "DrawRegion",
+    "group": "other"
+  },
+  {
+    "block": "differential-generator",
+    "class": "ConsumeGenerator",
+    "group": "other"
+  },
+  {
+    "block": "rtg-generator",
+    "class": "ConsumeGenerator",
+    "group": "other"
+  },
+  {
+    "block": "solar-panel",
+    "class": "SolarGenerator",
+    "group": "other"
+  },
+  {
+    "block": "solar-panel-large",
+    "class": "SolarGenerator",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "thorium-reactor",
+    "class": "NuclearReactor",
+    "group": "other"
+  },
+  {
+    "block": "impact-reactor",
+    "class": "ImpactReactor",
+    "group": "other"
+  },
+  {
+    "block": "beam-node",
+    "class": "BeamNode",
+    "group": "other"
+  },
+  {
+    "block": "beam-tower",
+    "class": "BeamNode",
+    "group": "other"
+  },
+  {
+    "block": "beam-link",
+    "class": "LongPowerNode",
+    "group": "other"
+  },
+  {
+    "block": "turbine-condenser",
+    "class": "ThermalGenerator",
+    "group": "other"
+  },
+  {
+    "block": "chemical-combustion-chamber",
+    "class": "ConsumeGenerator",
+    "group": "other"
+  },
+  {
+    "block": "pyrolysis-generator",
+    "class": "ConsumeGenerator",
+    "group": "other"
+  },
+  {
+    "block": "flux-reactor",
+    "class": "VariableReactor",
+    "group": "other"
+  },
+  {
+    "block": "-ventglow",
+    "class": "DrawGlowRegion",
+    "group": "other"
+  },
+  {
+    "block": "neoplasia-reactor",
+    "class": "HeaterGenerator",
+    "group": "other"
+  },
+  {
+    "block": "-glow",
+    "class": "DrawGlowRegion",
+    "group": "other"
+  },
+  {
+    "block": "mechanical-drill",
+    "class": "Drill",
+    "group": "other"
+  },
+  {
+    "block": "pneumatic-drill",
+    "class": "Drill",
+    "group": "other"
+  },
+  {
+    "block": "laser-drill",
+    "class": "Drill",
+    "group": "other"
+  },
+  {
+    "block": "blast-drill",
+    "class": "Drill",
+    "group": "other"
+  },
+  {
+    "block": "water-extractor",
+    "class": "SolidPump",
+    "group": "other"
+  },
+  {
+    "block": "cultivator",
+    "class": "AttributeCrafter",
+    "group": "other"
+  },
+  {
+    "block": "oil-extractor",
+    "class": "Fracker",
+    "group": "other"
+  },
+  {
+    "block": "vent-condenser",
+    "class": "AttributeCrafter",
+    "group": "other"
+  },
+  {
+    "block": "cliff-crusher",
+    "class": "WallCrafter",
+    "group": "other"
+  },
+  {
+    "block": "large-cliff-crusher",
+    "class": "WallCrafter",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "plasma-bore",
+    "class": "BeamDrill",
+    "group": "other"
+  },
+  {
+    "block": "large-plasma-bore",
+    "class": "BeamDrill",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "impact-drill",
+    "class": "BurstDrill",
+    "group": "other"
+  },
+  {
+    "block": "eruption-drill",
+    "class": "BurstDrill",
+    "group": "other"
+  },
+  {
+    "block": "core-shard",
+    "class": "CoreBlock",
+    "group": "other"
+  },
+  {
+    "block": "core-foundation",
+    "class": "CoreBlock",
+    "group": "other"
+  },
+  {
+    "block": "core-nucleus",
+    "class": "CoreBlock",
+    "group": "other"
+  },
+  {
+    "block": "core-bastion",
+    "class": "CoreBlock",
+    "group": "other"
+  },
+  {
+    "block": "core-citadel",
+    "class": "CoreBlock",
+    "group": "other"
+  },
+  {
+    "block": "core-acropolis",
+    "class": "CoreBlock",
+    "group": "other"
+  },
+  {
+    "block": "container",
+    "class": "StorageBlock",
+    "group": "other"
+  },
+  {
+    "block": "vault",
+    "class": "StorageBlock",
+    "group": "other"
+  },
+  {
+    "block": "reinforced-container",
+    "class": "StorageBlock",
+    "group": "other",
+    "flags": [
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-vault",
+    "class": "StorageBlock",
+    "group": "other",
+    "flags": [
+      "armored"
+    ]
+  },
+  {
+    "block": "duo",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "scatter",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "-mid",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "scorch",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "hail",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "wave",
+    "class": "LiquidTurret",
+    "group": "liquid",
+    "kind": "liquid",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "lancer",
+    "class": "PowerTurret",
+    "group": "other"
+  },
+  {
+    "block": "arc",
+    "class": "PowerTurret",
+    "group": "other"
+  },
+  {
+    "block": "parallax",
+    "class": "TractorBeamTurret",
+    "group": "other"
+  },
+  {
+    "block": "swarmer",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "salvo",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "-side",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "-barrel",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "segment",
+    "class": "PointDefenseTurret",
+    "group": "other"
+  },
+  {
+    "block": "tsunami",
+    "class": "LiquidTurret",
+    "speed": 4,
+    "group": "liquid",
+    "kind": "liquid",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "fuse",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "ripple",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "cyclone",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "foreshadow",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "spectre",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "meltdown",
+    "class": "LaserTurret",
+    "group": "other"
+  },
+  {
+    "block": "breach",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "diffuse",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "reinforced-",
+    "class": "DrawTurret",
+    "group": "other",
+    "flags": [
+      "armored"
+    ]
+  },
+  {
+    "block": "-front",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "sublimate",
+    "class": "ContinuousLiquidTurret",
+    "group": "liquid",
+    "kind": "liquid",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "-back",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "-nozzle",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "titan",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "disperse",
+    "class": "ItemTurret",
+    "speed": 8.5,
+    "group": "other"
+  },
+  {
+    "block": "-blade",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "afflict",
+    "class": "PowerTurret",
+    "speed": 5,
+    "group": "other"
+  },
+  {
+    "block": "-blade-glow",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "lustre",
+    "class": "ContinuousTurret",
+    "group": "other"
+  },
+  {
+    "block": "-inner",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "scathe",
+    "class": "ItemTurret",
+    "speed": 4.6,
+    "group": "other"
+  },
+  {
+    "block": "scathe-missile",
+    "class": "MissileUnitType",
+    "speed": 4.6,
+    "group": "other"
+  },
+  {
+    "block": "scathe-missile-phase",
+    "class": "MissileUnitType",
+    "speed": 2.5,
+    "group": "other",
+    "flags": [
+      "phase"
+    ]
+  },
+  {
+    "block": "scathe-missile-surge",
+    "class": "MissileUnitType",
+    "speed": 4.4,
+    "group": "other",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "scathe-missile-surge-split",
+    "class": "MissileUnitType",
+    "speed": 4.8,
+    "group": "other",
+    "flags": [
+      "surge"
+    ]
+  },
+  {
+    "block": "-missile",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "smite",
+    "class": "ItemTurret",
+    "group": "other"
+  },
+  {
+    "block": "-blade-bar",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "-spine",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "malign",
+    "class": "PowerTurret",
+    "group": "other"
+  },
+  {
+    "block": "-mouth",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "-end",
+    "class": "RegionPart",
+    "group": "other"
+  },
+  {
+    "block": "ground-factory",
+    "class": "UnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "air-factory",
+    "class": "UnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "naval-factory",
+    "class": "UnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "additive-reconstructor",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "multiplicative-reconstructor",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "exponential-reconstructor",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "tetrative-reconstructor",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "repair-point",
+    "class": "RepairTurret",
+    "group": "other"
+  },
+  {
+    "block": "repair-turret",
+    "class": "RepairTurret",
+    "group": "other"
+  },
+  {
+    "block": "tank-fabricator",
+    "class": "UnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "ship-fabricator",
+    "class": "UnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "mech-fabricator",
+    "class": "UnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "tank-refabricator",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "ship-refabricator",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "mech-refabricator",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "prime-refabricator",
+    "class": "Reconstructor",
+    "group": "other"
+  },
+  {
+    "block": "tank-assembler",
+    "class": "UnitAssembler",
+    "group": "other"
+  },
+  {
+    "block": "ship-assembler",
+    "class": "UnitAssembler",
+    "group": "other"
+  },
+  {
+    "block": "mech-assembler",
+    "class": "UnitAssembler",
+    "group": "other"
+  },
+  {
+    "block": "basic-assembler-module",
+    "class": "UnitAssemblerModule",
+    "group": "other"
+  },
+  {
+    "block": "unit-repair-tower",
+    "class": "RepairTower",
+    "group": "other"
+  },
+  {
+    "block": "payload-conveyor",
+    "class": "PayloadConveyor",
+    "group": "payload",
+    "kind": "payload-conveyor",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "payload-router",
+    "class": "PayloadRouter",
+    "group": "payload",
+    "kind": "payload-router",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "reinforced-payload-conveyor",
+    "class": "PayloadConveyor",
+    "group": "payload",
+    "kind": "payload-conveyor",
+    "flags": [
+      "payload",
+      "armored"
+    ]
+  },
+  {
+    "block": "reinforced-payload-router",
+    "class": "PayloadRouter",
+    "group": "payload",
+    "kind": "payload-router",
+    "flags": [
+      "payload",
+      "armored"
+    ]
+  },
+  {
+    "block": "payload-mass-driver",
+    "class": "PayloadMassDriver",
+    "group": "payload",
+    "kind": "payload-mass-driver",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "large-payload-mass-driver",
+    "class": "PayloadMassDriver",
+    "group": "payload",
+    "kind": "payload-mass-driver",
+    "flags": [
+      "payload",
+      "large"
+    ]
+  },
+  {
+    "block": "small-deconstructor",
+    "class": "PayloadDeconstructor",
+    "group": "payload",
+    "kind": "payload",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "deconstructor",
+    "class": "PayloadDeconstructor",
+    "group": "payload",
+    "kind": "payload",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "constructor",
+    "class": "Constructor",
+    "group": "other"
+  },
+  {
+    "block": "large-constructor",
+    "class": "Constructor",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "payload-loader",
+    "class": "PayloadLoader",
+    "group": "payload",
+    "kind": "payload-loader",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "payload-unloader",
+    "class": "PayloadUnloader",
+    "group": "payload",
+    "kind": "payload-unloader",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "power-source",
+    "class": "PowerSource",
+    "group": "other"
+  },
+  {
+    "block": "power-void",
+    "class": "PowerVoid",
+    "group": "other"
+  },
+  {
+    "block": "item-source",
+    "class": "ItemSource",
+    "group": "other"
+  },
+  {
+    "block": "item-void",
+    "class": "ItemVoid",
+    "group": "other"
+  },
+  {
+    "block": "liquid-source",
+    "class": "LiquidSource",
+    "group": "liquid",
+    "kind": "liquid-source",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "liquid-void",
+    "class": "LiquidVoid",
+    "group": "liquid",
+    "kind": "liquid-void",
+    "flags": [
+      "liquid"
+    ]
+  },
+  {
+    "block": "payload-source",
+    "class": "PayloadSource",
+    "group": "payload",
+    "kind": "payload-source",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "payload-void",
+    "class": "PayloadVoid",
+    "group": "payload",
+    "kind": "payload-void",
+    "flags": [
+      "payload"
+    ]
+  },
+  {
+    "block": "heat-source",
+    "class": "HeatProducer",
+    "group": "other"
+  },
+  {
+    "block": "illuminator",
+    "class": "LightBlock",
+    "group": "other"
+  },
+  {
+    "block": "legacy-unit-factory-air",
+    "class": "LegacyUnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "legacy-unit-factory-ground",
+    "class": "LegacyUnitFactory",
+    "group": "other"
+  },
+  {
+    "block": "command-center",
+    "class": "LegacyCommandCenter",
+    "group": "other"
+  },
+  {
+    "block": "launch-pad",
+    "class": "LaunchPad",
+    "group": "other"
+  },
+  {
+    "block": "advanced-launch-pad",
+    "class": "LaunchPad",
+    "group": "other"
+  },
+  {
+    "block": "landing-pad",
+    "class": "LandingPad",
+    "group": "other"
+  },
+  {
+    "block": "interplanetary-accelerator",
+    "class": "Accelerator",
+    "group": "other"
+  },
+  {
+    "block": "message",
+    "class": "MessageBlock",
+    "group": "other"
+  },
+  {
+    "block": "switch",
+    "class": "SwitchBlock",
+    "group": "other"
+  },
+  {
+    "block": "micro-processor",
+    "class": "LogicBlock",
+    "group": "other"
+  },
+  {
+    "block": "logic-processor",
+    "class": "LogicBlock",
+    "group": "other"
+  },
+  {
+    "block": "hyper-processor",
+    "class": "LogicBlock",
+    "group": "other"
+  },
+  {
+    "block": "memory-cell",
+    "class": "MemoryBlock",
+    "group": "other"
+  },
+  {
+    "block": "memory-bank",
+    "class": "MemoryBlock",
+    "group": "other"
+  },
+  {
+    "block": "logic-display",
+    "class": "LogicDisplay",
+    "group": "other"
+  },
+  {
+    "block": "large-logic-display",
+    "class": "LogicDisplay",
+    "group": "other",
+    "flags": [
+      "large"
+    ]
+  },
+  {
+    "block": "tile-logic-display",
+    "class": "TileableLogicDisplay",
+    "group": "other"
+  },
+  {
+    "block": "canvas",
+    "class": "CanvasBlock",
+    "group": "other"
+  },
+  {
+    "block": "reinforced-message",
+    "class": "MessageBlock",
+    "group": "other",
+    "flags": [
+      "armored"
+    ]
+  },
+  {
+    "block": "world-processor",
+    "class": "LogicBlock",
+    "group": "other"
+  },
+  {
+    "block": "world-cell",
+    "class": "MemoryBlock",
+    "group": "other"
+  },
+  {
+    "block": "world-message",
+    "class": "MessageBlock",
+    "group": "other"
+  },
+  {
+    "block": "world-switch",
+    "class": "SwitchBlock",
+    "group": "other"
+  }
+]

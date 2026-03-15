@@ -1697,7 +1697,7 @@ type Remote_NetServer_clientSnapshot_45 struct {
 	Building         bool
 	SelectedBlock    Block
 	SelectedRotation int32
-	Plans            any
+	Plans            []*BuildPlan
 	ViewX            float32
 	ViewY            float32
 	ViewWidth        float32
@@ -1800,7 +1800,7 @@ func (p *Remote_NetServer_clientSnapshot_45) Read(r *Reader, _ int) error {
 	} else {
 		p.SelectedRotation = v
 	}
-	if v, err := ReadObject(r, false, r.Ctx); err != nil {
+	if v, err := ReadPlansQueue(r, r.Ctx); err != nil {
 		return err
 	} else {
 		p.Plans = v
@@ -1886,7 +1886,7 @@ func (p *Remote_NetServer_clientSnapshot_45) Write(w *Writer) error {
 	if err := w.WriteInt32(p.SelectedRotation); err != nil {
 		return err
 	}
-	if err := WriteObject(w, p.Plans, w.Ctx); err != nil {
+	if err := WritePlansQueueNet(w, p.Plans, w.Ctx); err != nil {
 		return err
 	}
 	if err := w.WriteFloat32(p.ViewX); err != nil {

@@ -1493,6 +1493,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		_ = c.Send(resp)
 	case *protocol.Remote_Build_beginBreak_123:
 		//客户端请求开始破坏建筑
+		fmt.Printf("[net] rx beginBreak id=%d x=%d y=%d\n", c.id, v.X, v.Y)
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 123, "Remote_Build_beginBreak_123", fmt.Sprintf("x=%d y=%d", v.X, v.Y))
 		}
@@ -1511,6 +1512,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if v.Result != nil {
 			blockID = v.Result.ID()
 		}
+		fmt.Printf("[net] rx beginPlace id=%d x=%d y=%d block=%d\n", c.id, v.X, v.Y, blockID)
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 124, "Remote_Build_beginPlace_124", fmt.Sprintf("x=%d y=%d block=%d", v.X, v.Y, blockID))
 		}
