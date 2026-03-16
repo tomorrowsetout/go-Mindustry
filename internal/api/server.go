@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"mdt-server/internal/config"
@@ -27,20 +26,14 @@ type Server struct {
 	keys   map[string]struct{}
 	stopFn func()
 	// typeID, x, y, team
-	summonFn      func(int16, float32, float32, byte) error
-	moveFn        func(int32, float32, float32, float32) error
-	teleportFn    func(int32, float32, float32, float32) error
-	lifeFn        func(int32, float32) error
-	followFn      func(int32, int32, float32) error
-	patrolFn      func(int32, float32, float32, float32, float32, float32) error
-	behaviorFn    func(int32, string) error
-	opsChangedFn  func()
-	configFn      func() any
-	mapListFn     func() ([]string, error)
-	mapLoadFn     func(string) (map[string]any, error)
-	mapStatusFn   func() map[string]any
-	keysChangedFn func([]string)
-	stats         apiStats
+	summonFn     func(int16, float32, float32, byte) error
+	moveFn       func(int32, float32, float32, float32) error
+	teleportFn   func(int32, float32, float32, float32) error
+	lifeFn       func(int32, float32) error
+	followFn     func(int32, int32, float32) error
+	patrolFn     func(int32, float32, float32, float32, float32, float32) error
+	behaviorFn   func(int32, string) error
+	opsChangedFn func()
 }
 
 func New(cfg config.APIConfig, srv *netserver.Server, engineStats func() *sim.TickStats) *Server {
@@ -64,8 +57,6 @@ func New(cfg config.APIConfig, srv *netserver.Server, engineStats func() *sim.Ti
 	mux.HandleFunc("/health", s.withAuth(s.handleHealth))
 	mux.HandleFunc("/help", s.withAuth(s.handleHelp))
 	mux.HandleFunc("/status", s.withAuth(s.handleStatus))
-	mux.HandleFunc("/stats", s.withAuth(s.handleStats))
-	mux.HandleFunc("/config", s.withAuth(s.handleConfig))
 	mux.HandleFunc("/players", s.withAuth(s.handlePlayers))
 	mux.HandleFunc("/kick", s.withAuth(s.handleKick))
 	mux.HandleFunc("/summon", s.withAuth(s.handleSummon))
@@ -80,15 +71,10 @@ func New(cfg config.APIConfig, srv *netserver.Server, engineStats func() *sim.Ti
 	mux.HandleFunc("/unban", s.withAuth(s.handleUnban))
 	mux.HandleFunc("/bans", s.withAuth(s.handleBans))
 	mux.HandleFunc("/ops", s.withAuth(s.handleOps))
-	mux.HandleFunc("/keys", s.withAuth(s.handleKeys))
-	mux.HandleFunc("/maps", s.withAuth(s.handleMaps))
-	mux.HandleFunc("/map", s.withAuth(s.handleMapStatus))
-	mux.HandleFunc("/map/load", s.withAuth(s.handleMapLoad))
 	s.http = &http.Server{
 		Addr:    cfg.Bind,
 		Handler: mux,
 	}
-	s.stats.byPath = make(map[string]int64)
 	return s
 }
 
@@ -104,10 +90,8 @@ func (s *Server) Serve() error {
 
 func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		if !s.cfg.Enabled {
-			http.Error(sw, "api disabled", http.StatusForbidden)
-			s.recordStats(r.URL.Path, sw.status)
+			http.Error(w, "api disabled", http.StatusForbidden)
 			return
 		}
 		if s.requiresAuth() {
@@ -119,13 +103,11 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 				}
 			}
 			if !s.HasAPIKey(key) {
-				http.Error(sw, "unauthorized", http.StatusUnauthorized)
-				s.recordStats(r.URL.Path, sw.status)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 		}
-		next(sw, r)
-		s.recordStats(r.URL.Path, sw.status)
+		next(w, r)
 	}
 }
 
@@ -241,19 +223,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
-	stats := s.snapshotStats()
-	writeJSON(w, http.StatusOK, stats)
-}
-
-func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) {
-	if s.configFn == nil {
-		http.Error(w, "config not available", http.StatusNotImplemented)
-		return
-	}
-	writeJSON(w, http.StatusOK, s.configFn())
 }
 
 func (s *Server) handlePlayers(w http.ResponseWriter, _ *http.Request) {
@@ -658,115 +627,6 @@ func (s *Server) handleOps(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type apiKeyRequest struct {
-	Key string `json:"key"`
-}
-
-func (s *Server) handleKeys(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{
-			"count": len(s.ListAPIKeys()),
-			"keys":  s.ListAPIKeys(),
-		})
-	case http.MethodPost:
-		var req apiKeyRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		if !s.AddAPIKey(req.Key) {
-			http.Error(w, "add key failed", http.StatusBadRequest)
-			return
-		}
-		if s.keysChangedFn != nil {
-			s.keysChangedFn(s.ListAPIKeys())
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-	case http.MethodDelete:
-		var req apiKeyRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		if !s.DeleteAPIKey(req.Key) {
-			http.Error(w, "delete key failed", http.StatusBadRequest)
-			return
-		}
-		if s.keysChangedFn != nil {
-			s.keysChangedFn(s.ListAPIKeys())
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleMaps(w http.ResponseWriter, _ *http.Request) {
-	if s.mapListFn == nil {
-		http.Error(w, "maps not available", http.StatusNotImplemented)
-		return
-	}
-	maps, err := s.mapListFn()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"count": len(maps),
-		"maps":  maps,
-	})
-}
-
-func (s *Server) handleMapStatus(w http.ResponseWriter, _ *http.Request) {
-	if s.mapStatusFn != nil {
-		writeJSON(w, http.StatusOK, s.mapStatusFn())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"name": safeMapName(s.srv),
-	})
-}
-
-type mapLoadRequest struct {
-	Map  string `json:"map"`
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
-func (s *Server) handleMapLoad(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if s.mapLoadFn == nil {
-		http.Error(w, "map load not available", http.StatusNotImplemented)
-		return
-	}
-	var req mapLoadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
-		return
-	}
-	choice := strings.TrimSpace(req.Map)
-	if choice == "" {
-		choice = strings.TrimSpace(req.Name)
-	}
-	if choice == "" {
-		choice = strings.TrimSpace(req.Path)
-	}
-	if choice == "" {
-		http.Error(w, "map required", http.StatusBadRequest)
-		return
-	}
-	resp, err := s.mapLoadFn(choice)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
 func (s *Server) ListAPIKeys() []string {
 	s.keyMu.RLock()
 	defer s.keyMu.RUnlock()
@@ -840,26 +700,6 @@ func (s *Server) SetUnitBehaviorFunc(fn func(int32, string) error) {
 
 func (s *Server) SetOpsChangedFunc(fn func()) {
 	s.opsChangedFn = fn
-}
-
-func (s *Server) SetConfigFunc(fn func() any) {
-	s.configFn = fn
-}
-
-func (s *Server) SetMapListFunc(fn func() ([]string, error)) {
-	s.mapListFn = fn
-}
-
-func (s *Server) SetMapLoadFunc(fn func(string) (map[string]any, error)) {
-	s.mapLoadFn = fn
-}
-
-func (s *Server) SetMapStatusFunc(fn func() map[string]any) {
-	s.mapStatusFn = fn
-}
-
-func (s *Server) SetKeysChangedFunc(fn func([]string)) {
-	s.keysChangedFn = fn
 }
 
 func (s *Server) HasAPIKey(key string) bool {
@@ -943,19 +783,6 @@ func apiHelpCategories() map[string][]string {
 			"POST /unit/patrol {id,x1,y1,x2,y2,speed}",
 			"POST /unit/behavior {id,mode=clear}",
 		},
-		"http": {
-			"GET /health",
-			"GET /status",
-			"GET /stats",
-			"GET /config",
-			"GET /players",
-			"GET /maps",
-			"GET /map",
-			"POST /map/load {map|name|path}",
-			"GET /keys",
-			"POST /keys {key}",
-			"DELETE /keys {key}",
-		},
 	}
 }
 
@@ -964,56 +791,4 @@ func safeMapName(srv *netserver.Server) string {
 		return ""
 	}
 	return srv.MapNameFn()
-}
-
-type apiStats struct {
-	total  int64
-	errors int64
-	mu     sync.Mutex
-	byPath map[string]int64
-}
-
-type apiStatsSnapshot struct {
-	TotalRequests int64            `json:"total_requests"`
-	Errors        int64            `json:"errors"`
-	ByEndpoint    map[string]int64 `json:"by_endpoint"`
-	Timestamp     string           `json:"timestamp"`
-}
-
-func (s *Server) recordStats(path string, status int) {
-	if path == "" {
-		path = "/"
-	}
-	atomic.AddInt64(&s.stats.total, 1)
-	if status >= 400 {
-		atomic.AddInt64(&s.stats.errors, 1)
-	}
-	s.stats.mu.Lock()
-	s.stats.byPath[path]++
-	s.stats.mu.Unlock()
-}
-
-func (s *Server) snapshotStats() apiStatsSnapshot {
-	out := apiStatsSnapshot{
-		TotalRequests: atomic.LoadInt64(&s.stats.total),
-		Errors:        atomic.LoadInt64(&s.stats.errors),
-		ByEndpoint:    map[string]int64{},
-		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-	}
-	s.stats.mu.Lock()
-	for k, v := range s.stats.byPath {
-		out.ByEndpoint[k] = v
-	}
-	s.stats.mu.Unlock()
-	return out
-}
-
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusWriter) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
 }

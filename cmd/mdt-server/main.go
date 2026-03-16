@@ -2,12 +2,10 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"math"
 	mathrand "math/rand"
 	"net"
@@ -44,345 +42,6 @@ import (
 type worldState struct {
 	mu      sync.RWMutex
 	current string
-}
-
-type streamMirror struct {
-	prevStdout *os.File
-	prevStderr *os.File
-	stdoutR    *os.File
-	stdoutW    *os.File
-	stderrR    *os.File
-	stderrW    *os.File
-	stdoutLog  *rotatingFileWriter
-	stderrLog  *rotatingFileWriter
-	done       chan struct{}
-}
-
-type logRules struct {
-	netEnabled        bool
-	netTxEnabled      bool
-	netUdpTxEnabled   bool
-	worldStreamEnable bool
-	buildSvcEnabled   bool
-	scriptEnabled     bool
-	modsEnabled       bool
-	featureEnabled    bool
-}
-
-type lineFilterWriter struct {
-	mu   sync.Mutex
-	dst  io.Writer
-	rule logRules
-	buf  []byte
-}
-
-type rotatingFileWriter struct {
-	mu       sync.Mutex
-	dir      string
-	prefix   string
-	maxSize  int64
-	maxFiles int
-	curFile  *os.File
-	curSize  int64
-}
-
-func newRotatingFileWriter(dir, prefix string, maxSize int64, maxFiles int) (*rotatingFileWriter, error) {
-	if maxSize <= 0 {
-		maxSize = 10 * 1024 * 1024
-	}
-	if maxFiles <= 0 {
-		maxFiles = 100
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-	w := &rotatingFileWriter{
-		dir:      dir,
-		prefix:   prefix,
-		maxSize:  maxSize,
-		maxFiles: maxFiles,
-	}
-	if err := w.rotateLocked(); err != nil {
-		return nil, err
-	}
-	return w, nil
-}
-
-func newLineFilterWriter(dst io.Writer, rule logRules) *lineFilterWriter {
-	if dst == nil {
-		dst = io.Discard
-	}
-	return &lineFilterWriter{dst: dst, rule: rule, buf: make([]byte, 0, 1024)}
-}
-
-func (w *lineFilterWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.buf = append(w.buf, p...)
-	for {
-		idx := bytes.IndexByte(w.buf, '\n')
-		if idx < 0 {
-			break
-		}
-		line := string(w.buf[:idx+1])
-		if w.allowLine(line) {
-			_, _ = w.dst.Write([]byte(line))
-		}
-		w.buf = w.buf[idx+1:]
-	}
-	return len(p), nil
-}
-
-func (w *lineFilterWriter) allowLine(line string) bool {
-	switch {
-	case strings.Contains(line, "[net] tx-udp"):
-		return w.rule.netEnabled && w.rule.netTxEnabled && w.rule.netUdpTxEnabled
-	case strings.Contains(line, "[net] tx "):
-		return w.rule.netEnabled && w.rule.netTxEnabled
-	case strings.Contains(line, "[net]"):
-		return w.rule.netEnabled
-	case strings.Contains(line, "[worldstream]"):
-		return w.rule.worldStreamEnable
-	case strings.Contains(line, "[buildsvc]"):
-		return w.rule.buildSvcEnabled
-	case strings.Contains(line, "[script]"):
-		return w.rule.scriptEnabled
-	case strings.Contains(line, "[MOD"):
-		return w.rule.modsEnabled
-	case strings.Contains(line, "[feature]"):
-		return w.rule.featureEnabled
-	default:
-		return true
-	}
-}
-
-func (w *rotatingFileWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.curFile == nil {
-		if err := w.rotateLocked(); err != nil {
-			return 0, err
-		}
-	}
-	if w.curSize+int64(len(p)) > w.maxSize {
-		if err := w.rotateLocked(); err != nil {
-			return 0, err
-		}
-	}
-	n, err := w.curFile.Write(p)
-	w.curSize += int64(n)
-	return n, err
-}
-
-func (w *rotatingFileWriter) CurrentPath() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.curFile == nil {
-		return ""
-	}
-	return w.curFile.Name()
-}
-
-func (w *rotatingFileWriter) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.curFile != nil {
-		err := w.curFile.Close()
-		w.curFile = nil
-		w.curSize = 0
-		return err
-	}
-	return nil
-}
-
-func (w *rotatingFileWriter) rotateLocked() error {
-	if w.curFile != nil {
-		_ = w.curFile.Close()
-		w.curFile = nil
-	}
-	name := fmt.Sprintf("%s-%s.log", w.prefix, time.Now().Format("20060102-150405.000000000"))
-	path := filepath.Join(w.dir, name)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	fi, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return err
-	}
-	w.curFile = f
-	w.curSize = fi.Size()
-	w.cleanupLocked()
-	return nil
-}
-
-func (w *rotatingFileWriter) cleanupLocked() {
-	pattern := filepath.Join(w.dir, w.prefix+"-*.log")
-	matches, err := filepath.Glob(pattern)
-	if err != nil || len(matches) <= w.maxFiles {
-		return
-	}
-	type fileInfo struct {
-		path string
-		time time.Time
-	}
-	items := make([]fileInfo, 0, len(matches))
-	for _, m := range matches {
-		st, err := os.Stat(m)
-		if err != nil {
-			continue
-		}
-		items = append(items, fileInfo{path: m, time: st.ModTime()})
-	}
-	if len(items) <= w.maxFiles {
-		return
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].time.Before(items[j].time) })
-	excess := len(items) - w.maxFiles
-	for i := 0; i < excess; i++ {
-		_ = os.Remove(items[i].path)
-	}
-}
-
-func startStreamMirror(cfg config.LoggingConfig) (*streamMirror, error) {
-	if !cfg.Enabled {
-		return nil, nil
-	}
-	logDir := strings.TrimSpace(cfg.Directory)
-	if logDir == "" {
-		logDir = "logs"
-	}
-	maxBytes := int64(cfg.MaxFileMB) * 1024 * 1024
-	if maxBytes <= 0 {
-		maxBytes = 10 * 1024 * 1024
-	}
-	maxFiles := cfg.MaxFiles
-	if maxFiles <= 0 {
-		maxFiles = 100
-	}
-	var stdoutLog *rotatingFileWriter
-	var stderrLog *rotatingFileWriter
-	var err error
-	if cfg.FileEnabled {
-		stdoutLog, err = newRotatingFileWriter(logDir, "server-stdout", maxBytes, maxFiles)
-		if err != nil {
-			return nil, err
-		}
-		stderrLog, err = newRotatingFileWriter(logDir, "server-stderr", maxBytes, maxFiles)
-		if err != nil {
-			_ = stdoutLog.Close()
-			return nil, err
-		}
-	}
-
-	stdoutR, stdoutW, err := os.Pipe()
-	if err != nil {
-		if stdoutLog != nil {
-			_ = stdoutLog.Close()
-		}
-		if stderrLog != nil {
-			_ = stderrLog.Close()
-		}
-		return nil, err
-	}
-	stderrR, stderrW, err := os.Pipe()
-	if err != nil {
-		_ = stdoutR.Close()
-		_ = stdoutW.Close()
-		if stdoutLog != nil {
-			_ = stdoutLog.Close()
-		}
-		if stderrLog != nil {
-			_ = stderrLog.Close()
-		}
-		return nil, err
-	}
-
-	m := &streamMirror{
-		prevStdout: os.Stdout,
-		prevStderr: os.Stderr,
-		stdoutR:    stdoutR,
-		stdoutW:    stdoutW,
-		stderrR:    stderrR,
-		stderrW:    stderrW,
-		stdoutLog:  stdoutLog,
-		stderrLog:  stderrLog,
-		done:       make(chan struct{}, 2),
-	}
-
-	os.Stdout = stdoutW
-	os.Stderr = stderrW
-
-	rule := logRules{
-		netEnabled:        cfg.NetEnabled,
-		netTxEnabled:      cfg.NetTxEnabled,
-		netUdpTxEnabled:   cfg.NetUdpTxEnabled,
-		worldStreamEnable: cfg.WorldStreamEnable,
-		buildSvcEnabled:   cfg.BuildSvcEnabled,
-		scriptEnabled:     cfg.ScriptEnabled,
-		modsEnabled:       cfg.ModsEnabled,
-		featureEnabled:    cfg.FeatureEnabled,
-	}
-	outTargets := make([]io.Writer, 0, 2)
-	errTargets := make([]io.Writer, 0, 2)
-	if cfg.ConsoleEnabled {
-		outTargets = append(outTargets, m.prevStdout)
-		errTargets = append(errTargets, m.prevStderr)
-	}
-	if cfg.FileEnabled {
-		outTargets = append(outTargets, m.stdoutLog)
-		errTargets = append(errTargets, m.stderrLog)
-	}
-	if len(outTargets) == 0 {
-		outTargets = append(outTargets, io.Discard)
-	}
-	if len(errTargets) == 0 {
-		errTargets = append(errTargets, io.Discard)
-	}
-	outSink := newLineFilterWriter(io.MultiWriter(outTargets...), rule)
-	errSink := newLineFilterWriter(io.MultiWriter(errTargets...), rule)
-
-	go func() {
-		_, _ = io.Copy(outSink, m.stdoutR)
-		m.done <- struct{}{}
-	}()
-	go func() {
-		_, _ = io.Copy(errSink, m.stderrR)
-		m.done <- struct{}{}
-	}()
-
-	if cfg.FileEnabled {
-		fmt.Fprintf(m.prevStdout, "[log] stdout -> %s (rotate=%dMB maxFiles=%d)\n", stdoutLog.CurrentPath(), cfg.MaxFileMB, maxFiles)
-		fmt.Fprintf(m.prevStdout, "[log] stderr -> %s (rotate=%dMB maxFiles=%d)\n", stderrLog.CurrentPath(), cfg.MaxFileMB, maxFiles)
-	}
-	return m, nil
-}
-
-func (m *streamMirror) Close() {
-	if m == nil {
-		return
-	}
-	os.Stdout = m.prevStdout
-	os.Stderr = m.prevStderr
-	_ = m.stdoutW.Close()
-	_ = m.stderrW.Close()
-	select {
-	case <-m.done:
-	case <-time.After(500 * time.Millisecond):
-	}
-	select {
-	case <-m.done:
-	case <-time.After(500 * time.Millisecond):
-	}
-	_ = m.stdoutR.Close()
-	_ = m.stderrR.Close()
-	if m.stdoutLog != nil {
-		_ = m.stdoutLog.Close()
-	}
-	if m.stderrLog != nil {
-		_ = m.stderrLog.Close()
-	}
 }
 
 type startupStatus int
@@ -504,13 +163,6 @@ type mapLoadStats struct {
 	hasRulesTag  bool
 }
 
-type runtimeTileSyncState struct {
-	BlockID int16
-	Team    byte
-	Rot     int8
-	Health  float32
-}
-
 func computeMapLoadStats(model *world.WorldModel) mapLoadStats {
 	if model == nil {
 		return mapLoadStats{}
@@ -586,64 +238,7 @@ func printMapDetails(path string, model *world.WorldModel) {
 	fmt.Println("========================================")
 }
 
-func mapModeSummary(r *world.Rules) string {
-	if r == nil {
-		return "unknown"
-	}
-	mode := "survival"
-	switch {
-	case r.Editor || r.InfiniteResources:
-		mode = "sandbox"
-	case r.Pvp:
-		mode = "pvp"
-	case r.AttackMode:
-		mode = "attack"
-	}
-	return fmt.Sprintf("mode=%s waves=%v waveTimer=%v waveSpacing=%.1fs initialWave=%.1fs", mode, r.Waves, r.WaveTimer, r.WaveSpacing, r.InitialWaveSpacing)
-}
-
-func chdirToExecutableDir() error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(exe)
-	if strings.TrimSpace(dir) == "" {
-		return nil
-	}
-	return os.Chdir(dir)
-}
-
-func normalizeWorldPathForExeRoot(path string) string {
-	p := strings.TrimSpace(filepath.Clean(path))
-	if p == "" {
-		return ""
-	}
-	if filepath.IsAbs(p) || strings.HasPrefix(p, ".."+string(filepath.Separator)) || p == ".." {
-		base := filepath.Base(p)
-		if strings.TrimSpace(base) == "" || base == "." || base == string(filepath.Separator) {
-			return ""
-		}
-		return filepath.Join("assets", "worlds", base)
-	}
-	return p
-}
-
-func stableString(s string) string {
-	if s == "" {
-		return ""
-	}
-	b := make([]byte, len(s))
-	copy(b, s)
-	return string(b)
-}
-
 func main() {
-	if err := chdirToExecutableDir(); err != nil {
-		fmt.Fprintf(os.Stderr, "切换到程序目录失败: %v\n", err)
-		os.Exit(1)
-	}
-
 	cfgPath := flag.String("config", "config.json", "path to config file")
 	addr := flag.String("addr", "0.0.0.0:6567", "listen address for Mindustry protocol (TCP+UDP)")
 	buildVersion := flag.Int("build", 155, "Mindustry build version for strict check; must match client build")
@@ -668,13 +263,6 @@ func main() {
 	} else {
 		cfg = loaded
 		cfg.Source = *cfgPath
-	}
-
-	streamLog, err := startStreamMirror(cfg.Logging)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "初始化日志镜像失败: %v\n", err)
-	} else {
-		defer streamLog.Close()
 	}
 
 	startup := &startupReport{}
@@ -707,7 +295,7 @@ func main() {
 	// 初始化开发者日志
 	devLog := devlog.New(os.Stdout)
 	devLog.SetLevel(devlog.LogLevelDebug)
-	if cfg.Logging.DevLogEnabled {
+	if cfg.Runtime.DevLogEnabled {
 		startup.ok("开发者日志", "已启用")
 	} else {
 		startup.info("开发者日志", "未启用")
@@ -731,7 +319,6 @@ func main() {
 	worldChoice := *worldArg
 	var persisted persist.State
 	var persistedOK bool
-	recoveredMapFromPersist := false
 	if cfg.Persist.Enabled {
 		if st, ok, err := persist.Load(cfg.Persist); err != nil {
 			log.Warn("persist load failed", logging.Field{Key: "error", Value: err.Error()})
@@ -740,9 +327,8 @@ func main() {
 			persisted = st
 			persistedOK = true
 			if worldChoice == "random" && st.MapPath != "" {
-				worldChoice = normalizeWorldPathForExeRoot(st.MapPath)
-				recoveredMapFromPersist = true
-				startup.ok("持久化地图恢复", worldChoice)
+				worldChoice = st.MapPath
+				startup.ok("持久化地图恢复", st.MapPath)
 			}
 		}
 	} else {
@@ -758,33 +344,12 @@ func main() {
 	fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 
 	srv := netserver.NewServer(*addr, *buildVersion)
-	srv.ModsFn = func() []string {
-		if modMgr == nil {
-			return nil
-		}
-		mods := modMgr.Mods()
-		if len(mods) == 0 {
-			return nil
-		}
-		out := make([]string, 0, len(mods))
-		for _, m := range mods {
-			if strings.TrimSpace(m.Name) == "" {
-				continue
-			}
-			out = append(out, m.Name)
-		}
-		return out
-	}
-	srv.SetSnapshotLogSample(cfg.Logging.SnapshotLogSample)
-	srv.SetTileConfigForwardMode(cfg.Net.TileConfigForwardMode)
 	contentIDsPath := filepath.FromSlash("data/vanilla/content_ids.json")
-	var contentIDs *vanilla.ContentIDsFile
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
 	} else {
 		count := vanilla.ApplyContentIDs(srv.Content, ids)
 		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
-		contentIDs = ids
 	}
 	srv.SetServerName(cfg.Runtime.ServerName)
 	srv.SetServerDescription(cfg.Runtime.ServerDesc)
@@ -792,117 +357,13 @@ func main() {
 	srv.UdpRetryCount = cfg.Net.UdpRetryCount
 	srv.UdpRetryDelay = time.Duration(cfg.Net.UdpRetryDelayMs) * time.Millisecond
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
-	srv.StrictMode = cfg.Net.StrictMode
-	srv.PositionCorrection = cfg.Net.PositionCorrection
-	srv.PositionMaxDist = cfg.Net.PositionMaxDist
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
-	wld.SetContentRegistry(srv.Content)
-	wld.SetTypeIO(srv.TypeIO)
-	if contentIDs != nil {
-		wld.SetLogicIDs(contentIDs)
-	}
-	weatherNamesByID := map[int16]string{}
-	weatherIDsByName := map[string]int16{}
-	srv.Content.IterateWeathers(func(w protocol.Weather) bool {
-		name := strings.ToLower(strings.TrimSpace(w.Name()))
-		if name == "" {
-			return true
-		}
-		weatherNamesByID[w.ID()] = name
-		weatherIDsByName[name] = w.ID()
-		return true
-	})
-	wld.SetWeatherNamesByID(weatherNamesByID)
-	itemNamesByID := map[int16]string{}
-	liquidNamesByID := map[int16]string{}
-	srv.Content.IterateItems(func(it protocol.Item) bool {
-		name := strings.ToLower(strings.TrimSpace(it.Name()))
-		if name == "" {
-			return true
-		}
-		itemNamesByID[it.ID()] = name
-		return true
-	})
-	srv.Content.IterateLiquids(func(l protocol.Liquid) bool {
-		name := strings.ToLower(strings.TrimSpace(l.Name()))
-		if name == "" {
-			return true
-		}
-		liquidNamesByID[l.ID()] = name
-		return true
-	})
-	wld.SetItemNamesByID(itemNamesByID)
-	wld.SetLiquidNamesByID(liquidNamesByID)
-	if err := wld.LoadItemProps(filepath.FromSlash("data/vanilla/item_props.json")); err != nil {
-		startup.warn("原版 item_props", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 item_props", "data/vanilla/item_props.json")
-	}
-	if err := wld.LoadLiquidProps(filepath.FromSlash("data/vanilla/liquid_props.json")); err != nil {
-		startup.warn("原版 liquid_props", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 liquid_props", "data/vanilla/liquid_props.json")
-	}
-	if err := wld.LoadRecipes(filepath.FromSlash("data/vanilla/recipes.json")); err != nil {
-		startup.warn("原版 recipes", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 recipes", "data/vanilla/recipes.json")
-	}
-	if err := wld.LoadBlockProps(filepath.FromSlash("data/vanilla/block_props.json")); err != nil {
-		startup.warn("原版 block_props", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 block_props", "data/vanilla/block_props.json")
-	}
-	if err := wld.LoadBlockSizes(filepath.FromSlash("data/vanilla/block_sizes.json")); err != nil {
-		startup.warn("原版 block_sizes", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 block_sizes", "data/vanilla/block_sizes.json")
-	}
-	if err := wld.LoadBlockKinds(filepath.FromSlash("data/vanilla/block_kinds.json")); err != nil {
-		startup.warn("原版 block_kinds", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 block_kinds", "data/vanilla/block_kinds.json")
-	}
-	if err := wld.LoadBlockBuild(filepath.FromSlash("data/vanilla/block_build.json")); err != nil {
-		startup.warn("原版 block_build", fmt.Sprintf("加载失败: %v", err))
-	} else {
-		startup.ok("原版 block_build", "data/vanilla/block_build.json")
-	}
-	srv.SetItemDepositCooldown(wld.GetRulesManager().Get().ItemDepositCooldown)
 	buildService := buildsvc.New(wld, buildsvc.Options{
-		MaxQueuedBatches: 4096,
-		MaxPlansPerBatch: 64,
-		MaxOpsPerTick:    128,
+		MaxQueuedBatches: 256,
+		MaxPlansPerBatch: 20,
+		MaxOpsPerTick:    64,
 	})
-	var runtimeTileMu sync.RWMutex
-	runtimeTiles := make(map[int32]runtimeTileSyncState)
-	updateRuntimeTileState := func(buildPos int32) {
-		if buildPos == 0 {
-			return
-		}
-		model := wld.Model()
-		if model == nil {
-			return
-		}
-		pt := protocol.UnpackPoint2(buildPos)
-		if !model.InBounds(int(pt.X), int(pt.Y)) {
-			return
-		}
-		tile := &model.Tiles[int(pt.Y)*model.Width+int(pt.X)]
-		runtimeTileMu.Lock()
-		defer runtimeTileMu.Unlock()
-		if tile == nil || tile.Build == nil || tile.Block == 0 {
-			delete(runtimeTiles, buildPos)
-			return
-		}
-		runtimeTiles[buildPos] = runtimeTileSyncState{
-			BlockID: int16(tile.Block),
-			Team:    byte(tile.Build.Team),
-			Rot:     tile.Build.Rotation,
-			Health:  maxf32(tile.Build.Health, 1),
-		}
-	}
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
 			return 0, 0, false
@@ -938,15 +399,7 @@ func main() {
 			MaxHealth: ent.MaxHealth,
 			TeamID:    byte(ent.Team),
 			TypeID:    ent.TypeID,
-			MoveSpeed: ent.MoveSpeed,
 		}, true
-	}
-	srv.SyncUnitStateFn = func(unitID int32, x, y, rotation, vx, vy float32) {
-		if wld == nil || unitID == 0 {
-			return
-		}
-		_, _ = wld.SetEntityPosition(unitID, x, y, rotation)
-		_, _ = wld.SetEntityMotion(unitID, vx, vy, 0)
 	}
 	var unitNamesByID map[int16]string
 	var loadedModel *world.WorldModel
@@ -961,10 +414,6 @@ func main() {
 	}
 	loadWorldModel := func(path string) {
 		buildService.Reset()
-		runtimeTileMu.Lock()
-		clear(runtimeTiles)
-		runtimeTileMu.Unlock()
-		srv.ClearTileConfigs()
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
 			wld.SetModel(nil)
@@ -981,9 +430,6 @@ func main() {
 			return
 		}
 		wld.SetModel(model)
-		wld.ResetRuntimeFromTags(model.Tags)
-		srv.SetItemDepositCooldown(wld.GetRulesManager().Get().ItemDepositCooldown)
-		startup.ok("地图规则", mapModeSummary(wld.GetRulesManager().Get()))
 		loadedModel = model
 		loadedMapPath = path
 		startup.ok("地图模型", fmt.Sprintf("%s (%dx%d)", path, model.Width, model.Height))
@@ -1016,8 +462,7 @@ func main() {
 		atomic.StoreInt32(&playerSpawnTypeID, int32(spawnType))
 		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
-	loadWorldModel(initialWorld)
-	if persistedOK && recoveredMapFromPersist {
+	if persistedOK {
 		waveTime := persisted.WaveTime
 		if waveTime < 0 || waveTime > 3600 {
 			waveTime = 600
@@ -1032,6 +477,7 @@ func main() {
 			Tick:     persisted.Tick,
 		})
 	}
+	loadWorldModel(initialWorld)
 	srv.MapNameFn = func() string {
 		path := state.get()
 		if path == "" {
@@ -1044,64 +490,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "事件存储初始化失败: %v\n", rerr)
 		os.Exit(1)
 	}
-	var store storage.Store
-	if st, ok := recorder.(storage.Store); ok {
-		store = st
-	}
-	var eventPacketCounter atomic.Int64
 	srv.OnEvent = func(ev netserver.NetEvent) {
-		if !cfg.Logging.EventStoreEnabled {
-			return
-		}
-		if ev.Kind == "packet_send" && !cfg.Logging.EventPacketSend {
-			return
-		}
-		if ev.Kind == "packet_recv" && !cfg.Logging.EventPacketRecv {
-			return
-		}
-		if ev.Kind == "packet_send" || ev.Kind == "packet_recv" {
-			n := eventPacketCounter.Add(1)
-			sample := cfg.Logging.EventPacketSample
-			if sample <= 1 {
-				sample = 1
-			}
-			if n%int64(sample) != 1 {
-				return
-			}
-		}
 		_ = recorder.Record(storage.Event{
 			Timestamp: ev.Timestamp,
-			Kind:      stableString(ev.Kind),
-			Packet:    stableString(ev.Packet),
-			Detail:    stableString(ev.Detail),
+			Kind:      ev.Kind,
+			Packet:    ev.Packet,
+			Detail:    ev.Detail,
 			ConnID:    ev.ConnID,
-			UUID:      stableString(ev.UUID),
-			USID:      stableString(ev.USID),
-			IP:        stableString(ev.IP),
-			Name:      stableString(ev.Name),
+			UUID:      ev.UUID,
+			IP:        ev.IP,
+			Name:      ev.Name,
 		})
-		if store != nil {
-			switch strings.ToLower(strings.TrimSpace(ev.Kind)) {
-			case "connect_packet":
-				_ = store.UpsertPlayer(storage.PlayerRecord{
-					UUID:        stableString(ev.UUID),
-					USID:        stableString(ev.USID),
-					Name:        stableString(ev.Name),
-					IP:          stableString(ev.IP),
-					TimesJoined: 1,
-				})
-			case "kick":
-				if ev.UUID != "" {
-					_ = store.UpsertPlayer(storage.PlayerRecord{
-						UUID:        stableString(ev.UUID),
-						USID:        stableString(ev.USID),
-						Name:        stableString(ev.Name),
-						IP:          stableString(ev.IP),
-						TimesKicked: 1,
-					})
-				}
-			}
-		}
 	}
 	if ops, ok, err := persist.LoadOps(cfg.Admin); err != nil {
 		log.Warn("ops load failed", logging.Field{Key: "error", Value: err.Error()})
@@ -1126,24 +525,8 @@ func main() {
 	scriptCtl.ScheduleStartupTasks(cfg.Script.StartupTasks)
 	scriptCtl.SetDailyGC(cfg.Script.DailyGCTime)
 
-	cache := &worldCache{
-		preloadEnabled: cfg.Net.WorldDataPreload,
-		maxBytes:       int64(cfg.Net.WorldDataPreloadMaxMB) * 1024 * 1024,
-	}
-	if err := cache.preload(state.get()); err != nil {
-		startup.warn("WorldData 预载入", err.Error())
-	} else if cache.preloadEnabled {
-		if cache.maxBytes > 0 {
-			startup.ok("WorldData 预载入", fmt.Sprintf("enabled=true max=%dMB", cfg.Net.WorldDataPreloadMaxMB))
-		} else {
-			startup.ok("WorldData 预载入", "enabled=true max=unlimited")
-		}
-	} else {
-		startup.info("WorldData 预载入", "enabled=false")
-	}
+	cache := &worldCache{}
 	srv.WorldDataFn = func(conn *netserver.Conn, _ *protocol.ConnectPacket) ([]byte, error) {
-		// Keep handshake payload strictly compatible with official client parser.
-		// Runtime build/config deltas are replayed after connect via OnPostConnect.
 		path := state.get()
 		base, err := cache.get(path)
 		if err != nil {
@@ -1156,6 +539,14 @@ func main() {
 		}
 		return base, nil
 	}
+	srv.OnPostConnect = func(conn *netserver.Conn) {
+		if conn == nil {
+			return
+		}
+		// Wait until client applies world stream, then patch runtime build states.
+		time.Sleep(350 * time.Millisecond)
+		syncCurrentWorldToConn(conn, wld)
+	}
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {
 		pos, ok, err := cache.spawnPos(state.get())
 		if err == nil && ok {
@@ -1164,408 +555,11 @@ func main() {
 		// Fallback for maps where core tile cannot be parsed from msav metadata.
 		return fallbackSpawnPosFromModel(wld.Model())
 	}
-	srv.OnPostConnect = func(c *netserver.Conn) {
-		if c == nil {
-			return
-		}
-		replaySync := strings.EqualFold(cfg.Net.PostConnectReplayMode, "sync")
-		sendReplay := func(obj any) {
-			if replaySync {
-				_ = c.Send(obj)
-			} else {
-				_ = c.SendAsync(obj)
-			}
-		}
-		// Replay runtime build/destroy deltas for late joiners.
-		runtimeTileMu.RLock()
-		pending := make([]struct {
-			pos int32
-			st  runtimeTileSyncState
-		}, 0, len(runtimeTiles))
-		for pos, st := range runtimeTiles {
-			pending = append(pending, struct {
-				pos int32
-				st  runtimeTileSyncState
-			}{pos: pos, st: st})
-		}
-		runtimeTileMu.RUnlock()
-		sort.Slice(pending, func(i, j int) bool { return pending[i].pos < pending[j].pos })
-		for _, it := range pending {
-			sendReplay(&protocol.Remote_Tile_setTile_131{
-				Tile:     protocol.TileBox{PosValue: it.pos},
-				Block:    protocol.BlockRef{BlkID: it.st.BlockID, BlkName: ""},
-				Team:     protocol.Team{ID: it.st.Team},
-				Rotation: int32(it.st.Rot) & 0x3,
-			})
-			sendReplay(&protocol.Remote_Tile_buildHealthUpdate_135{
-				Buildings: protocol.IntSeq{Items: []int32{
-					it.pos, int32(math.Float32bits(it.st.Health)),
-				}},
-			})
-		}
-
-		// Replay inventory state for late joiners (e.g. core/sorter/unloader items).
-		// Clear then set makes replay deterministic even if base world stream had stale values.
-		inventoriesByPos := wld.SnapshotBuildingInventories()
-		if len(inventoriesByPos) > 0 {
-			posList := make([]int32, 0, len(inventoriesByPos))
-			for pos := range inventoriesByPos {
-				posList = append(posList, pos)
-			}
-			sort.Slice(posList, func(i, j int) bool { return posList[i] < posList[j] })
-			for _, pos := range posList {
-				sendReplay(&protocol.Remote_InputHandler_clearItems_63{
-					Build: protocol.BuildingBox{PosValue: pos},
-				})
-
-				src := inventoriesByPos[pos]
-				items := make([]protocol.ItemStack, 0, len(src))
-				for _, st := range src {
-					if st.Amount <= 0 {
-						continue
-					}
-					items = append(items, protocol.ItemStack{
-						Item:   itemRef{id: int16(st.Item)},
-						Amount: st.Amount,
-					})
-				}
-				if len(items) == 0 {
-					continue
-				}
-				sendReplay(&protocol.Remote_InputHandler_setItems_61{
-					Build: protocol.BuildingBox{PosValue: pos},
-					Items: items,
-				})
-			}
-		}
-
-		// Replay per-tile configs (sorter/bridge/logic/etc.) after tile state is present.
-		// For runtime-changed positions, explicitly sending nil clears stale client config.
-		configs := srv.SnapshotTileConfigs()
-		replayConfigPos := make(map[int32]struct{}, len(pending)+len(configs))
-		for _, it := range pending {
-			replayConfigPos[it.pos] = struct{}{}
-		}
-		for pos := range configs {
-			replayConfigPos[pos] = struct{}{}
-		}
-		if len(replayConfigPos) == 0 {
-			return
-		}
-		posList := make([]int32, 0, len(replayConfigPos))
-		for pos := range replayConfigPos {
-			posList = append(posList, pos)
-		}
-		sort.Slice(posList, func(i, j int) bool { return posList[i] < posList[j] })
-		for _, pos := range posList {
-			val, ok := configs[pos]
-			if !ok {
-				val = nil
-			}
-			sendReplay(&protocol.Remote_InputHandler_tileConfig_86{
-				Build: protocol.BuildingBox{PosValue: pos},
-				Value: val,
-			})
-		}
-	}
 	srv.OnBuildPlans = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
 		if c == nil || len(plans) == 0 {
 			return
 		}
-		if model := wld.Model(); model != nil && len(model.BlockNames) > 0 {
-			for _, p := range plans {
-				if p == nil || p.Breaking || p.Block == nil {
-					continue
-				}
-				blockID := p.Block.ID()
-				blockName := strings.ToLower(strings.TrimSpace(model.BlockNames[blockID]))
-				if blockName == "" {
-					continue
-				}
-				if strings.Contains(blockName, "bridge-conveyor") || strings.Contains(blockName, "sorter") || strings.Contains(blockName, "unloader") {
-					srv.WarnFeatureOnce(
-						"logistics-"+strconv.Itoa(int(blockID)),
-						fmt.Sprintf("[feature] logistics behavior not fully simulated yet: block=%d name=%s (multi-player desync possible)", blockID, blockName),
-					)
-				}
-			}
-		}
-		teamID := world.TeamID(srv.ConnTeamID(c))
-		buildSpeed := float32(1)
-		if wld != nil {
-			buildSpeed = wld.UnitBuildSpeed(c.UnitID())
-		}
-		if store != nil {
-			uuid := c.UUID()
-			usid := c.USID()
-			name := c.Name()
-			ip := c.RemoteIP()
-			for _, p := range plans {
-				if p == nil {
-					continue
-				}
-				blockID := int16(0)
-				if p.Block != nil {
-					blockID = p.Block.ID()
-				}
-				_ = store.Log("build_plan", map[string]any{
-					"ts":       time.Now().UTC().Format(time.RFC3339Nano),
-					"uuid":     uuid,
-					"usid":     usid,
-					"name":     name,
-					"ip":       ip,
-					"team":     teamID,
-					"breaking": p.Breaking,
-					"x":        p.X,
-					"y":        p.Y,
-					"rot":      p.Rotation,
-					"block":    blockID,
-				})
-			}
-		}
-		_ = buildService.ApplyPlansNow(teamID, plans, buildSpeed)
-	}
-	srv.CanInteractBuildFn = func(c *netserver.Conn, buildPos int32, action string) bool {
-		if buildPos < 0 {
-			return false
-		}
-		if !wld.HasBuilding(buildPos) {
-			return false
-		}
-		rules := wld.GetRulesManager().Get()
-		team, ok := wld.BuildingTeam(buildPos)
-		if !ok {
-			return false
-		}
-		connTeam := world.TeamID(srv.ConnTeamID(c))
-		if team != connTeam && (rules == nil || !rules.Editor) {
-			return false
-		}
-		switch action {
-		case "transfer_inventory", "transfer_item_to":
-			return wld.CanDepositToBuilding(buildPos)
-		default:
-			return true
-		}
-	}
-	srv.OnSetPlayerTeamEditor = func(c *netserver.Conn, teamID byte) bool {
-		_ = c
-		_ = teamID
-		r := wld.GetRulesManager().Get()
-		return r != nil && r.Editor
-	}
-	srv.OnSetItem = func(buildPos int32, itemID int16, amount int32) {
-		_ = wld.SetBuildingItem(buildPos, itemID, amount)
-	}
-	srv.OnSetItems = func(buildPos int32, items []protocol.ItemStack) {
-		out := make([]world.ItemStack, 0, len(items))
-		for _, st := range items {
-			if st.Item == nil || st.Amount <= 0 {
-				continue
-			}
-			out = append(out, world.ItemStack{
-				Item:   world.ItemID(st.Item.ID()),
-				Amount: st.Amount,
-			})
-		}
-		_ = wld.SetBuildingItems(buildPos, out)
-	}
-	srv.OnSetLiquid = func(buildPos int32, liquidID int16, amount float32) {
-		_ = wld.SetBuildingLiquid(buildPos, liquidID, amount)
-	}
-	srv.OnSetLiquids = func(buildPos int32, liquids []protocol.LiquidStack) {
-		out := make([]world.LiquidStack, 0, len(liquids))
-		for _, st := range liquids {
-			if st.Liquid == nil || st.Amount <= 0 {
-				continue
-			}
-			out = append(out, world.LiquidStack{
-				Liquid: world.LiquidID(st.Liquid.ID()),
-				Amount: st.Amount,
-			})
-		}
-		_ = wld.SetBuildingLiquids(buildPos, out)
-	}
-	srv.OnSetTileItems = func(itemID int16, amount int32, positions []int32) {
-		_ = wld.SetTileItems(positions, itemID, amount)
-	}
-	srv.OnSetTileLiquids = func(liquidID int16, amount float32, positions []int32) {
-		_ = wld.SetTileLiquids(positions, liquidID, amount)
-	}
-	srv.OnClearItems = func(buildPos int32) {
-		_ = wld.ClearBuildingItems(buildPos)
-	}
-	srv.OnClearLiquids = func(buildPos int32) {
-		_ = wld.ClearBuildingLiquids(buildPos)
-	}
-	srv.OnTransferItemTo = func(buildPos int32, itemID int16, amount int32) int32 {
-		return wld.AcceptBuildingItem(buildPos, itemID, amount)
-	}
-	srv.OnTakeItems = func(buildPos int32, itemID int16, amount int32, toUnitID int32) int32 {
-		if buildPos < 0 || itemID <= 0 || amount <= 0 || toUnitID == 0 {
-			return 0
-		}
-		removed := wld.RemoveBuildingItem(buildPos, itemID, amount)
-		if removed <= 0 {
-			return 0
-		}
-		added := srv.AddUnitItemByID(toUnitID, itemID, removed)
-		if added < removed {
-			_ = wld.AddBuildingItem(buildPos, itemID, removed-added)
-		}
-		return added
-	}
-	srv.OnTransferItemToUnit = func(itemID int16, amount int32, toUnitID int32) int32 {
-		if itemID <= 0 || amount <= 0 || toUnitID == 0 {
-			return 0
-		}
-		return srv.AddUnitItemByID(toUnitID, itemID, amount)
-	}
-	srv.OnTransferInventory = func(c *netserver.Conn, buildPos int32) (int16, int32) {
-		if c == nil || buildPos < 0 {
-			return 0, 0
-		}
-		itemID, amount, ok := srv.ConsumePlayerUnitStack(c, 0)
-		if !ok || amount <= 0 {
-			return 0, 0
-		}
-		accepted := wld.AcceptBuildingItem(buildPos, itemID, amount)
-		if accepted < amount {
-			_ = srv.AddPlayerUnitItem(c, itemID, amount-accepted)
-		}
-		return itemID, accepted
-	}
-	srv.OnRequestItem = func(c *netserver.Conn, buildPos int32, itemID int16, amount int32) int32 {
-		if c == nil || buildPos < 0 || itemID <= 0 || amount <= 0 {
-			return 0
-		}
-		if !srv.CanPlayerUnitCarry(c, itemID) {
-			return 0
-		}
-		moved := wld.RemoveBuildingItem(buildPos, itemID, amount)
-		if moved <= 0 {
-			return 0
-		}
-		added := srv.AddPlayerUnitItem(c, itemID, moved)
-		if added < moved {
-			_ = wld.AcceptBuildingItem(buildPos, itemID, moved-added)
-		}
-		return added
-	}
-	srv.OnRemoveQueueBlock = func(x, y int32, breaking bool) {
-		_ = wld.RemovePendingBuild(x, y, breaking)
-	}
-	srv.OnTileConfig = func(buildPos int32, value any) {
-		raw, err := encodeTileConfigRaw(value, srv.TypeIO)
-		if err != nil {
-			return
-		}
-		_ = wld.SetBuildingConfigRaw(buildPos, raw)
-		_ = wld.SetBuildingConfigValue(buildPos, value)
-	}
-	srv.OnRotateBlock = func(buildPos int32, direction bool) {
-		blockID, rot, team, ok := wld.RotateBuilding(buildPos, direction)
-		if !ok {
-			return
-		}
-		broadcastConstructFinish(srv, buildPos, blockID, rot, byte(team))
-	}
-	srv.OnRequestUnitPayload = func(c *netserver.Conn, unitID int32, targetID int32) bool {
-		if c == nil {
-			return false
-		}
-		carrierID := c.UnitID()
-		if carrierID == 0 {
-			return false
-		}
-		if targetID == 0 {
-			return false
-		}
-		if !wld.PickUnitPayload(carrierID, targetID) {
-			return false
-		}
-		srv.Broadcast(&protocol.Remote_InputHandler_pickedUnitPayload_79{
-			Unit:   protocol.UnitBox{IDValue: carrierID},
-			Target: protocol.UnitBox{IDValue: targetID},
-		})
-		return true
-	}
-	srv.OnRequestBuildPayload = func(c *netserver.Conn, unitID int32, buildPos int32) bool {
-		if c == nil {
-			return false
-		}
-		carrierID := c.UnitID()
-		if carrierID == 0 || buildPos == 0 {
-			return false
-		}
-		if _, _, _, ok := wld.PickBuildPayload(carrierID, buildPos); !ok {
-			return false
-		}
-		updateRuntimeTileState(buildPos)
-		srv.Broadcast(&protocol.Remote_InputHandler_pickedBuildPayload_80{
-			Unit:     protocol.UnitBox{IDValue: carrierID},
-			Build:    protocol.BuildingBox{PosValue: buildPos},
-			OnGround: false,
-		})
-		return true
-	}
-	srv.OnPickedUnitPayload = func(c *netserver.Conn, unitID int32, targetID int32) bool {
-		if unitID == 0 || targetID == 0 {
-			return false
-		}
-		return wld.PickUnitPayload(unitID, targetID)
-	}
-	srv.OnPickedBuildPayload = func(c *netserver.Conn, unitID int32, buildPos int32, onGround bool) bool {
-		if unitID == 0 || buildPos == 0 {
-			return false
-		}
-		if _, _, _, ok := wld.PickBuildPayload(unitID, buildPos); !ok {
-			return false
-		}
-		_ = onGround
-		updateRuntimeTileState(buildPos)
-		return true
-	}
-	srv.OnRequestDropPayload = func(c *netserver.Conn, x, y float32) bool {
-		if c == nil {
-			return false
-		}
-		unitID := c.UnitID()
-		if unitID == 0 {
-			return false
-		}
-		result, ok := wld.DropEntityPayload(unitID, x, y)
-		if !ok {
-			return false
-		}
-		if result.Kind == world.PayloadDropBuild && result.BuildPos != 0 {
-			updateRuntimeTileState(result.BuildPos)
-		}
-		srv.Broadcast(&protocol.Remote_InputHandler_payloadDropped_82{
-			Unit: protocol.UnitBox{IDValue: unitID},
-			X:    x,
-			Y:    y,
-		})
-		return true
-	}
-	srv.OnPayloadDropped = func(c *netserver.Conn, unitID int32, x, y float32) {
-		if unitID == 0 {
-			return
-		}
-		result, ok := wld.DropEntityPayload(unitID, x, y)
-		if ok && result.Kind == world.PayloadDropBuild && result.BuildPos != 0 {
-			updateRuntimeTileState(result.BuildPos)
-		}
-		_, _ = wld.ClearEntityBehavior(unitID)
-	}
-	srv.OnUnitEnteredPayload = func(c *netserver.Conn, unitID int32, buildPos int32) {
-		if unitID == 0 || buildPos == 0 {
-			return
-		}
-		if wld.EnterUnitIntoPayload(unitID, buildPos) {
-			updateRuntimeTileState(buildPos)
-		}
-		_, _ = wld.ClearEntityBehavior(unitID)
+		buildService.EnqueuePlans(world.TeamID(1), plans)
 	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
@@ -1593,89 +587,33 @@ func main() {
 		return 0, nil
 	}
 	go func() {
-		t := time.NewTicker(33 * time.Millisecond)
+		t := time.NewTicker(200 * time.Millisecond)
 		defer t.Stop()
 		for range t.C {
 			evs := wld.DrainEntityEvents()
 			buildHealth := make([]int32, 0, len(evs)*2)
-			buildItems := make(map[int32][]world.ItemStack)
-			buildLiquids := make(map[int32][]world.LiquidStack)
 			for _, ev := range evs {
 				switch ev.Kind {
 				case world.EntityEventRemoved:
 					broadcastUnitDestroy(srv, ev.Entity.ID)
 					srv.MarkUnitDead(ev.Entity.ID, "world-removed")
 				case world.EntityEventBuildPlaced:
-					runtimeTileMu.Lock()
-					runtimeTiles[ev.BuildPos] = runtimeTileSyncState{
-						BlockID: ev.BuildBlock,
-						Team:    byte(ev.BuildTeam),
-						Rot:     ev.BuildRot,
-						Health:  maxf32(ev.BuildHP, 1),
-					}
-					runtimeTileMu.Unlock()
 					broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
-					if store != nil {
-						_ = store.Log("build", map[string]any{
-							"ts":     time.Now().UTC().Format(time.RFC3339Nano),
-							"action": "placed",
-							"pos":    ev.BuildPos,
-							"block":  ev.BuildBlock,
-							"team":   ev.BuildTeam,
-							"rot":    ev.BuildRot,
-							"hp":     ev.BuildHP,
-						})
-					}
 				case world.EntityEventBuildDestroyed:
-					runtimeTileMu.Lock()
-					delete(runtimeTiles, ev.BuildPos)
-					runtimeTileMu.Unlock()
-					srv.ClearTileConfig(ev.BuildPos)
-					if len(ev.BuildItems) > 0 {
-						_ = wld.RefundToTeamCore(ev.BuildTeam, ev.BuildItems)
-					}
 					broadcastBuildDestroyed(srv, ev.BuildPos)
-					if store != nil {
-						_ = store.Log("build", map[string]any{
-							"ts":     time.Now().UTC().Format(time.RFC3339Nano),
-							"action": "destroyed",
-							"pos":    ev.BuildPos,
-							"block":  ev.BuildBlock,
-							"team":   ev.BuildTeam,
-							"rot":    ev.BuildRot,
-							"hp":     ev.BuildHP,
-						})
-					}
 				case world.EntityEventBuildHealth:
-					runtimeTileMu.Lock()
-					if st, ok := runtimeTiles[ev.BuildPos]; ok {
-						st.Health = ev.BuildHP
-						runtimeTiles[ev.BuildPos] = st
-					}
-					runtimeTileMu.Unlock()
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
-				case world.EntityEventBuildItems:
-					buildItems[ev.BuildPos] = append([]world.ItemStack(nil), ev.BuildItems...)
-				case world.EntityEventBuildLiquids:
-					buildLiquids[ev.BuildPos] = append([]world.LiquidStack(nil), ev.BuildLiquids...)
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
-				case world.EntityEventWeather:
-					broadcastWeatherCreate(srv, weatherIDsByName, ev.Weather)
 				}
 			}
 			if len(buildHealth) > 0 {
+				// Keep this packet small to avoid starving frequent UDP snapshots.
+				const maxInts = 256 // 128 buildings per flush
+				if len(buildHealth) > maxInts {
+					buildHealth = buildHealth[len(buildHealth)-maxInts:]
+				}
 				broadcastBuildHealthUpdate(srv, buildHealth)
-			}
-			if len(buildItems) > 0 {
-				for pos, items := range buildItems {
-					broadcastBuildItems(srv, pos, items)
-				}
-			}
-			if len(buildLiquids) > 0 {
-				for pos, liquids := range buildLiquids {
-					broadcastBuildLiquids(srv, pos, liquids)
-				}
 			}
 		}
 	}()
@@ -2035,37 +973,6 @@ func main() {
 	}
 
 	var engine *sim.Engine
-	flushLogicEvents := func() {
-		if srv == nil {
-			return
-		}
-		for _, ev := range wld.DrainLogicClientData() {
-			pkt := &protocol.Remote_NetServer_clientLogicDataReliable_43{
-				Player:  protocol.UnitBox{IDValue: 0},
-				Channel: ev.Channel,
-				Value:   ev.Value,
-			}
-			if ev.Reliable {
-				srv.Broadcast(pkt)
-			} else {
-				srv.Broadcast(&protocol.Remote_NetServer_clientLogicDataUnreliable_44{
-					Player:  protocol.UnitBox{IDValue: 0},
-					Channel: ev.Channel,
-					Value:   ev.Value,
-				})
-			}
-		}
-		for _, ev := range wld.DrainLogicSyncVars() {
-			if ev.BuildPos == 0 {
-				continue
-			}
-			srv.Broadcast(&protocol.Remote_LExecutor_syncVariable_94{
-				Building: protocol.BuildingBox{PosValue: ev.BuildPos},
-				Variable: ev.VarID,
-				Value:    ev.Value,
-			})
-		}
-	}
 	if cfg.Runtime.SchedulerEnabled {
 		engine = sim.NewEngine(sim.Config{
 			TPS:        sim.DefaultTPS,
@@ -2078,7 +985,6 @@ func main() {
 			if p.ID == 0 {
 				buildService.Tick()
 				wld.Step(ctx.Delta)
-				flushLogicEvents()
 			}
 		})
 		engine.Start()
@@ -2090,18 +996,16 @@ func main() {
 			for range t.C {
 				buildService.Tick()
 				wld.Step(interval)
-				flushLogicEvents()
 			}
 		}()
 	}
 
 	monitor := newStatusMonitor(srv, cfg, engine)
 	saveState = func() {}
-	autoSave := func() {}
 	if cfg.Persist.Enabled {
-		buildPersistState := func() (persist.State, world.Snapshot) {
+		saveState = func() {
 			snap := wld.Snapshot()
-			st := persist.State{
+			_ = persist.Save(cfg.Persist, persist.State{
 				MapPath:  state.get(),
 				WaveTime: snap.WaveTime,
 				Wave:     snap.Wave,
@@ -2109,20 +1013,8 @@ func main() {
 				TimeData: snap.TimeData,
 				Rand0:    snap.Rand0,
 				Rand1:    snap.Rand1,
-			}
-			return st, snap
-		}
-		saveState = func() {
-			st, snap := buildPersistState()
-			_ = persist.Save(cfg.Persist, st)
-			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), st.MapPath)
-		}
-		autoSave = func() {
-			st, snap := buildPersistState()
-			_ = persist.Save(cfg.Persist, st)
-			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), st.MapPath)
-			_ = persist.SaveVersionedState(cfg.Persist, st)
-			_ = persist.SaveVersionedMSAVFromModel(cfg.Persist, snap, wld.Model(), st.MapPath)
+			})
+			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), state.get())
 		}
 		interval := time.Duration(cfg.Persist.IntervalSec) * time.Second
 		if interval <= 0 {
@@ -2132,7 +1024,7 @@ func main() {
 			t := time.NewTicker(interval)
 			defer t.Stop()
 			for range t.C {
-				autoSave()
+				saveState()
 			}
 		}()
 	}
@@ -2231,55 +1123,6 @@ func main() {
 		apiSrv.SetOpsChangedFunc(func() {
 			saveOps()
 		})
-		apiSrv.SetConfigFunc(func() any {
-			out := cfg
-			out.API.Key = ""
-			out.API.Keys = nil
-			out.Storage.DSN = ""
-			return out
-		})
-		apiSrv.SetMapListFunc(func() ([]string, error) {
-			return listWorldMaps()
-		})
-		apiSrv.SetMapStatusFunc(func() map[string]any {
-			cur := state.get()
-			name := worldstream.TrimMapName(filepath.Base(cur))
-			return map[string]any{
-				"path": cur,
-				"name": name,
-			}
-		})
-		apiSrv.SetMapLoadFunc(func(choice string) (map[string]any, error) {
-			prev := state.get()
-			next, err := resolveWorldSelection(choice)
-			if err != nil {
-				return nil, err
-			}
-			state.set(next)
-			loadWorldModel(next)
-			if st, ok := recorder.(storage.Store); ok && st != nil {
-				_ = st.Log("map_change", map[string]any{
-					"ts":   time.Now().UTC().Format(time.RFC3339Nano),
-					"from": prev,
-					"to":   next,
-					"by":   "api",
-				})
-			}
-			reloaded, failed := srv.ReloadWorldLiveForAll()
-			return map[string]any{
-				"from":     prev,
-				"to":       next,
-				"reloaded": reloaded,
-				"failed":   failed,
-			}, nil
-		})
-		apiSrv.SetKeysChangedFunc(func(keys []string) {
-			cfg.API.Keys = keys
-			cfg.API.Key = ""
-			if err := saveConfig(); err != nil {
-				log.Error("save api keys failed", logging.Field{Key: "error", Value: err.Error()})
-			}
-		})
 	}
 	removeEntityByID := func(id int32) bool {
 		_, ok := wld.RemoveEntity(id)
@@ -2375,10 +1218,6 @@ func runConsole(
 	name, _, _ := srv.ServerMeta()
 	printConsoleIntro(name, state.get(), listenAddr, cfg.API.Bind, cfg.API.Enabled)
 	printHelp(*cfg)
-	var store storage.Store
-	if st, ok := recorder.(storage.Store); ok {
-		store = st
-	}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -2447,7 +1286,6 @@ func runConsole(
 				fmt.Println("用法: host random | host <地图名> | host <.msav 文件路径>")
 				continue
 			}
-			prev := state.get()
 			next, err := resolveWorldSelection(parts[1])
 			if err != nil {
 				fmt.Printf("切图失败: %v\n", err)
@@ -2455,14 +1293,6 @@ func runConsole(
 			}
 			state.set(next)
 			loadWorldModel(next)
-			if store != nil {
-				_ = store.Log("map_change", map[string]any{
-					"ts":   time.Now().UTC().Format(time.RFC3339Nano),
-					"from": prev,
-					"to":   next,
-					"by":   "console",
-				})
-			}
 			fmt.Printf("地图已切换: %s\n", next)
 			reloaded, failed := srv.ReloadWorldLiveForAll()
 			if reloaded == 0 && failed == 0 {
@@ -3632,7 +2462,6 @@ type unitTypeRef struct {
 
 func (u unitTypeRef) ContentType() protocol.ContentType { return protocol.ContentUnit }
 func (u unitTypeRef) ID() int16                         { return u.id }
-func (u unitTypeRef) Name() string                      { return "" }
 
 type bulletTypeRef struct {
 	id int16
@@ -3640,7 +2469,6 @@ type bulletTypeRef struct {
 
 func (b bulletTypeRef) ContentType() protocol.ContentType { return protocol.ContentBullet }
 func (b bulletTypeRef) ID() int16                         { return b.id }
-func (b bulletTypeRef) Name() string                      { return "" }
 
 type itemRef struct {
 	id int16
@@ -3648,15 +2476,6 @@ type itemRef struct {
 
 func (i itemRef) ContentType() protocol.ContentType { return protocol.ContentItem }
 func (i itemRef) ID() int16                         { return i.id }
-func (i itemRef) Name() string                      { return "" }
-
-type liquidRef struct {
-	id int16
-}
-
-func (l liquidRef) ContentType() protocol.ContentType { return protocol.ContentLiquid }
-func (l liquidRef) ID() int16                         { return l.id }
-func (l liquidRef) Name() string                      { return "" }
 
 type blockRef struct {
 	id int16
@@ -3664,31 +2483,6 @@ type blockRef struct {
 
 func (b blockRef) ContentType() protocol.ContentType { return protocol.ContentBlock }
 func (b blockRef) ID() int16                         { return b.id }
-func (b blockRef) Name() string                      { return "" }
-
-func maxf32(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func encodeTileConfigRaw(v any, ctx *protocol.TypeIOContext) ([]byte, error) {
-	if v == nil {
-		return nil, nil
-	}
-	w := protocol.NewWriterWithContext(ctx)
-	if err := protocol.WriteObject(w, v, ctx); err != nil {
-		return nil, err
-	}
-	raw := w.Bytes()
-	if len(raw) == 0 {
-		return nil, nil
-	}
-	out := make([]byte, len(raw))
-	copy(out, raw)
-	return out, nil
-}
 
 func broadcastSummonVisible(srv *netserver.Server, typeID int16, x, y float32, team byte) {
 	if srv == nil {
@@ -3718,7 +2512,7 @@ func broadcastBuildDestroyed(srv *netserver.Server, buildPos int32) {
 	srv.Broadcast(&protocol.Remote_ConstructBlock_deconstructFinish_136{
 		Tile:    protocol.TileBox{PosValue: buildPos},
 		Block:   protocol.BlockRef{BlkID: 0, BlkName: "air"}, // block ID unknown, use 0
-		Builder: protocol.UnitBox{IDValue: 0},                // 0 for server
+		Builder: protocol.UnitBox{IDValue: 0}, // 0 for server
 	})
 	// Also send removeTile for compatibility
 	srv.Broadcast(&protocol.Remote_Tile_removeTile_130{
@@ -3735,79 +2529,46 @@ func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
 	})
 }
 
-func broadcastBuildItems(srv *netserver.Server, buildPos int32, items []world.ItemStack) {
-	if srv == nil || buildPos < 0 {
+func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
+	if conn == nil || wld == nil {
 		return
 	}
-	out := make([]protocol.ItemStack, 0, len(items))
-	for _, st := range items {
-		if st.Amount <= 0 {
+	builds := wld.BuildSyncSnapshot()
+	if len(builds) == 0 {
+		return
+	}
+	health := make([]int32, 0, 256)
+	for i := range builds {
+		b := builds[i]
+		if b.BlockID <= 0 {
 			continue
 		}
-		out = append(out, protocol.ItemStack{
-			Item:   itemRef{id: int16(st.Item)},
-			Amount: st.Amount,
+		_ = conn.SendAsync(&protocol.Remote_Tile_setTile_131{
+			Tile:     protocol.TileBox{PosValue: b.Pos},
+			Block:    protocol.BlockRef{BlkID: b.BlockID, BlkName: ""},
+			Team:     protocol.Team{ID: byte(b.Team)},
+			Rotation: int32(b.Rotation) & 0x3,
 		})
-	}
-	if len(out) == 0 {
-		srv.Broadcast(&protocol.Remote_InputHandler_clearItems_63{
-			Build: protocol.BuildingBox{PosValue: buildPos},
-		})
-		return
-	}
-	srv.Broadcast(&protocol.Remote_InputHandler_setItems_61{
-		Build: protocol.BuildingBox{PosValue: buildPos},
-		Items: out,
-	})
-}
-
-func broadcastBuildLiquids(srv *netserver.Server, buildPos int32, liquids []world.LiquidStack) {
-	if srv == nil || buildPos < 0 {
-		return
-	}
-	out := make([]protocol.LiquidStack, 0, len(liquids))
-	for _, st := range liquids {
-		if st.Amount <= 0 {
-			continue
+		hp := b.Health
+		if hp <= 0 {
+			hp = 1000
 		}
-		out = append(out, protocol.LiquidStack{
-			Liquid: liquidRef{id: int16(st.Liquid)},
-			Amount: st.Amount,
-		})
-	}
-	if len(out) == 0 {
-		srv.Broadcast(&protocol.Remote_InputHandler_clearLiquids_67{
-			Build: protocol.BuildingBox{PosValue: buildPos},
-		})
-		return
-	}
-	srv.Broadcast(&protocol.Remote_InputHandler_setLiquids_65{
-		Build:   protocol.BuildingBox{PosValue: buildPos},
-		Liquids: out,
-	})
-}
-
-func broadcastWeatherCreate(srv *netserver.Server, weatherIDsByName map[string]int16, ev world.WeatherEvent) {
-	if srv == nil {
-		return
-	}
-	id := ev.ID
-	if id == 0 && ev.Name != "" && weatherIDsByName != nil {
-		if v, ok := weatherIDsByName[strings.ToLower(strings.TrimSpace(ev.Name))]; ok {
-			id = v
+		health = append(health, b.Pos, int32(math.Float32bits(hp)))
+		if len(health) >= 256 {
+			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+				Buildings: protocol.IntSeq{Items: append([]int32(nil), health...)},
+			})
+			health = health[:0]
+		}
+		if i > 0 && i%128 == 0 {
+			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	var wth protocol.Weather
-	if id != 0 {
-		wth = srv.Content.Weather(id)
+	if len(health) > 0 {
+		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+			Buildings: protocol.IntSeq{Items: health},
+		})
 	}
-	srv.Broadcast(&protocol.Remote_Weather_createWeather_101{
-		Weather:   wth,
-		Intensity: ev.Intensity,
-		Duration:  ev.Duration,
-		WindX:     ev.WindX,
-		WindY:     ev.WindY,
-	})
 }
 
 func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte) {
@@ -3815,13 +2576,17 @@ func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int
 		return
 	}
 	// Compatibility path: avoid constructFinish(137), it still crashes some official clients.
-	// Use setTile directly; sending remove+set for each completion can cause visible flicker.
+	// Force clear + set tile directly.
+	srv.Broadcast(&protocol.Remote_Tile_removeTile_130{
+		Tile: protocol.TileBox{PosValue: buildPos},
+	})
 	srv.Broadcast(&protocol.Remote_Tile_setTile_131{
 		Tile:     protocol.TileBox{PosValue: buildPos},
 		Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},
 		Team:     protocol.Team{ID: team},
 		Rotation: int32(rot) & 0x3,
 	})
+	// buildHealth is streamed by world.EntityEventBuildHealth to preserve build animation.
 }
 
 func broadcastBulletCreate(srv *netserver.Server, b world.BulletEvent) {
@@ -4432,14 +3197,12 @@ func spawnPosFromCache(cache *worldCache, path string) (protocol.Point2, bool, e
 }
 
 type worldCache struct {
-	mu             sync.Mutex
-	path           string
-	modTime        time.Time
-	data           []byte
-	corePos        protocol.Point2
-	corePosOK      bool
-	preloadEnabled bool
-	maxBytes       int64
+	mu        sync.Mutex
+	path      string
+	modTime   time.Time
+	data      []byte
+	corePos   protocol.Point2
+	corePosOK bool
 }
 
 func (c *worldCache) get(path string) ([]byte, error) {
@@ -4458,19 +3221,9 @@ func (c *worldCache) get(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	cacheable := len(data) > 0
-	if c.maxBytes > 0 && int64(len(data)) > c.maxBytes {
-		cacheable = false
-	}
-	if cacheable {
-		c.path = path
-		c.modTime = info.ModTime()
-		c.data = data
-	} else {
-		c.path = ""
-		c.modTime = time.Time{}
-		c.data = nil
-	}
+	c.path = path
+	c.modTime = info.ModTime()
+	c.data = data
 	c.corePosOK = false
 	if strings.HasSuffix(strings.ToLower(path), ".msav") || strings.HasSuffix(strings.ToLower(path), ".msav.msav") {
 		if pos, ok, err := worldstream.FindCoreTileFromMSAV(path); err == nil {
@@ -4479,14 +3232,6 @@ func (c *worldCache) get(path string) ([]byte, error) {
 		}
 	}
 	return data, nil
-}
-
-func (c *worldCache) preload(path string) error {
-	if c == nil || !c.preloadEnabled {
-		return nil
-	}
-	_, err := c.get(path)
-	return err
 }
 
 func (c *worldCache) spawnPos(path string) (protocol.Point2, bool, error) {

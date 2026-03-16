@@ -276,42 +276,6 @@ const (
 	KickReasonServerRestarting
 )
 
-const (
-	AdminActionKick AdminAction = iota
-	AdminActionBan
-	AdminActionTrace
-	AdminActionWave
-	AdminActionSwitchTeam
-)
-
-const (
-	LMarkerControlRemove LMarkerControl = iota
-	LMarkerControlWorld
-	LMarkerControlMinimap
-	LMarkerControlAutoscale
-	LMarkerControlPos
-	LMarkerControlEndPos
-	LMarkerControlDrawLayer
-	LMarkerControlColor
-	LMarkerControlRadius
-	LMarkerControlStroke
-	LMarkerControlOutline
-	LMarkerControlRotation
-	LMarkerControlShape
-	LMarkerControlArc
-	LMarkerControlFlushText
-	LMarkerControlFontSize
-	LMarkerControlTextHeight
-	LMarkerControlTextAlign
-	LMarkerControlLineAlign
-	LMarkerControlLabelFlags
-	LMarkerControlTexture
-	LMarkerControlTextureSize
-	LMarkerControlPosi
-	LMarkerControlUvi
-	LMarkerControlColori
-)
-
 type Payload interface {
 	WritePayload(w *Writer) error
 }
@@ -463,7 +427,6 @@ type TypeIOContext struct {
 	SoundLookup        func(id int16) Sound
 	UnitLookup         func(id int32) Unit
 	BuildingLookup     func(pos int32) Building
-	TileLookup         func(pos int32) Tile
 	TeamLookup         func(id byte) Team
 	UnitCommandLookup  func(id int16) UnitCommand
 	UnitStanceLookup   func(id int16) UnitStance
@@ -471,11 +434,11 @@ type TypeIOContext struct {
 	// Optional full payload decoders. If set, DefaultPayloadRead will use them.
 	PayloadUnitRead  func(r *Reader, classID byte) (Payload, error)
 	PayloadBuildRead func(r *Reader, blockID int16, version byte) (Payload, error)
-	EntityByID       func(id int32) UnitSyncEntity
-	EntityFactory    func(classID byte) UnitSyncEntity
-	IsEntityUsed     func(id int32) bool
-	AddEntity        func(ent UnitSyncEntity)
-	AddRemovedEntity func(id int32)
+	EntityByID         func(id int32) UnitSyncEntity
+	EntityFactory      func(classID byte) UnitSyncEntity
+	IsEntityUsed       func(id int32) bool
+	AddEntity          func(ent UnitSyncEntity)
+	AddRemovedEntity   func(id int32)
 }
 
 func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
@@ -712,9 +675,6 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if l < 0 {
-			return nil, ErrUnsupportedTypeIO
-		}
 		items := make([]int32, l)
 		for i := 0; i < int(l); i++ {
 			v, err := r.ReadInt32()
@@ -794,9 +754,6 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if l < 0 {
-			return nil, ErrUnsupportedTypeIO
-		}
 		return r.ReadBytes(int(l))
 	case 15:
 		_, err := r.ReadByte()
@@ -808,9 +765,6 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		l, err := r.ReadInt32()
 		if err != nil {
 			return nil, err
-		}
-		if l < 0 {
-			return nil, ErrUnsupportedTypeIO
 		}
 		bools := make([]bool, l)
 		for i := 0; i < int(l); i++ {
@@ -834,9 +788,6 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		l, err := r.ReadInt16()
 		if err != nil {
 			return nil, err
-		}
-		if l < 0 {
-			return nil, ErrUnsupportedTypeIO
 		}
 		out := make([]Vec2, l)
 		for i := 0; i < int(l); i++ {
@@ -876,9 +827,6 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		l, err := r.ReadInt32()
 		if err != nil {
 			return nil, err
-		}
-		if l < 0 {
-			return nil, ErrUnsupportedTypeIO
 		}
 		out := make([]any, l)
 		for i := 0; i < int(l); i++ {

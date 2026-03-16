@@ -7,12 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,7 +29,6 @@ type NetEvent struct {
 	Detail    string
 	ConnID    int32
 	UUID      string
-	USID      string
 	IP        string
 	Name      string
 }
@@ -43,36 +40,26 @@ type Server struct {
 	Content  *protocol.ContentRegistry
 	TypeIO   *protocol.TypeIOContext
 
-	mu               sync.Mutex
-	conns            map[*Conn]struct{}
-	pending          map[int32]*Conn
-	byUDP            map[string]*Conn
-	banUUID          map[string]string
-	banIP            map[string]string
-	kickUUID         map[string]time.Time
-	kickIP           map[string]time.Time
-	whiteUUID        map[string]struct{}
-	whiteUSID        map[string]struct{}
-	whitelistEnabled bool
-	playerLimit      int32
-	udpConn          *net.UDPConn
-	opMu             sync.RWMutex
-	ops              map[string]struct{}
-	entityMu         sync.Mutex
-	entities         map[int32]protocol.UnitSyncEntity
-	unitNext         int32
+	mu       sync.Mutex
+	conns    map[*Conn]struct{}
+	pending  map[int32]*Conn
+	byUDP    map[string]*Conn
+	banUUID  map[string]string
+	banIP    map[string]string
+	udpConn  *net.UDPConn
+	opMu     sync.RWMutex
+	ops      map[string]struct{}
+	entityMu sync.Mutex
+	entities map[int32]protocol.UnitSyncEntity
+	unitNext int32
 
 	// EventManager 事件管理器
 	EventManager *storage.EventManager
 
-	// Optional provider: list of server-side mods for ArcNet compatibility checks.
-	ModsFn func() []string
-
-	BuildVersion  int
-	WorldDataFn   func(*Conn, *protocol.ConnectPacket) ([]byte, error)
-	OnEvent       func(NetEvent)
-	OnPostConnect func(*Conn)
-	playerIDNext  int32
+	BuildVersion int
+	WorldDataFn  func(*Conn, *protocol.ConnectPacket) ([]byte, error)
+	OnEvent      func(NetEvent)
+	playerIDNext int32
 
 	Name           string
 	Description    string
@@ -84,92 +71,32 @@ type Server struct {
 	PlayerUnitTypeFn func() int16
 	// Optional hook: apply client build plans from snapshot.
 	OnBuildPlans func(*Conn, []*protocol.BuildPlan)
-	// Optional hooks: keep building inventories/config synced with world model.
-	OnSetItem        func(buildPos int32, itemID int16, amount int32)
-	OnSetItems       func(buildPos int32, items []protocol.ItemStack)
-	OnSetTileItems   func(itemID int16, amount int32, positions []int32)
-	OnClearItems     func(buildPos int32)
-	OnSetLiquid      func(buildPos int32, liquidID int16, amount float32)
-	OnSetLiquids     func(buildPos int32, liquids []protocol.LiquidStack)
-	OnSetTileLiquids func(liquidID int16, amount float32, positions []int32)
-	OnClearLiquids   func(buildPos int32)
-	// Removes up to amount from building and moves to the target unit stack.
-	// Returns actual moved amount.
-	OnTakeItems func(buildPos int32, itemID int16, amount int32, toUnitID int32) int32
-	// Adds up to amount into target unit stack. Returns actual added amount.
-	OnTransferItemToUnit func(itemID int16, amount int32, toUnitID int32) int32
-	// Adds up to amount into building and returns actual accepted amount.
-	OnTransferItemTo func(buildPos int32, itemID int16, amount int32) int32
-	// Moves stack from player unit into building; returns transferred item and amount.
-	OnTransferInventory func(c *Conn, buildPos int32) (itemID int16, amount int32)
-	// Moves item from building into player's unit; returns actual moved amount.
-	OnRequestItem func(c *Conn, buildPos int32, itemID int16, amount int32) int32
-	// Optional interaction guard. Returns whether this connection can interact
-	// with the target building for the specified action.
-	CanInteractBuildFn    func(c *Conn, buildPos int32, action string) bool
-	OnRemoveQueueBlock    func(x, y int32, breaking bool)
-	OnRotateBlock         func(buildPos int32, direction bool)
-	OnRequestUnitPayload  func(c *Conn, unitID int32, targetID int32) bool
-	OnRequestBuildPayload func(c *Conn, unitID int32, buildPos int32) bool
-	OnPickedUnitPayload   func(c *Conn, unitID int32, targetID int32) bool
-	OnPickedBuildPayload  func(c *Conn, unitID int32, buildPos int32, onGround bool) bool
-	OnRequestDropPayload  func(c *Conn, x, y float32) bool
-	OnPayloadDropped      func(c *Conn, unitID int32, x, y float32)
-	OnUnitEnteredPayload  func(c *Conn, unitID int32, buildPos int32)
-	OnTileConfig          func(buildPos int32, value any)
-	// Optional hook: validate/apply player team change from team editor packet.
-	// Return true to allow applying the requested team.
-	OnSetPlayerTeamEditor func(c *Conn, teamID byte) bool
 	// Respawn delay in "frames" (Mindustry Time.delta units). Defaults to 60 if zero.
 	RespawnDelayFrames float32
-	// Item deposit cooldown (seconds in original rules).
-	// Effective limiter allows 2 deposits per 2*cooldown window.
-	itemDepositCooldown time.Duration
 	// Optional hook: spawn player unit in world/state. Uses provided unitID, returns world coords.
 	SpawnUnitFn func(c *Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool)
 	// Optional hook: remove a unit from world/state.
 	DropUnitFn func(unitID int32)
 	// Optional hook: query unit info from world/state.
 	UnitInfoFn func(unitID int32) (UnitInfo, bool)
-	// Optional hook: sync player-controlled unit pose to world/state from client snapshots.
-	SyncUnitStateFn func(unitID int32, x, y, rotation, vx, vy float32)
+	// Optional hook: called once after initial connect/spawn sequence starts.
+	OnPostConnect func(*Conn)
 
 	StateSnapshotFn func() *protocol.Remote_NetClient_stateSnapshot_35
 	// Appends additional entities into entity snapshot stream.
 	// Return value is appended entity count.
 	ExtraEntitySnapshotFn func(w *protocol.Writer) (int16, error)
 
-	UdpRetryCount      int
-	UdpRetryDelay      time.Duration
-	UdpFallbackTCP     bool
-	StrictMode         bool
-	PositionCorrection bool
-	PositionMaxDist    float32
+	UdpRetryCount  int
+	UdpRetryDelay  time.Duration
+	UdpFallbackTCP bool
 
 	entitySnapshotIntervalNs atomic.Int64
 	stateSnapshotIntervalNs  atomic.Int64
-	snapshotLogSampleN       atomic.Int64
 	infoMu                   sync.RWMutex
 
 	// DevLogger 开发者日志（可选）
 	DevLogger *devlog.DevLogger
-
-	featureWarnMu         sync.Mutex
-	featureWarned         map[string]struct{}
-	tileConfigMu          sync.RWMutex
-	tileConfigs           map[int32]any
-	tileConfigForwardSync atomic.Bool
-}
-
-const itemTransferRange = float32(220)
-const defaultUnitItemCapacity = int32(30)
-
-var unitItemCapacityByName = map[string]int32{
-	"alpha":   30,
-	"beta":    50,
-	"gamma":   70,
-	"flare":   10,
-	"horizon": 0,
 }
 
 func NewServer(addr string, buildVersion int) *Server {
@@ -178,65 +105,33 @@ func NewServer(addr string, buildVersion int) *Server {
 	ctx := content.Context()
 	em := storage.NewEventManager()
 	s := &Server{
-		Addr:                addr,
-		Registry:            reg,
-		Serial:              &Serializer{Registry: reg, Ctx: ctx},
-		Content:             content,
-		TypeIO:              ctx,
-		conns:               map[*Conn]struct{}{},
-		pending:             map[int32]*Conn{},
-		byUDP:               map[string]*Conn{},
-		banUUID:             map[string]string{},
-		banIP:               map[string]string{},
-		kickUUID:            map[string]time.Time{},
-		kickIP:              map[string]time.Time{},
-		whiteUUID:           map[string]struct{}{},
-		whiteUSID:           map[string]struct{}{},
-		whitelistEnabled:    false,
-		playerLimit:         0,
-		EventManager:        em,
-		BuildVersion:        buildVersion,
-		WorldDataFn:         defaultWorldData,
-		playerIDNext:        0,
-		Name:                "mdt-server",
-		Description:         "",
-		VirtualPlayers:      0,
-		entities:            map[int32]protocol.UnitSyncEntity{},
-		unitNext:            2000000000,
-		ops:                 map[string]struct{}{},
-		UdpRetryCount:       2,
-		UdpRetryDelay:       5 * time.Millisecond,
-		UdpFallbackTCP:      true,
-		StrictMode:          false,
-		PositionCorrection:  true,
-		PositionMaxDist:     48,
-		RespawnDelayFrames:  60,
-		itemDepositCooldown: 500 * time.Millisecond,
-		featureWarned:       map[string]struct{}{},
-		tileConfigs:         map[int32]any{},
+		Addr:               addr,
+		Registry:           reg,
+		Serial:             &Serializer{Registry: reg, Ctx: ctx},
+		Content:            content,
+		TypeIO:             ctx,
+		conns:              map[*Conn]struct{}{},
+		pending:            map[int32]*Conn{},
+		byUDP:              map[string]*Conn{},
+		banUUID:            map[string]string{},
+		banIP:              map[string]string{},
+		EventManager:       em,
+		BuildVersion:       buildVersion,
+		WorldDataFn:        defaultWorldData,
+		playerIDNext:       0,
+		Name:               "mdt-server",
+		Description:        "",
+		VirtualPlayers:     0,
+		entities:           map[int32]protocol.UnitSyncEntity{},
+		unitNext:           2000000000,
+		ops:                map[string]struct{}{},
+		UdpRetryCount:      2,
+		UdpRetryDelay:      5 * time.Millisecond,
+		UdpFallbackTCP:     true,
+		RespawnDelayFrames: 60,
 	}
 	s.SetSnapshotIntervals(100, 250)
-	s.SetSnapshotLogSample(20)
-	s.SetTileConfigForwardMode("async")
 	return s
-}
-
-func (s *Server) SetTileConfigForwardMode(mode string) {
-	if s == nil {
-		return
-	}
-	s.tileConfigForwardSync.Store(strings.EqualFold(strings.TrimSpace(mode), "sync"))
-}
-
-func (s *Server) SetItemDepositCooldown(sec float32) {
-	if s == nil {
-		return
-	}
-	if sec <= 0 {
-		s.itemDepositCooldown = 500 * time.Millisecond
-		return
-	}
-	s.itemDepositCooldown = time.Duration(float64(sec) * float64(time.Second))
 }
 
 func normalizeSyncInterval(ms int, def int) time.Duration {
@@ -269,35 +164,6 @@ func (s *Server) SnapshotIntervalsMs() (entityMs int, stateMs int) {
 		state = 250 * time.Millisecond
 	}
 	return int(entity / time.Millisecond), int(state / time.Millisecond)
-}
-
-func (s *Server) SetSnapshotLogSample(n int) {
-	if n <= 0 {
-		n = 20
-	}
-	s.snapshotLogSampleN.Store(int64(n))
-}
-
-func (s *Server) SnapshotLogSample() int {
-	n := int(s.snapshotLogSampleN.Load())
-	if n <= 0 {
-		return 20
-	}
-	return n
-}
-
-func (s *Server) WarnFeatureOnce(key string, message string) {
-	if s == nil || strings.TrimSpace(key) == "" || strings.TrimSpace(message) == "" {
-		return
-	}
-	s.featureWarnMu.Lock()
-	if _, ok := s.featureWarned[key]; ok {
-		s.featureWarnMu.Unlock()
-		return
-	}
-	s.featureWarned[key] = struct{}{}
-	s.featureWarnMu.Unlock()
-	fmt.Println(message)
 }
 
 // KillSelfUnit clears current controlled unit for a player connection.
@@ -336,12 +202,7 @@ func (s *Server) Serve() error {
 			return err
 		}
 		conn := NewConn(c, s.Serial)
-		conn.strictMode = s.StrictMode
-		conn.acceptedAt = time.Now()
-		conn.handshakeDeadline = conn.acceptedAt.Add(15 * time.Second)
-		_ = conn.Conn.SetReadDeadline(conn.handshakeDeadline)
 		conn.id = s.nextID()
-		conn.snapshotLogSampleN.Store(int64(s.SnapshotLogSample()))
 		conn.onSend = func(obj any, packetID int, frameworkID int, size int) {
 			detail := fmt.Sprintf("size=%d", size)
 			if packetID >= 0 {
@@ -383,11 +244,6 @@ func (s *Server) handleConn(c *Conn) {
 	}()
 
 	for {
-		if !c.hasBegunConnecting && !c.handshakeDeadline.IsZero() && time.Now().After(c.handshakeDeadline) {
-			fmt.Printf("[net] handshake timeout id=%d remote=%s\n", c.id, c.RemoteAddr().String())
-			s.emitEvent(c, "handshake_timeout", "", "")
-			return
-		}
 		obj, err := c.ReadObject()
 		if err != nil {
 			if !c.hasConnected && c.hasBegunConnecting && strings.Contains(err.Error(), "item stack length") {
@@ -427,181 +283,7 @@ func isConnReadClosed(err error) bool {
 	return false
 }
 
-func normalizeConnectName(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
-}
-
-func (s *Server) hasDuplicateIdentity(curr *Conn, name, uuid, usid string) (protocol.KickReason, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	normName := normalizeConnectName(name)
-	usid = strings.TrimSpace(usid)
-	for c := range s.conns {
-		if c == nil || c == curr || !c.hasBegunConnecting {
-			continue
-		}
-		if uuid != "" && strings.TrimSpace(c.uuid) == uuid {
-			return protocol.KickReasonIDInUse, true
-		}
-		if usid != "" && strings.TrimSpace(c.usid) == usid {
-			return protocol.KickReasonIDInUse, true
-		}
-		if normName != "" && normalizeConnectName(c.name) == normName {
-			return protocol.KickReasonNameInUse, true
-		}
-	}
-	return 0, false
-}
-
-func (s *Server) registerRecentKick(uuid, ip string, dur time.Duration) {
-	if s == nil || dur <= 0 {
-		return
-	}
-	exp := time.Now().Add(dur)
-	s.mu.Lock()
-	if uuid = strings.TrimSpace(uuid); uuid != "" {
-		s.kickUUID[uuid] = exp
-	}
-	if ip = strings.TrimSpace(ip); ip != "" {
-		s.kickIP[ip] = exp
-	}
-	s.mu.Unlock()
-}
-
-func (s *Server) isRecentlyKicked(uuid, ip string) bool {
-	if s == nil {
-		return false
-	}
-	now := time.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if uuid = strings.TrimSpace(uuid); uuid != "" {
-		if exp, ok := s.kickUUID[uuid]; ok {
-			if now.Before(exp) {
-				return true
-			}
-			delete(s.kickUUID, uuid)
-		}
-	}
-	if ip = strings.TrimSpace(ip); ip != "" {
-		if exp, ok := s.kickIP[ip]; ok {
-			if now.Before(exp) {
-				return true
-			}
-			delete(s.kickIP, ip)
-		}
-	}
-	return false
-}
-
-func (s *Server) onlinePlayersCount() int32 {
-	if s == nil {
-		return 0
-	}
-	var n int32
-	s.mu.Lock()
-	for c := range s.conns {
-		if c != nil && c.hasConnected {
-			n++
-		}
-	}
-	s.mu.Unlock()
-	return n
-}
-
-func (s *Server) isWhitelisted(uuid, usid string) bool {
-	if s == nil {
-		return true
-	}
-	s.mu.Lock()
-	enabled := s.whitelistEnabled
-	if !enabled {
-		s.mu.Unlock()
-		return true
-	}
-	_, okUUID := s.whiteUUID[strings.TrimSpace(uuid)]
-	_, okUSID := s.whiteUSID[strings.TrimSpace(usid)]
-	s.mu.Unlock()
-	return okUUID || okUSID
-}
-
-func (s *Server) modCompatibilityCheck(clientMods []string) (missing []string, extra []string, incompatible bool) {
-	if s == nil || s.ModsFn == nil {
-		return nil, nil, false
-	}
-	serverMods := s.ModsFn()
-	if len(serverMods) == 0 && len(clientMods) == 0 {
-		return nil, nil, false
-	}
-	missing, extra = diffMods(serverMods, clientMods)
-	return missing, extra, len(missing) > 0 || len(extra) > 0
-}
-
-func diffMods(serverMods, clientMods []string) (missing []string, extra []string) {
-	serverSet := map[string]string{}
-	clientSet := map[string]string{}
-	for _, m := range serverMods {
-		n := normalizeModName(m)
-		if n == "" {
-			continue
-		}
-		if _, ok := serverSet[n]; !ok {
-			serverSet[n] = m
-		}
-	}
-	for _, m := range clientMods {
-		n := normalizeModName(m)
-		if n == "" {
-			continue
-		}
-		if _, ok := clientSet[n]; !ok {
-			clientSet[n] = m
-		}
-	}
-	for n, original := range serverSet {
-		if _, ok := clientSet[n]; !ok {
-			missing = append(missing, original)
-		}
-	}
-	for n, original := range clientSet {
-		if _, ok := serverSet[n]; !ok {
-			extra = append(extra, original)
-		}
-	}
-	sort.Strings(missing)
-	sort.Strings(extra)
-	return missing, extra
-}
-
-func normalizeModName(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
-}
-
-func buildModsKickReason(missing, extra []string) string {
-	var b strings.Builder
-	b.WriteString("[accent]Incompatible mods![]\n\n")
-	if len(missing) > 0 {
-		b.WriteString("Missing:[lightgray]\n> ")
-		b.WriteString(strings.Join(missing, "\n> "))
-		b.WriteString("[]\n")
-	}
-	if len(extra) > 0 {
-		b.WriteString("Unnecessary mods:[lightgray]\n> ")
-		b.WriteString(strings.Join(extra, "\n> "))
-		b.WriteString("[]")
-	}
-	return strings.TrimSpace(b.String())
-}
-
 func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
-	if c != nil && s.StrictMode && !c.hasBegunConnecting {
-		switch obj.(type) {
-		case *protocol.ConnectPacket, protocol.FrameworkMessage:
-		default:
-			s.emitEvent(c, "strict_preconnect_drop", fmt.Sprintf("%T", obj), "")
-			return
-		}
-	}
 	detail := ""
 	if fromTCP {
 		if c.lastRecvPacketID >= 0 {
@@ -702,56 +384,8 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			return
 		}
-		if !c.handshakeDeadline.IsZero() {
-			_ = c.Conn.SetReadDeadline(time.Time{})
-			c.handshakeDeadline = time.Time{}
-		}
-		v.Name = strings.TrimSpace(v.Name)
-		v.UUID = strings.TrimSpace(v.UUID)
-		v.USID = strings.TrimSpace(v.USID)
-		v.VersionType = strings.TrimSpace(v.VersionType)
-		v.Locale = strings.TrimSpace(v.Locale)
-		if v.Locale == "" {
-			v.Locale = "en"
-		}
-		if err := ValidateConnect(v, s.BuildVersion, s.StrictMode); err != nil {
+		if err := ValidateConnect(v, s.BuildVersion); err != nil {
 			switch {
-			case errors.Is(err, ErrTypeMismatch):
-				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonTypeMismatch})
-				if s.DevLogger != nil {
-					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
-						devlog.StringFld("reason", "typeMismatch"),
-						devlog.StringFld("error", err.Error()))
-				} else {
-					fmt.Printf("[net] connect rejected id=%d reason=typeMismatch err=%v\n", c.id, err)
-				}
-			case errors.Is(err, ErrCustomClient):
-				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonCustomClient})
-				if s.DevLogger != nil {
-					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
-						devlog.StringFld("reason", "customClient"),
-						devlog.StringFld("error", err.Error()))
-				} else {
-					fmt.Printf("[net] connect rejected id=%d reason=customClient err=%v\n", c.id, err)
-				}
-			case errors.Is(err, ErrIDInUse):
-				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonIDInUse})
-				if s.DevLogger != nil {
-					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
-						devlog.StringFld("reason", "idInUse"),
-						devlog.StringFld("error", err.Error()))
-				} else {
-					fmt.Printf("[net] connect rejected id=%d reason=idInUse err=%v\n", c.id, err)
-				}
-			case errors.Is(err, ErrNameEmpty):
-				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonNameEmpty})
-				if s.DevLogger != nil {
-					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
-						devlog.StringFld("reason", "nameEmpty"),
-						devlog.StringFld("error", err.Error()))
-				} else {
-					fmt.Printf("[net] connect rejected id=%d reason=nameEmpty err=%v\n", c.id, err)
-				}
 			case errors.Is(err, ErrClientOutdated):
 				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonClientOutdated})
 				if s.DevLogger != nil {
@@ -782,67 +416,22 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			}
 			return
 		}
-		if s.StrictMode {
-			if reason, dup := s.hasDuplicateIdentity(c, v.Name, v.UUID, v.USID); dup {
-				_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: reason})
-				if s.DevLogger != nil {
-					s.DevLogger.LogConnection("connect rejected", c.id, c.remoteIP(), v.Name, v.UUID,
-						devlog.StringFld("reason", "duplicate_identity"))
-				} else {
-					fmt.Printf("[net] connect rejected id=%d reason=duplicate_identity kick=%d\n", c.id, reason)
-				}
-				return
-			}
-		}
-		ip := c.remoteIP()
-		if s.isRecentlyKicked(v.UUID, ip) {
-			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonRecentKick})
-			fmt.Printf("[net] connect rejected id=%d reason=recentKick ip=%s uuid=%s\n", c.id, ip, v.UUID)
-			return
-		}
-		if limit := s.PlayerLimit(); limit > 0 && s.onlinePlayersCount() >= limit && !s.IsOp(v.UUID) {
-			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonPlayerLimit})
-			fmt.Printf("[net] connect rejected id=%d reason=playerLimit current=%d limit=%d\n", c.id, s.onlinePlayersCount(), limit)
-			return
-		}
-		if modsMissing, modsExtra, ok := s.modCompatibilityCheck(v.Mods); ok {
-			reason := buildModsKickReason(modsMissing, modsExtra)
-			_ = c.Send(&protocol.Remote_NetClient_kick_22{Reason: reason})
-			fmt.Printf("[net] connect rejected id=%d reason=mod_incompatible missing=%d extra=%d\n",
-				c.id, len(modsMissing), len(modsExtra))
-			return
-		}
-		if !s.isWhitelisted(v.UUID, v.USID) {
-			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonWhitelist})
-			fmt.Printf("[net] connect rejected id=%d reason=whitelist uuid=%s usid=%s\n", c.id, v.UUID, v.USID)
-			return
-		}
 		c.name = v.Name
 		c.uuid = v.UUID
-		c.usid = v.USID
 		c.versionType = strings.TrimSpace(v.VersionType)
 		c.color = v.Color
 		// Use official call IDs for official clients; keep compat IDs only for
 		// non-official/custom clients.
 		vt := strings.ToLower(strings.TrimSpace(c.versionType))
 		isOfficial := vt == "" || vt == "official" || strings.Contains(vt, "official")
-		if s.StrictMode && !isOfficial {
-			_ = c.Send(&protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonTypeMismatch})
-			fmt.Printf("[net] connect rejected id=%d reason=strictTypeMismatch versionType=%q\n", c.id, v.VersionType)
-			return
-		}
-		if s.StrictMode {
-			c.recvCompatIDs = false
-			c.sendCompatIDs = false
-		} else {
-			c.recvCompatIDs = !isOfficial
-			c.sendCompatIDs = !isOfficial
-		}
+		c.recvCompatIDs = !isOfficial
+		c.sendCompatIDs = !isOfficial
 		if c.playerID == 0 {
 			c.playerID = s.nextPlayerID()
 		}
 		s.ensurePlayerEntity(c)
 		s.emitEvent(c, "connect_packet", fmt.Sprintf("%T", v), fmt.Sprintf("version=%d type=%s mods=%d", v.Version, v.VersionType, len(v.Mods)))
+		ip := c.remoteIP()
 		if ip != "" {
 			s.mu.Lock()
 			ipReason, ipBanned := s.banIP[ip]
@@ -868,14 +457,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		}
 		fmt.Printf("[net] world handshake sent id=%d\n", c.id)
 		s.emitEvent(c, "world_handshake_sent", "", "")
-	case *protocol.Disconnect:
-		reason := strings.TrimSpace(v.Reason)
-		if reason == "" {
-			reason = "client_disconnect"
-		}
-		s.emitEvent(c, "client_disconnect", fmt.Sprintf("%T", v), reason)
-		_ = c.Close()
-		return
 	case *protocol.Remote_NetServer_connectConfirm_47:
 		c.hasConnected = true
 		fmt.Printf("[net] connect confirm id=%d\n", c.id)
@@ -888,25 +469,8 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			s.emitEvent(c, "connect_confirm_client_snapshot", fmt.Sprintf("%T", v), "")
 			s.ensurePostConnectStarted(c)
 		}
-		if v.SnapshotID < c.lastClientSnapshotID {
-			return
-		}
-		now := time.Now()
-		elapsed := now.Sub(c.lastClientSnapshotAt)
-		if c.lastClientSnapshotAt.IsZero() {
-			elapsed = 16 * time.Millisecond
-		}
-		if elapsed > 1500*time.Millisecond {
-			elapsed = 1500 * time.Millisecond
-		}
-		if elapsed < 0 {
-			elapsed = 0
-		}
-		rawX := v.X
-		rawY := v.Y
-		rawRot := v.Rotation
-		rawVelX := v.XVelocity
-		rawVelY := v.YVelocity
+		c.snapX = v.X
+		c.snapY = v.Y
 		c.pointerX = v.PointerX
 		c.pointerY = v.PointerY
 		c.shooting = v.Shooting
@@ -961,61 +525,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if prevUnitID != 0 && prevUnitID != c.unitID {
 			s.dropPlayerUnitEntity(c, prevUnitID)
 		}
-		ignorePosition := v.Dead || c.unitID == 0
-		if !ignorePosition && v.UnitID != 0 && v.UnitID != c.unitID {
-			ignorePosition = true
-		}
-		applyX := rawX
-		applyY := rawY
-		applyVelX := rawVelX
-		applyVelY := rawVelY
-		corrected := false
-		verifyPosition := s.StrictMode && s.PositionCorrection
-		if !ignorePosition && s.UnitInfoFn != nil {
-			if info, ok := s.UnitInfoFn(c.unitID); ok {
-				maxSpeed := info.MoveSpeed
-				if maxSpeed <= 0 {
-					maxSpeed = 18
-				}
-				maxMove := float32(elapsed.Seconds()) * 60 * maxSpeed * 1.1
-				if maxMove < 0 {
-					maxMove = 0
-				}
-				if verifyPosition {
-					vlen := float32(math.Hypot(float64(applyVelX), float64(applyVelY)))
-					if vlen > maxSpeed && vlen > 0 {
-						scale := maxSpeed / vlen
-						applyVelX *= scale
-						applyVelY *= scale
-					}
-					dx := rawX - info.X
-					dy := rawY - info.Y
-					dist := float32(math.Hypot(float64(dx), float64(dy)))
-					if maxMove > 0 && dist > maxMove {
-						scale := maxMove / dist
-						applyX = info.X + dx*scale
-						applyY = info.Y + dy*scale
-					} else {
-						applyX = rawX
-						applyY = rawY
-					}
-					correctDist := s.PositionMaxDist
-					if correctDist <= 0 {
-						correctDist = 112
-					}
-					ddx := rawX - applyX
-					ddy := rawY - applyY
-					if ddx*ddx+ddy*ddy > correctDist*correctDist {
-						corrected = true
-					}
-				}
-			}
-		}
-		c.snapX = applyX
-		c.snapY = applyY
-		c.snapRotation = rawRot
-		c.snapVelX = applyVelX
-		c.snapVelY = applyVelY
 		c.building = v.Building
 		c.selectedRotation = v.SelectedRotation
 		c.selectedBlockID = -1
@@ -1027,31 +536,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				s.OnBuildPlans(c, plans)
 			}
 		}
-		if s.SyncUnitStateFn != nil && c.unitID != 0 && !ignorePosition {
-			s.SyncUnitStateFn(c.unitID, applyX, applyY, rawRot, applyVelX, applyVelY)
-		}
-		if corrected {
-			s.emitEvent(c, "position_correction", "*protocol.Remote_NetServer_clientSnapshot_45",
-				fmt.Sprintf("dx=%.2f dy=%.2f max=%.2f", rawX-applyX, rawY-applyY, s.PositionMaxDist))
-			if u := s.playerUnitEntity(c); u != nil {
-				_ = s.sendEntitySyncTo(c, u)
-			}
-		}
-		c.lastClientSnapshotID = v.SnapshotID
-		c.lastClientSnapshotAt = now
-	case *protocol.Remote_NetClient_sendChatMessage_16:
-		msg := sanitizeChatMessage(v.Message)
-		if msg == "" {
-			return
-		}
-		if s.OnChat != nil && s.OnChat(c, msg) {
-			return
-		}
-		name := c.name
-		if strings.TrimSpace(name) == "" {
-			name = "player"
-		}
-		s.BroadcastChat(fmt.Sprintf("[accent]%s[]: %s", name, msg))
 	case *protocol.Remote_NetClient_ping_18:
 		// Temporary compatibility: some 155 clients misdecode pingResponse call IDs.
 		// Keep connection alive via framework keepalive loop only.
@@ -1151,143 +635,55 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 58, "Remote_InputHandler_takeItems_58", "take_items")
 		}
-		if v.Build != nil && v.Item != nil && v.To != nil && s.OnTakeItems != nil &&
-			!c.dead && v.Amount > 0 && s.withinItemTransferRange(c, v.Build.Pos()) &&
-			s.isConnControlledUnit(c, v.To.ID()) &&
-			s.canInteractBuild(c, v.Build.Pos(), "take_items") {
-			moved := s.OnTakeItems(v.Build.Pos(), v.Item.ID(), v.Amount, v.To.ID())
-			if moved > 0 {
-				pkt := *v
-				pkt.Amount = moved
-				s.Broadcast(&pkt)
-			}
-		}
 	case *protocol.Remote_InputHandler_transferItemToUnit_59:
 		// 传输物品到单位
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 59, "Remote_InputHandler_transferItemToUnit_59", "transfer_item_to_unit")
-		}
-		if v.Item != nil && v.To != nil && s.OnTransferItemToUnit != nil &&
-			!c.dead && s.isConnControlledUnit(c, v.To.ID()) {
-			if added := s.OnTransferItemToUnit(v.Item.ID(), 1, v.To.ID()); added > 0 {
-				s.Broadcast(v)
-			}
 		}
 	case *protocol.Remote_InputHandler_setItem_60:
 		// 设置单个物品槽位
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 60, "Remote_InputHandler_setItem_60", "set_item")
 		}
-		if v.Build != nil && v.Item != nil && s.OnSetItem != nil {
-			s.OnSetItem(v.Build.Pos(), v.Item.ID(), v.Amount)
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setItems_61:
 		// 批量设置物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 61, "Remote_InputHandler_setItems_61", "set_items")
 		}
-		if v.Build != nil && s.OnSetItems != nil {
-			items := make([]protocol.ItemStack, 0, len(v.Items))
-			for _, it := range v.Items {
-				items = append(items, it)
-			}
-			s.OnSetItems(v.Build.Pos(), items)
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setTileItems_62:
 		// 设置地砖物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 62, "Remote_InputHandler_setTileItems_62", "set_tile_items")
 		}
-		if v.Item != nil && s.OnSetTileItems != nil {
-			s.OnSetTileItems(v.Item.ID(), v.Amount, append([]int32(nil), v.Positions...))
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_clearItems_63:
 		// 清空物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 63, "Remote_InputHandler_clearItems_63", "clear_items")
 		}
-		if v.Build != nil && s.OnClearItems != nil {
-			s.OnClearItems(v.Build.Pos())
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setLiquid_64:
 		// 设置单个液体槽位
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 64, "Remote_InputHandler_setLiquid_64", "set_liquid")
 		}
-		if v.Build != nil && v.Liquid != nil && s.OnSetLiquid != nil {
-			s.OnSetLiquid(v.Build.Pos(), v.Liquid.ID(), v.Amount)
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setLiquids_65:
 		// 批量设置液体
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 65, "Remote_InputHandler_setLiquids_65", "set_liquids")
 		}
-		if v.Build != nil && s.OnSetLiquids != nil {
-			out := make([]protocol.LiquidStack, 0, len(v.Liquids))
-			for _, st := range v.Liquids {
-				if st.Liquid == nil || st.Amount <= 0 {
-					continue
-				}
-				out = append(out, st)
-			}
-			s.OnSetLiquids(v.Build.Pos(), out)
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_setTileLiquids_66:
 		// 设置地砖液体
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 66, "Remote_InputHandler_setTileLiquids_66", "set_tile_liquids")
 		}
-		if v.Liquid != nil && s.OnSetTileLiquids != nil {
-			s.OnSetTileLiquids(v.Liquid.ID(), v.Amount, append([]int32(nil), v.Positions...))
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_clearLiquids_67:
 		// 清空液体
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 67, "Remote_InputHandler_clearLiquids_67", "clear_liquids")
 		}
-		if v.Build != nil && s.OnClearLiquids != nil {
-			s.OnClearLiquids(v.Build.Pos())
-		}
-		s.Broadcast(v)
 	case *protocol.Remote_InputHandler_transferItemTo_68:
 		// 通用物品传输到
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 68, "Remote_InputHandler_transferItemTo_68", "transfer_item_to")
-		}
-		if v.Build != nil && v.Item != nil && s.OnTransferItemTo != nil &&
-			!c.dead && v.Amount > 0 && s.withinItemTransferRange(c, v.Build.Pos()) &&
-			s.canInteractBuild(c, v.Build.Pos(), "transfer_item_to") {
-			moved := v.Amount
-			fromUnitID := int32(0)
-			if moved > 0 && v.Unit != nil {
-				if uid := extractUnitID(v.Unit); uid != 0 {
-					fromUnitID = uid
-					if !s.isConnControlledUnit(c, uid) {
-						moved = 0
-					}
-				}
-			}
-			if moved > 0 && fromUnitID != 0 {
-				moved = s.ConsumeUnitStackByID(fromUnitID, v.Item.ID(), moved)
-			}
-			if moved > 0 {
-				accepted := s.OnTransferItemTo(v.Build.Pos(), v.Item.ID(), moved)
-				if accepted < moved && fromUnitID != 0 {
-					_ = s.AddUnitItemByID(fromUnitID, v.Item.ID(), moved-accepted)
-				}
-				if accepted > 0 {
-					pkt := *v
-					pkt.Amount = accepted
-					s.Broadcast(&pkt)
-				}
-			}
 		}
 	case *protocol.Remote_InputHandler_deletePlans_69:
 		// 删除建造计划
@@ -1319,165 +715,50 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 74, "Remote_InputHandler_requestItem_74", "request_item")
 		}
-		if v.Build != nil && v.Item != nil && s.OnRequestItem != nil &&
-			!c.dead && s.withinItemTransferRange(c, v.Build.Pos()) &&
-			s.canInteractBuild(c, v.Build.Pos(), "request_item") {
-			if moved := s.OnRequestItem(c, v.Build.Pos(), v.Item.ID(), v.Amount); moved > 0 && c.unitID != 0 {
-				s.Broadcast(&protocol.Remote_InputHandler_takeItems_58{
-					Build:  v.Build,
-					Item:   v.Item,
-					Amount: moved,
-					To:     &protocol.EntityBox{IDValue: c.unitID},
-				})
-			}
-		}
 	case *protocol.Remote_InputHandler_transferInventory_75:
 		// 转移库存
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 75, "Remote_InputHandler_transferInventory_75", "transfer_inventory")
-		}
-		if v.Build != nil && s.OnTransferInventory != nil &&
-			!c.dead && s.withinItemTransferRange(c, v.Build.Pos()) && s.allowItemDeposit(c) &&
-			s.canInteractBuild(c, v.Build.Pos(), "transfer_inventory") {
-			itemID, moved := s.OnTransferInventory(c, v.Build.Pos())
-			if moved > 0 && itemID > 0 {
-				s.Broadcast(&protocol.Remote_InputHandler_transferItemTo_68{
-					Unit:   protocol.EntityBox{IDValue: c.unitID},
-					Item:   protocol.ItemRef{ItmID: itemID, ItmName: ""},
-					Amount: moved,
-					X:      c.snapX,
-					Y:      c.snapY,
-					Build:  v.Build,
-				})
-			}
 		}
 	case *protocol.Remote_InputHandler_removeQueueBlock_76:
 		// 从队列中移除方块
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 76, "Remote_InputHandler_removeQueueBlock_76", fmt.Sprintf("remove_queue(x=%d y=%d breaking=%v)", v.X, v.Y, v.Breaking))
 		}
-		if s.OnRemoveQueueBlock != nil {
-			s.OnRemoveQueueBlock(v.X, v.Y, v.Breaking)
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_requestUnitPayload_77:
 		// 请求单位载荷
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 77, "Remote_InputHandler_requestUnitPayload_77", "request_unit_payload")
 		}
-		if s.OnRequestUnitPayload != nil {
-			playerID := extractUnitID(v.Player)
-			targetID := extractUnitID(v.Target)
-			if s.OnRequestUnitPayload(c, playerID, targetID) {
-				return
-			}
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_requestBuildPayload_78:
 		// 请求建筑载荷
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 78, "Remote_InputHandler_requestBuildPayload_78", "request_build_payload")
 		}
-		if s.OnRequestBuildPayload != nil {
-			playerID := extractUnitID(v.Player)
-			buildPos := int32(0)
-			if v.Build != nil {
-				buildPos = v.Build.Pos()
-			}
-			if s.OnRequestBuildPayload(c, playerID, buildPos) {
-				return
-			}
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_pickedUnitPayload_79:
 		// 单位运载选择
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 79, "Remote_InputHandler_pickedUnitPayload_79", "picked_unit_payload")
 		}
-		if s.OnPickedUnitPayload != nil {
-			unitID := extractUnitID(v.Unit)
-			targetID := extractUnitID(v.Target)
-			if s.OnPickedUnitPayload(c, unitID, targetID) {
-				return
-			}
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_pickedBuildPayload_80:
 		// 建筑运载选择
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 80, "Remote_InputHandler_pickedBuildPayload_80", "picked_build_payload")
 		}
-		if s.OnPickedBuildPayload != nil {
-			unitID := extractUnitID(v.Unit)
-			buildPos := int32(0)
-			if v.Build != nil {
-				buildPos = v.Build.Pos()
-			}
-			if s.OnPickedBuildPayload(c, unitID, buildPos, v.OnGround) {
-				return
-			}
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_requestDropPayload_81:
 		// 请求丢弃运载物
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 81, "Remote_InputHandler_requestDropPayload_81", fmt.Sprintf("request_drop_payload(x=%.1f y=%.1f)", v.X, v.Y))
 		}
-		if s.OnRequestDropPayload != nil {
-			if s.OnRequestDropPayload(c, v.X, v.Y) {
-				return
-			}
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_payloadDropped_82:
 		// 运载物已丢弃
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 82, "Remote_InputHandler_payloadDropped_82", fmt.Sprintf("payload_dropped(x=%.1f y=%.1f)", v.X, v.Y))
 		}
-		if s.OnPayloadDropped != nil {
-			s.OnPayloadDropped(c, extractUnitID(v.Unit), v.X, v.Y)
-		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_InputHandler_unitEnteredPayload_83:
 		// 单位进入运载
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 83, "Remote_InputHandler_unitEnteredPayload_83", "unit_entered_payload")
-		}
-		if s.OnUnitEnteredPayload != nil {
-			buildPos := int32(0)
-			if v.Build != nil {
-				buildPos = v.Build.Pos()
-			}
-			s.OnUnitEnteredPayload(c, extractUnitID(v.Unit), buildPos)
-		}
-		s.BroadcastExcept(c, v)
-	case *protocol.Remote_InputHandler_tileConfig_86:
-		// 建筑配置（逻辑处理器/显示屏/分类器等）
-		if s.DevLogger != nil {
-			s.DevLogger.LogPacketReceived(c.id, c.playerID, 86, "Remote_InputHandler_tileConfig_86", "tile_config")
-		}
-		if v.Build != nil {
-			pos := v.Build.Pos()
-			val := normalizeTileConfigValue(v.Value)
-			fmt.Printf("[net] tileConfig recv id=%d pos=%d valueType=%T\n", c.id, pos, val)
-			s.SetTileConfig(pos, val)
-			if s.OnTileConfig != nil {
-				s.OnTileConfig(pos, val)
-			}
-			// Official-like behavior: forward original tileConfig call to peers.
-			if s.tileConfigForwardSync.Load() {
-				s.BroadcastExceptSync(c, v)
-			} else {
-				s.BroadcastExcept(c, v)
-			}
-		}
-	case *protocol.Remote_InputHandler_rotateBlock_85:
-		// 旋转建筑方向（门、路由器、部分可旋转方块）
-		if s.DevLogger != nil {
-			s.DevLogger.LogPacketReceived(c.id, c.playerID, 85, "Remote_InputHandler_rotateBlock_85", "rotate_block")
-		}
-		if v.Build != nil && s.OnRotateBlock != nil {
-			s.OnRotateBlock(v.Build.Pos(), v.Direction)
 		}
 	case *protocol.Remote_InputHandler_dropItem_84:
 		// 投放物品
@@ -1493,7 +774,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		_ = c.Send(resp)
 	case *protocol.Remote_Build_beginBreak_123:
 		//客户端请求开始破坏建筑
-		fmt.Printf("[net] rx beginBreak id=%d x=%d y=%d\n", c.id, v.X, v.Y)
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 123, "Remote_Build_beginBreak_123", fmt.Sprintf("x=%d y=%d", v.X, v.Y))
 		}
@@ -1505,14 +785,12 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				Rotation: 0,
 			}})
 		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_Build_beginPlace_124:
 		// 客户端请求开始放置建筑
 		blockID := int16(0)
 		if v.Result != nil {
 			blockID = v.Result.ID()
 		}
-		fmt.Printf("[net] rx beginPlace id=%d x=%d y=%d block=%d\n", c.id, v.X, v.Y, blockID)
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 124, "Remote_Build_beginPlace_124", fmt.Sprintf("x=%d y=%d block=%d", v.X, v.Y, blockID))
 		}
@@ -1526,7 +804,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				Config:   v.PlaceConfig,
 			}})
 		}
-		s.BroadcastExcept(c, v)
 	case *protocol.Remote_Tile_setFloor_128:
 		// 设置地板
 		if s.DevLogger != nil {
@@ -1567,9 +844,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				devlog.Int32Fld("tile_x", x),
 				devlog.Int32Fld("tile_y", y))
 		}
-		if v.Tile != nil {
-			s.ClearTileConfig(v.Tile.Pos())
-		}
 	case *protocol.Remote_Tile_setTile_131:
 		// 设置 Tile（_block）
 		if s.DevLogger != nil {
@@ -1609,9 +883,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			s.DevLogger.LogBuild(x, y, 0, "none", "buildDestroyed",
 				devlog.Int32Fld("tile_pos", pos))
 		}
-		if v.Build != nil {
-			s.ClearTileConfig(v.Build.Pos())
-		}
 	case *protocol.Remote_Tile_buildHealthUpdate_135:
 		// 建筑生命值更新 - 简化处理（数据包结构需要进一步分析）
 		if s.DevLogger != nil {
@@ -1641,12 +912,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				m.IsReply = true
 				_ = c.Send(m)
 			}
-		case *protocol.RegisterTCP:
-			// Client-side ACK for RegisterTCP; ignore in server mode.
-		case *protocol.RegisterUDP:
-			// Some clients may send RegisterUDP over TCP; ignore.
-		case *protocol.KeepAlive:
-			// keepalive from client; ignore
 		default:
 			// ignore keepalive
 		}
@@ -1824,9 +1089,6 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// HUD - 设置玩家队伍编辑器
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 122, "Remote_HudFragment_setPlayerTeamEditor_122", "set_player_team_editor")
-		}
-		if s.OnSetPlayerTeamEditor != nil && s.OnSetPlayerTeamEditor(c, v.Team.ID) {
-			s.setConnTeam(c, v.Team.ID)
 		}
 	case *protocol.Remote_Tile_setTileBlocks_125:
 		// Tile - 设置 Tile 的 Blocks
@@ -2066,42 +1328,6 @@ func (s *Server) Broadcast(obj any) {
 	}
 }
 
-func (s *Server) BroadcastExcept(skip *Conn, obj any) {
-	if obj == nil {
-		return
-	}
-	s.mu.Lock()
-	peers := make([]*Conn, 0, len(s.conns))
-	for c := range s.conns {
-		if c == nil || c == skip {
-			continue
-		}
-		peers = append(peers, c)
-	}
-	s.mu.Unlock()
-	for _, peer := range peers {
-		_ = peer.SendAsync(obj)
-	}
-}
-
-func (s *Server) BroadcastExceptSync(skip *Conn, obj any) {
-	if obj == nil {
-		return
-	}
-	s.mu.Lock()
-	peers := make([]*Conn, 0, len(s.conns))
-	for c := range s.conns {
-		if c == nil || c == skip {
-			continue
-		}
-		peers = append(peers, c)
-	}
-	s.mu.Unlock()
-	for _, peer := range peers {
-		_ = peer.Send(obj)
-	}
-}
-
 func (s *Server) SendStatusTo(c *Conn) {
 	if c == nil {
 		return
@@ -2111,55 +1337,22 @@ func (s *Server) SendStatusTo(c *Conn) {
 }
 
 func (s *Server) emitEvent(c *Conn, kind, packet, detail string) {
-	stable := func(v string) string {
-		if v == "" {
-			return ""
-		}
-		b := make([]byte, len(v))
-		copy(b, v)
-		return string(b)
+	if s.OnEvent == nil {
+		return
 	}
 	ev := NetEvent{
 		Timestamp: time.Now().UTC(),
-		Kind:      stable(kind),
-		Packet:    stable(packet),
-		Detail:    stable(detail),
+		Kind:      kind,
+		Packet:    packet,
+		Detail:    detail,
 	}
 	if c != nil {
 		ev.ConnID = c.id
-		ev.UUID = stable(c.uuid)
-		ev.USID = stable(c.usid)
-		ev.IP = stable(c.remoteIP())
-		ev.Name = stable(c.name)
+		ev.UUID = c.uuid
+		ev.IP = c.remoteIP()
+		ev.Name = c.name
 	}
-	s.emitEventRaw(ev)
-}
-
-func (s *Server) emitAdminEvent(kind, detail, uuid, usid, ip, name string) {
-	stable := func(v string) string {
-		if v == "" {
-			return ""
-		}
-		b := make([]byte, len(v))
-		copy(b, v)
-		return string(b)
-	}
-	ev := NetEvent{
-		Timestamp: time.Now().UTC(),
-		Kind:      stable(kind),
-		Detail:    stable(detail),
-		UUID:      stable(uuid),
-		USID:      stable(usid),
-		IP:        stable(ip),
-		Name:      stable(name),
-	}
-	s.emitEventRaw(ev)
-}
-
-func (s *Server) emitEventRaw(ev NetEvent) {
-	if s.OnEvent != nil {
-		s.OnEvent(ev)
-	}
+	s.OnEvent(ev)
 
 	// 也分发到事件管理器
 	if s.EventManager != nil {
@@ -2171,27 +1364,11 @@ func (s *Server) emitEventRaw(ev NetEvent) {
 			Detail:    ev.Detail,
 			ConnID:    ev.ConnID,
 			UUID:      ev.UUID,
-			USID:      ev.USID,
 			IP:        ev.IP,
 			Name:      ev.Name,
 		}
-		if trg, ok := mapEventKindToTrigger(ev.Kind); ok {
-			stgEv.Trigger = trg
-		}
+		// todo: 映射 kind 到 Trigger
 		s.EventManager.Dispatch(stgEv)
-	}
-}
-
-func mapEventKindToTrigger(kind string) (storage.Trigger, bool) {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case "tcp_accept", "connect_packet", "world_handshake_sent":
-		return storage.TriggerPlayerConnect, true
-	case "connect_confirm", "connect_confirm_client_snapshot":
-		return storage.TriggerPlayerJoin, true
-	case "client_disconnect", "tcp_closed", "handshake_timeout", "kick":
-		return storage.TriggerPlayerLeave, true
-	default:
-		return 0, false
 	}
 }
 
@@ -2221,78 +1398,57 @@ func (s *Server) removeConn(c *Conn) {
 
 type Conn struct {
 	net.Conn
-	serial                 *Serializer
-	mu                     sync.Mutex
-	id                     int32
-	playerID               int32
-	recvCompatIDs          bool
-	sendCompatIDs          bool
-	udpMu                  sync.RWMutex
-	udpAddr                *net.UDPAddr
-	hasBegunConnecting     bool
-	hasConnected           bool
-	name                   string
-	uuid                   string
-	usid                   string
-	versionType            string
-	color                  int32
-	teamID                 byte
-	strictMode             bool
-	acceptedAt             time.Time
-	handshakeDeadline      time.Time
-	snapX                  float32
-	snapY                  float32
-	pointerX               float32
-	pointerY               float32
-	shooting               bool
-	boosting               bool
-	typing                 bool
-	dead                   bool
-	deathTimer             float32
-	lastRespawnCheck       time.Time
-	lastSpawnAt            time.Time
-	unitInvalidSince       time.Time
-	unitID                 int32
-	lastRespawnReq         time.Time
-	itemDepositWindowStart time.Time
-	itemDepositOps         int
-	building               bool
-	selectedBlockID        int16
-	selectedRotation       int32
-	snapRotation           float32
-	snapVelX               float32
-	snapVelY               float32
-	lastClientSnapshotID   int32
-	lastClientSnapshotAt   time.Time
-	lastRecvPacketID       int
-	lastRecvFrameworkID    int
-	closed                 chan struct{}
-	closeOnce              sync.Once
-	postOnce               sync.Once
-	onSend                 func(obj any, packetID int, frameworkID int, size int)
-	streamMu               sync.Mutex
-	streams                map[int32]*StreamBuilder
-	outHigh                chan any
-	outNorm                chan any
-	outClosed              chan struct{}
-	sendCount              atomic.Int64
-	sendErrors             atomic.Int64
-	sendQueued             atomic.Int64
-	sendQueueFull          atomic.Int64
-	bytesSent              atomic.Int64
-	udpSent                atomic.Int64
-	udpErrors              atomic.Int64
-	tcpStateLogCount       atomic.Int64
-	tcpBuildHealthCount    atomic.Int64
-	tcpSetTileLogCount     atomic.Int64
-	tcpRemoveTileCount     atomic.Int64
-	tcpGeneralLogCount     atomic.Int64
-	udpEntityLogCount      atomic.Int64
-	udpGeneralLogCount     atomic.Int64
-	snapshotLogSampleN     atomic.Int64
-	statsMu                sync.Mutex
-	byTypeSent             map[string]int64
-	byTypeBytes            map[string]int64
+	serial              *Serializer
+	mu                  sync.Mutex
+	id                  int32
+	playerID            int32
+	recvCompatIDs       bool
+	sendCompatIDs       bool
+	udpMu               sync.RWMutex
+	udpAddr             *net.UDPAddr
+	hasBegunConnecting  bool
+	hasConnected        bool
+	name                string
+	uuid                string
+	versionType         string
+	color               int32
+	snapX               float32
+	snapY               float32
+	pointerX            float32
+	pointerY            float32
+	shooting            bool
+	boosting            bool
+	typing              bool
+	dead                bool
+	deathTimer          float32
+	lastRespawnCheck    time.Time
+	lastSpawnAt         time.Time
+	unitID              int32
+	lastRespawnReq      time.Time
+	building            bool
+	selectedBlockID     int16
+	selectedRotation    int32
+	lastRecvPacketID    int
+	lastRecvFrameworkID int
+	closed              chan struct{}
+	closeOnce           sync.Once
+	postOnce            sync.Once
+	onSend              func(obj any, packetID int, frameworkID int, size int)
+	streamMu            sync.Mutex
+	streams             map[int32]*StreamBuilder
+	outHigh             chan any
+	outNorm             chan any
+	outClosed           chan struct{}
+	sendCount           atomic.Int64
+	sendErrors          atomic.Int64
+	sendQueued          atomic.Int64
+	sendQueueFull       atomic.Int64
+	bytesSent           atomic.Int64
+	udpSent             atomic.Int64
+	udpErrors           atomic.Int64
+	statsMu             sync.Mutex
+	byTypeSent          map[string]int64
+	byTypeBytes         map[string]int64
 }
 
 type UnitInfo struct {
@@ -2303,7 +1459,6 @@ type UnitInfo struct {
 	MaxHealth float32
 	TeamID    byte
 	TypeID    int16
-	MoveSpeed float32
 }
 
 func NewConn(c net.Conn, serial *Serializer) *Conn {
@@ -2319,7 +1474,6 @@ func NewConn(c net.Conn, serial *Serializer) *Conn {
 		outClosed:           make(chan struct{}),
 		byTypeSent:          make(map[string]int64),
 		byTypeBytes:         make(map[string]int64),
-		teamID:              1,
 	}
 	go conn.sendLoop()
 	return conn
@@ -2351,7 +1505,7 @@ func (c *Conn) ReadObject() (any, error) {
 		obj, err := c.serial.ReadObjectMode(r, c.recvCompatIDs)
 		if err != nil {
 			// Early auto-fallback: probe opposite decode mode for mixed-ID clients.
-			if !c.hasConnected && !c.strictMode {
+			if !c.hasConnected {
 				if altObj, altErr := c.serial.ReadObjectMode(bytesReader(payload), !c.recvCompatIDs); altErr == nil {
 					c.recvCompatIDs = !c.recvCompatIDs
 					fmt.Printf("[net] rx mode switch id=%d recvCompat=%v packet_id=%d\n", c.id, c.recvCompatIDs, c.lastRecvPacketID)
@@ -2363,7 +1517,7 @@ func (c *Conn) ReadObject() (any, error) {
 				return nil, err
 			}
 		}
-		if ignored, ok := obj.(*CompatIgnoredPacket); ok && !c.hasConnected && !c.strictMode {
+		if ignored, ok := obj.(*CompatIgnoredPacket); ok && !c.hasConnected {
 			if altObj, altErr := c.serial.ReadObjectMode(bytesReader(payload), !c.recvCompatIDs); altErr == nil {
 				c.recvCompatIDs = !c.recvCompatIDs
 				fmt.Printf("[net] rx mode switch(id=ignored) id=%d recvCompat=%v packet_id=%d ignored=%d\n", c.id, c.recvCompatIDs, c.lastRecvPacketID, ignored.ID)
@@ -2424,7 +1578,8 @@ func (c *Conn) sendNow(obj any) error {
 			packetID = int(payload[0])
 		}
 	}
-	if packetID >= 0 && c.shouldLogPacket(packetID, false) {
+	// Keep per-packet logs off by default to avoid log flood.
+	if packetID >= 0 && c.sendCount.Load() < 40 {
 		fmt.Printf("[net] tx id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 	}
 	if len(payload) > 0xFFFF {
@@ -2503,24 +1658,8 @@ func (c *Conn) PlayerID() int32 {
 	return c.playerID
 }
 
-func (c *Conn) UnitID() int32 {
-	return c.unitID
-}
-
 func (c *Conn) UUID() string {
 	return c.uuid
-}
-
-func (c *Conn) USID() string {
-	return c.usid
-}
-
-func (c *Conn) Name() string {
-	return c.name
-}
-
-func (c *Conn) RemoteIP() string {
-	return c.remoteIP()
 }
 
 func (c *Conn) VersionType() string {
@@ -2626,60 +1765,6 @@ func priorityOf(obj any) int {
 		return p.Priority()
 	}
 	return protocol.PriorityNormal
-}
-
-func (c *Conn) shouldLogPacket(packetID int, udp bool) bool {
-	nSample := int(c.snapshotLogSampleN.Load())
-	if nSample <= 0 {
-		nSample = 20
-	}
-
-	// Keep handshake/control packets visible.
-	switch packetID {
-	case 0, 2, 17, 21, 22, 28, 31, 47:
-		return true
-	}
-
-	if udp {
-		// packet 43 (entity snapshot) is the hottest path; sample aggressively.
-		if packetID == 43 {
-			n := c.udpEntityLogCount.Add(1)
-			return n%int64(maxInt(nSample*4, 40)) == 1
-		}
-		// Other UDP packets are still frequent under load.
-		n := c.udpGeneralLogCount.Add(1)
-		return n%int64(maxInt(nSample*6, 60)) == 1
-	}
-
-	switch packetID {
-	// High-frequency world sync packets.
-	case 1:
-		n := c.tcpGeneralLogCount.Add(1)
-		return n%int64(maxInt(nSample*2, 20)) == 1
-	case 117:
-		n := c.tcpStateLogCount.Add(1)
-		return n%int64(maxInt(nSample*3, 30)) == 1
-	case 13:
-		n := c.tcpBuildHealthCount.Add(1)
-		return n%int64(maxInt(nSample*3, 30)) == 1
-	case 106:
-		n := c.tcpSetTileLogCount.Add(1)
-		return n%int64(maxInt(nSample*3, 30)) == 1
-	case 71, 36:
-		n := c.tcpRemoveTileCount.Add(1)
-		return n%int64(maxInt(nSample*3, 30)) == 1
-	default:
-		// Non-critical TCP packets: keep sparse sampling to avoid log storms.
-		n := c.tcpGeneralLogCount.Add(1)
-		return n%int64(maxInt(nSample*4, 40)) == 1
-	}
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (c *Conn) remoteIP() string {
@@ -2924,7 +2009,7 @@ func (s *Server) ensurePostConnectStarted(c *Conn) {
 	c.postOnce.Do(func() {
 		s.spawnPlayerInitial(c)
 		if s.OnPostConnect != nil {
-			s.OnPostConnect(c)
+			go s.OnPostConnect(c)
 		}
 		go s.postConnectLoop(c)
 	})
@@ -2950,9 +2035,7 @@ func (s *Server) postConnectLoop(c *Conn) {
 		case <-stateTicker.C:
 			s.maybeRespawn(c)
 			state := buildStateSnapshot(s, c)
-			// State snapshot is sent reliably to avoid UDP reordering jitter
-			// (e.g. wavetime jumping backward on client).
-			if err := c.SendAsync(state); err != nil {
+			if err := s.sendUnreliable(c, state); err != nil {
 				fmt.Printf("[net] state snapshot send failed id=%d err=%v\n", c.id, err)
 				s.emitEvent(c, "state_snapshot_send_failed", "*protocol.Remote_NetClient_stateSnapshot_35", err.Error())
 				return
@@ -3019,7 +2102,7 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 				fmt.Printf("[net] sendUnreliable encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
 				return err
 			}
-			if packetID >= 0 && c.shouldLogPacket(packetID, true) {
+			if packetID >= 0 && c.sendCount.Load() < 80 {
 				fmt.Printf("[net] tx-udp id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 			}
 			retries := s.UdpRetryCount
@@ -3124,11 +2207,6 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 	if c == nil || c.playerID == 0 {
 		return
 	}
-	select {
-	case <-c.closed:
-		return
-	default:
-	}
 	if s.SpawnTileFn == nil {
 		return
 	}
@@ -3159,7 +2237,6 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 		c.dead = false
 		c.deathTimer = 0
 		c.lastRespawnCheck = time.Time{}
-		c.unitInvalidSince = time.Time{}
 		c.lastRespawnReq = time.Now()
 		fmt.Printf("[net] respawn sent conn=%d source=%s\n", c.id, source)
 	} else {
@@ -3170,11 +2247,6 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 func (s *Server) requestRespawn(c *Conn, source string) {
 	if c == nil || c.playerID == 0 {
 		return
-	}
-	select {
-	case <-c.closed:
-		return
-	default:
 	}
 	now := time.Now()
 	cooldown := 600 * time.Millisecond
@@ -3209,7 +2281,6 @@ func (s *Server) markDead(c *Conn, source string) {
 		c.deathTimer = 0
 		c.lastRespawnCheck = time.Now()
 		c.lastSpawnAt = time.Time{}
-		c.unitInvalidSince = time.Time{}
 	}
 	if s.DevLogger != nil {
 		s.DevLogger.LogConnection("player_dead", c.id, c.remoteIP(), c.name, c.uuid,
@@ -3226,44 +2297,34 @@ func (s *Server) maybeRespawn(c *Conn) {
 			s.markDead(c, "unit-missing")
 			return
 		}
-		// Avoid false-death around spawn/map-reload handover.
-		if !c.lastSpawnAt.IsZero() && time.Since(c.lastSpawnAt) < 6*time.Second {
-			c.unitInvalidSince = time.Time{}
+		// Avoid immediate false-death right after spawn.
+		if !c.lastSpawnAt.IsZero() && time.Since(c.lastSpawnAt) < 1500*time.Millisecond {
 			return
 		}
-		badState := false
 		s.entityMu.Lock()
 		ent, ok := s.entities[c.unitID]
 		s.entityMu.Unlock()
 		if !ok {
-			badState = true
+			s.markDead(c, "unit-entity-missing")
+			return
 		}
 		if s.UnitInfoFn != nil {
 			info, ok := s.UnitInfoFn(c.unitID)
 			if !ok {
-				badState = true
-			} else if info.Health <= 0 {
-				badState = true
-			}
-		}
-		if u, ok := ent.(*protocol.UnitEntitySync); ok && u != nil {
-			if u.Health <= 0 {
-				badState = true
-			}
-		}
-		if badState {
-			now := time.Now()
-			if c.unitInvalidSince.IsZero() {
-				c.unitInvalidSince = now
+				s.markDead(c, "unit-state-missing")
 				return
 			}
-			if now.Sub(c.unitInvalidSince) >= 2*time.Second {
+			if info.Health <= 0 {
 				s.markDead(c, "unit-health")
 				return
 			}
-			return
 		}
-		c.unitInvalidSince = time.Time{}
+		if u, ok := ent.(*protocol.UnitEntitySync); ok {
+			if u.Health <= 0 {
+				s.markDead(c, "unit-health")
+				return
+			}
+		}
 		c.deathTimer = 0
 		c.lastRespawnCheck = time.Now()
 		return
@@ -3458,7 +2519,7 @@ func (s *Server) updatePlayerEntity(p *protocol.PlayerEntity, c *Conn) {
 	p.SelectedBlock = -1
 	p.SelectedRotation = 0
 	p.Shooting = c.shooting
-	p.TeamID = s.connTeamID(c)
+	p.TeamID = 1
 	p.Typing = c.typing
 	if c.unitID != 0 {
 		p.Unit = protocol.UnitBox{IDValue: c.unitID}
@@ -3488,7 +2549,6 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		c.unitID = s.nextUnitID()
 	}
 	playerTypeID := int16(1)
-	teamID := s.connTeamID(c)
 	if s.PlayerUnitTypeFn != nil {
 		if t := s.PlayerUnitTypeFn(); t >= 0 {
 			playerTypeID = t
@@ -3521,10 +2581,8 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 				u.X = c.snapX
 				u.Y = c.snapY
 			}
-			u.Rotation = c.snapRotation
-			u.Shooting = c.shooting
-			u.Vel = protocol.Vec2{X: c.snapVelX, Y: c.snapVelY}
-			u.TeamID = teamID
+			u.Rotation = 90
+			u.TeamID = 1
 			u.TypeID = playerTypeID
 			u.Elevation = 1
 			if u.Health <= 0 {
@@ -3541,19 +2599,19 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		Elevation:      1,
 		Flag:           0,
 		Health:         100,
-		Shooting:       c.shooting,
+		Shooting:       false,
 		MineTile:       nil,
 		Mounts:         []protocol.WeaponMount{},
 		Plans:          []*protocol.BuildPlan{},
-		Rotation:       c.snapRotation,
+		Rotation:       90,
 		Shield:         0,
 		SpawnedByCore:  true,
 		Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}, Amount: 0},
 		Statuses:       []protocol.StatusEntry{},
-		TeamID:         teamID,
+		TeamID:         1,
 		TypeID:         playerTypeID,
 		UpdateBuilding: false,
-		Vel:            protocol.Vec2{X: c.snapVelX, Y: c.snapVelY},
+		Vel:            protocol.Vec2{X: 0, Y: 0},
 		X:              c.snapX,
 		Y:              c.snapY,
 	}
@@ -3576,9 +2634,6 @@ func (s *Server) playerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 				u.X = c.snapX
 				u.Y = c.snapY
 			}
-			u.Rotation = c.snapRotation
-			u.Shooting = c.shooting
-			u.Vel = protocol.Vec2{X: c.snapVelX, Y: c.snapVelY}
 			return u
 		}
 	}
@@ -3705,16 +2760,6 @@ func (s *Server) broadcastEntitySync(entity protocol.UnitSyncEntity) {
 			fmt.Printf("[net] failed to send entity sync: %v\n", err)
 		}
 	}
-}
-
-func (s *Server) sendEntitySyncTo(c *Conn, entity protocol.UnitSyncEntity) error {
-	if s == nil || c == nil || entity == nil {
-		return nil
-	}
-	return c.Send(&protocol.Remote_NetClient_entitySnapshot_32{
-		Amount: 1,
-		Data:   s.serializeEntity(entity),
-	})
 }
 
 // serializeEntity 序列化实体为字节数组
@@ -3854,77 +2899,6 @@ func (s *Server) ListSessions() []SessionInfo {
 	return out
 }
 
-func (s *Server) SetTileConfig(pos int32, value any) {
-	if s == nil || pos < 0 {
-		return
-	}
-	s.tileConfigMu.Lock()
-	if value == nil {
-		delete(s.tileConfigs, pos)
-	} else {
-		s.tileConfigs[pos] = value
-	}
-	s.tileConfigMu.Unlock()
-}
-
-func (s *Server) ClearTileConfig(pos int32) {
-	if s == nil || pos < 0 {
-		return
-	}
-	s.tileConfigMu.Lock()
-	delete(s.tileConfigs, pos)
-	s.tileConfigMu.Unlock()
-}
-
-func (s *Server) SnapshotTileConfigs() map[int32]any {
-	out := map[int32]any{}
-	if s == nil {
-		return out
-	}
-	s.tileConfigMu.RLock()
-	defer s.tileConfigMu.RUnlock()
-	for k, v := range s.tileConfigs {
-		out[k] = v
-	}
-	return out
-}
-
-func (s *Server) ClearTileConfigs() {
-	if s == nil {
-		return
-	}
-	s.tileConfigMu.Lock()
-	clear(s.tileConfigs)
-	s.tileConfigMu.Unlock()
-}
-
-func normalizeTileConfigValue(v any) any {
-	switch x := v.(type) {
-	case nil:
-		return nil
-	case int:
-		return int32(x)
-	case int8:
-		return int32(x)
-	case int16:
-		return int32(x)
-	case int64:
-		return int32(x)
-	case uint:
-		return int32(x)
-	case uint8:
-		return int32(x)
-	case uint16:
-		return int32(x)
-	case uint32:
-		return int32(x)
-	case uint64:
-		return int32(x)
-	default:
-		return v
-	}
-}
-
 func (s *Server) KickByID(id int32, reason string) bool {
 	var target *Conn
 	s.mu.Lock()
@@ -3941,9 +2915,7 @@ func (s *Server) KickByID(id int32, reason string) bool {
 	if reason == "" {
 		reason = "kicked by admin"
 	}
-	s.emitEvent(target, "kick", "", reason)
 	_ = target.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
-	s.registerRecentKick(target.uuid, target.remoteIP(), 30*time.Second)
 	s.closeConnLater(target, 250*time.Millisecond)
 	return true
 }
@@ -3988,7 +2960,6 @@ func (s *Server) BanUUID(uuid, reason string) int {
 	if reason == "" {
 		reason = "banned by admin"
 	}
-	s.emitAdminEvent("ban_uuid", reason, uuid, "", "", "")
 	s.mu.Lock()
 	s.banUUID[uuid] = reason
 	var targets []*Conn
@@ -4000,7 +2971,6 @@ func (s *Server) BanUUID(uuid, reason string) int {
 	s.mu.Unlock()
 	for _, c := range targets {
 		_ = c.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
-		s.registerRecentKick(c.uuid, c.remoteIP(), 30*time.Second)
 		s.closeConnLater(c, 250*time.Millisecond)
 	}
 	return len(targets)
@@ -4013,7 +2983,6 @@ func (s *Server) BanIP(ip, reason string) int {
 	if reason == "" {
 		reason = "banned by admin"
 	}
-	s.emitAdminEvent("ban_ip", reason, "", "", ip, "")
 	s.mu.Lock()
 	s.banIP[ip] = reason
 	var targets []*Conn
@@ -4025,7 +2994,6 @@ func (s *Server) BanIP(ip, reason string) int {
 	s.mu.Unlock()
 	for _, c := range targets {
 		_ = c.SendAsync(&protocol.Remote_NetClient_kick_22{Reason: reason})
-		s.registerRecentKick(c.uuid, c.remoteIP(), 30*time.Second)
 		s.closeConnLater(c, 250*time.Millisecond)
 	}
 	return len(targets)
@@ -4033,25 +3001,21 @@ func (s *Server) BanIP(ip, reason string) int {
 
 func (s *Server) UnbanUUID(uuid string) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.banUUID[uuid]; !ok {
-		s.mu.Unlock()
 		return false
 	}
 	delete(s.banUUID, uuid)
-	s.mu.Unlock()
-	s.emitAdminEvent("unban_uuid", "", uuid, "", "", "")
 	return true
 }
 
 func (s *Server) UnbanIP(ip string) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.banIP[ip]; !ok {
-		s.mu.Unlock()
 		return false
 	}
 	delete(s.banIP, ip)
-	s.mu.Unlock()
-	s.emitAdminEvent("unban_ip", "", "", "", ip, "")
 	return true
 }
 
@@ -4067,116 +3031,6 @@ func (s *Server) BanLists() (map[string]string, map[string]string) {
 		ipCopy[k] = v
 	}
 	return uuidCopy, ipCopy
-}
-
-func (s *Server) SetPlayerLimit(limit int32) {
-	if s == nil {
-		return
-	}
-	if limit < 0 {
-		limit = 0
-	}
-	s.mu.Lock()
-	s.playerLimit = limit
-	s.mu.Unlock()
-}
-
-func (s *Server) PlayerLimit() int32 {
-	if s == nil {
-		return 0
-	}
-	s.mu.Lock()
-	limit := s.playerLimit
-	s.mu.Unlock()
-	return limit
-}
-
-func (s *Server) SetWhitelistEnabled(enabled bool) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.whitelistEnabled = enabled
-	s.mu.Unlock()
-}
-
-func (s *Server) WhitelistEnabled() bool {
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	enabled := s.whitelistEnabled
-	s.mu.Unlock()
-	return enabled
-}
-
-func (s *Server) AddWhitelistUUID(uuid string) {
-	if s == nil {
-		return
-	}
-	uuid = strings.TrimSpace(uuid)
-	if uuid == "" {
-		return
-	}
-	s.mu.Lock()
-	s.whiteUUID[uuid] = struct{}{}
-	s.mu.Unlock()
-}
-
-func (s *Server) RemoveWhitelistUUID(uuid string) {
-	if s == nil {
-		return
-	}
-	uuid = strings.TrimSpace(uuid)
-	if uuid == "" {
-		return
-	}
-	s.mu.Lock()
-	delete(s.whiteUUID, uuid)
-	s.mu.Unlock()
-}
-
-func (s *Server) AddWhitelistUSID(usid string) {
-	if s == nil {
-		return
-	}
-	usid = strings.TrimSpace(usid)
-	if usid == "" {
-		return
-	}
-	s.mu.Lock()
-	s.whiteUSID[usid] = struct{}{}
-	s.mu.Unlock()
-}
-
-func (s *Server) RemoveWhitelistUSID(usid string) {
-	if s == nil {
-		return
-	}
-	usid = strings.TrimSpace(usid)
-	if usid == "" {
-		return
-	}
-	s.mu.Lock()
-	delete(s.whiteUSID, usid)
-	s.mu.Unlock()
-}
-
-func (s *Server) WhitelistLists() (uuids []string, usids []string) {
-	if s == nil {
-		return nil, nil
-	}
-	s.mu.Lock()
-	uuids = make([]string, 0, len(s.whiteUUID))
-	for u := range s.whiteUUID {
-		uuids = append(uuids, u)
-	}
-	usids = make([]string, 0, len(s.whiteUSID))
-	for u := range s.whiteUSID {
-		usids = append(usids, u)
-	}
-	s.mu.Unlock()
-	return uuids, usids
 }
 
 func (s *Server) AddOp(uuid string) {
@@ -4282,8 +3136,7 @@ func (s *Server) unitControl(c *Conn, unitID int32) {
 	s.entityMu.Unlock()
 
 	// Basic validation: same team and reasonably close.
-	connTeam := s.connTeamID(c)
-	if info.TeamID != 0 && connTeam != 0 && info.TeamID != connTeam {
+	if info.TeamID != 0 && info.TeamID != 1 {
 		return
 	}
 	dx := float64(info.X - c.snapX)
@@ -4298,137 +3151,6 @@ func (s *Server) unitControl(c *Conn, unitID int32) {
 	}
 	u.Controller = &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}
 	c.unitID = unitID
-}
-
-// CanPlayerUnitCarry reports whether the player's controlled unit can carry
-// the given item type in its stack (empty stack or same item type).
-func (s *Server) CanPlayerUnitCarry(c *Conn, itemID int16) bool {
-	if s == nil || c == nil || itemID <= 0 {
-		return false
-	}
-	s.entityMu.Lock()
-	defer s.entityMu.Unlock()
-	ent, ok := s.entities[c.unitID]
-	if !ok {
-		return false
-	}
-	u, ok := ent.(*protocol.UnitEntitySync)
-	if !ok || u == nil {
-		return false
-	}
-	curItem := int16(0)
-	if u.Stack.Item != nil {
-		curItem = u.Stack.Item.ID()
-	}
-	return curItem == 0 || curItem == itemID
-}
-
-// AddPlayerUnitItem appends item amount into player's controlled unit stack.
-// It returns the amount actually added.
-func (s *Server) AddPlayerUnitItem(c *Conn, itemID int16, amount int32) int32 {
-	if s == nil || c == nil || c.unitID == 0 || itemID <= 0 || amount <= 0 {
-		return 0
-	}
-	return s.AddUnitItemByID(c.unitID, itemID, amount)
-}
-
-// ConsumePlayerUnitStack removes up to maxAmount items from player's unit stack.
-// maxAmount<=0 consumes the whole stack.
-func (s *Server) ConsumePlayerUnitStack(c *Conn, maxAmount int32) (itemID int16, amount int32, ok bool) {
-	if s == nil || c == nil || c.unitID == 0 {
-		return 0, 0, false
-	}
-	itemID, amount = s.consumeUnitStackByIDAny(c.unitID, maxAmount)
-	return itemID, amount, amount > 0
-}
-
-// AddUnitItemByID appends item amount into a specific unit stack.
-// It only accepts adding to empty stack or same item type.
-func (s *Server) AddUnitItemByID(unitID int32, itemID int16, amount int32) int32 {
-	if s == nil || unitID == 0 || itemID <= 0 || amount <= 0 {
-		return 0
-	}
-	s.entityMu.Lock()
-	defer s.entityMu.Unlock()
-	ent, ok := s.entities[unitID]
-	if !ok {
-		return 0
-	}
-	u, ok := ent.(*protocol.UnitEntitySync)
-	if !ok || u == nil {
-		return 0
-	}
-	curItem := int16(0)
-	if u.Stack.Item != nil {
-		curItem = u.Stack.Item.ID()
-	}
-	if curItem != 0 && curItem != itemID {
-		return 0
-	}
-	if u.Stack.Item == nil || curItem == 0 {
-		u.Stack.Item = protocol.ItemRef{ItmID: itemID, ItmName: ""}
-	}
-	capacity := s.unitStackCapacityLocked(u)
-	if capacity <= 0 {
-		return 0
-	}
-	space := capacity - u.Stack.Amount
-	if space <= 0 {
-		return 0
-	}
-	if amount > space {
-		amount = space
-	}
-	u.Stack.Amount += amount
-	return amount
-}
-
-// ConsumeUnitStackByID removes up to maxAmount from unit stack, only if stack
-// item matches itemID. Returns actual removed amount.
-func (s *Server) ConsumeUnitStackByID(unitID int32, itemID int16, maxAmount int32) int32 {
-	if itemID <= 0 {
-		return 0
-	}
-	gotItem, gotAmount := s.consumeUnitStackByIDAny(unitID, maxAmount)
-	if gotAmount <= 0 {
-		return 0
-	}
-	if gotItem == itemID {
-		return gotAmount
-	}
-	// Wrong item type consumed; put it back to avoid corruption.
-	_ = s.AddUnitItemByID(unitID, gotItem, gotAmount)
-	return 0
-}
-
-func (s *Server) consumeUnitStackByIDAny(unitID int32, maxAmount int32) (itemID int16, amount int32) {
-	if s == nil || unitID == 0 {
-		return 0, 0
-	}
-	s.entityMu.Lock()
-	defer s.entityMu.Unlock()
-	ent, exists := s.entities[unitID]
-	if !exists {
-		return 0, 0
-	}
-	u, okCast := ent.(*protocol.UnitEntitySync)
-	if !okCast || u == nil || u.Stack.Item == nil || u.Stack.Amount <= 0 {
-		return 0, 0
-	}
-	itemID = u.Stack.Item.ID()
-	if itemID <= 0 {
-		return 0, 0
-	}
-	amount = u.Stack.Amount
-	if maxAmount > 0 && amount > maxAmount {
-		amount = maxAmount
-	}
-	u.Stack.Amount -= amount
-	if u.Stack.Amount <= 0 {
-		u.Stack.Amount = 0
-		u.Stack.Item = protocol.ItemRef{ItmID: 0, ItmName: ""}
-	}
-	return itemID, amount
 }
 
 func extractUnitID(obj any) int32 {
@@ -4455,136 +3177,4 @@ func extractUnitID(obj any) int32 {
 	default:
 		return 0
 	}
-}
-
-func (s *Server) withinItemTransferRange(c *Conn, buildPos int32) bool {
-	if c == nil {
-		return false
-	}
-	p := protocol.UnpackPoint2(buildPos)
-	// Match official behavior using world-space distance and the same 220 range.
-	bx := float32(p.X*8 + 4)
-	by := float32(p.Y*8 + 4)
-	dx := c.snapX - bx
-	dy := c.snapY - by
-	return dx*dx+dy*dy <= itemTransferRange*itemTransferRange
-}
-
-func (s *Server) isConnControlledUnit(c *Conn, unitID int32) bool {
-	if c == nil || unitID == 0 {
-		return false
-	}
-	return c.unitID == unitID
-}
-
-func (s *Server) allowItemDeposit(c *Conn) bool {
-	if s == nil || c == nil {
-		return false
-	}
-	cooldown := s.itemDepositCooldown
-	if cooldown <= 0 {
-		cooldown = 500 * time.Millisecond
-	}
-	window := cooldown * 2
-	now := time.Now()
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.itemDepositWindowStart.IsZero() || now.Sub(c.itemDepositWindowStart) > window {
-		c.itemDepositWindowStart = now
-		c.itemDepositOps = 1
-		return true
-	}
-	if c.itemDepositOps >= 2 {
-		return false
-	}
-	c.itemDepositOps++
-	return true
-}
-
-func (s *Server) canInteractBuild(c *Conn, buildPos int32, action string) bool {
-	if s == nil {
-		return false
-	}
-	if s.CanInteractBuildFn == nil {
-		return true
-	}
-	return s.CanInteractBuildFn(c, buildPos, action)
-}
-
-// connTeamID returns the connection's current team, preferring controlled unit
-// team then player entity team. Falls back to team 1 for current server runtime.
-func (s *Server) connTeamID(c *Conn) byte {
-	if s == nil || c == nil {
-		return 1
-	}
-	if c.teamID != 0 {
-		return c.teamID
-	}
-	s.entityMu.Lock()
-	defer s.entityMu.Unlock()
-	if c.unitID != 0 {
-		if ent, ok := s.entities[c.unitID]; ok {
-			if u, ok := ent.(*protocol.UnitEntitySync); ok && u != nil && u.TeamID != 0 {
-				return u.TeamID
-			}
-		}
-	}
-	if c.playerID != 0 {
-		if ent, ok := s.entities[c.playerID]; ok {
-			if p, ok := ent.(*protocol.PlayerEntity); ok && p != nil && p.TeamID != 0 {
-				return p.TeamID
-			}
-		}
-	}
-	return 1
-}
-
-func (s *Server) ConnTeamID(c *Conn) byte {
-	return s.connTeamID(c)
-}
-
-func (s *Server) setConnTeam(c *Conn, teamID byte) {
-	if s == nil || c == nil {
-		return
-	}
-	if teamID == 0 {
-		teamID = 1
-	}
-	c.teamID = teamID
-	s.entityMu.Lock()
-	defer s.entityMu.Unlock()
-	if c.playerID != 0 {
-		if ent, ok := s.entities[c.playerID]; ok {
-			if p, ok := ent.(*protocol.PlayerEntity); ok && p != nil {
-				p.TeamID = teamID
-			}
-		}
-	}
-	if c.unitID != 0 {
-		if ent, ok := s.entities[c.unitID]; ok {
-			if u, ok := ent.(*protocol.UnitEntitySync); ok && u != nil {
-				u.TeamID = teamID
-			}
-		}
-	}
-}
-
-func (s *Server) unitStackCapacityLocked(u *protocol.UnitEntitySync) int32 {
-	if u == nil {
-		return defaultUnitItemCapacity
-	}
-	if s == nil || s.Content == nil {
-		return defaultUnitItemCapacity
-	}
-	name := ""
-	if typ := s.Content.UnitType(u.TypeID); typ != nil {
-		name = strings.ToLower(strings.TrimSpace(typ.Name()))
-	}
-	if name == "" {
-		return defaultUnitItemCapacity
-	}
-	if v, ok := unitItemCapacityByName[name]; ok {
-		return v
-	}
-	return defaultUnitItemCapacity
 }

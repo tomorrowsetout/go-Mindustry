@@ -27,8 +27,6 @@ type Service struct {
 
 	lastByTeam   map[world.TeamID][]world.BuildPlanOp
 	lastAtByTeam map[world.TeamID]time.Time
-	lastOpByPos  map[world.TeamID]map[int32]world.BuildPlanOp
-	lastOpAtPos  map[world.TeamID]map[int32]time.Time
 }
 
 type queuedBatch struct {
@@ -61,8 +59,6 @@ func New(w *world.World, opts Options) *Service {
 		queue:            make([]queuedBatch, 0, 64),
 		lastByTeam:       make(map[world.TeamID][]world.BuildPlanOp),
 		lastAtByTeam:     make(map[world.TeamID]time.Time),
-		lastOpByPos:      make(map[world.TeamID]map[int32]world.BuildPlanOp),
-		lastOpAtPos:      make(map[world.TeamID]map[int32]time.Time),
 	}
 }
 
@@ -75,13 +71,11 @@ func (s *Service) Reset() {
 	s.queue = s.queue[:0]
 	clear(s.lastByTeam)
 	clear(s.lastAtByTeam)
-	clear(s.lastOpByPos)
-	clear(s.lastOpAtPos)
 	s.mu.Unlock()
 }
 
 // EnqueuePlans validates and enqueues protocol build plans.
-func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan, buildSpeed float32) {
+func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	if s == nil || s.w == nil || len(plans) == 0 {
 		return
 	}
@@ -96,11 +90,10 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan, b
 		if p == nil {
 			continue
 		}
-		op, ok := sanitizePlan(model, p, buildSpeed)
+		op, ok := sanitizePlan(model, p)
 		if !ok {
 			continue
 		}
-		applyPlanConfig(s.w, p)
 		if _, ok := seen[op]; ok {
 			continue
 		}
@@ -115,34 +108,10 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan, b
 	}
 
 	s.mu.Lock()
-	if s.lastOpByPos[team] == nil {
-		s.lastOpByPos[team] = make(map[int32]world.BuildPlanOp)
-	}
-	if s.lastOpAtPos[team] == nil {
-		s.lastOpAtPos[team] = make(map[int32]time.Time)
-	}
-	filtered := make([]world.BuildPlanOp, 0, len(ops))
-	for _, op := range ops {
-		pos := int32(op.Y)*int32(model.Width) + int32(op.X)
-		prev, ok := s.lastOpByPos[team][pos]
-		if ok && prev == op {
-			if at := s.lastOpAtPos[team][pos]; !at.IsZero() && time.Since(at) < 700*time.Millisecond {
-				continue
-			}
-		}
-		s.lastOpByPos[team][pos] = op
-		s.lastOpAtPos[team][pos] = time.Now()
-		filtered = append(filtered, op)
-	}
-	if len(filtered) == 0 {
-		s.mu.Unlock()
-		return
-	}
-
 	// Snapshot packets can resend identical plans every tick.
 	// Suppress only short-interval duplicates to avoid queue spam,
 	// while still allowing later retries for the same coordinates.
-	if prev := s.lastByTeam[team]; sameOps(prev, filtered) {
+	if prev := s.lastByTeam[team]; sameOps(prev, ops) {
 		if lastAt := s.lastAtByTeam[team]; !lastAt.IsZero() && time.Since(lastAt) < 500*time.Millisecond {
 			s.mu.Unlock()
 			return
@@ -155,49 +124,11 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan, b
 	}
 	s.queue = append(s.queue, queuedBatch{
 		team: team,
-		ops:  filtered,
+		ops:  ops,
 	})
-	s.lastByTeam[team] = append(s.lastByTeam[team][:0], filtered...)
+	s.lastByTeam[team] = append(s.lastByTeam[team][:0], ops...)
 	s.lastAtByTeam[team] = time.Now()
 	s.mu.Unlock()
-}
-
-// ApplyPlansNow validates and applies plans immediately, bypassing batch queue.
-// This matches the original server's responsive build/deconstruct handling better.
-func (s *Service) ApplyPlansNow(team world.TeamID, plans []*protocol.BuildPlan, buildSpeed float32) int {
-	if s == nil || s.w == nil || len(plans) == 0 {
-		return 0
-	}
-	model := s.w.Model()
-	if model == nil || model.Width <= 0 || model.Height <= 0 {
-		return 0
-	}
-
-	ops := make([]world.BuildPlanOp, 0, minInt(len(plans), s.maxOpsPerTick))
-	seen := make(map[world.BuildPlanOp]struct{}, minInt(len(plans), s.maxOpsPerTick))
-	for _, p := range plans {
-		if p == nil {
-			continue
-		}
-		op, ok := sanitizePlan(model, p, buildSpeed)
-		if !ok {
-			continue
-		}
-		applyPlanConfig(s.w, p)
-		if _, ok := seen[op]; ok {
-			continue
-		}
-		seen[op] = struct{}{}
-		ops = append(ops, op)
-		if len(ops) >= s.maxOpsPerTick {
-			break
-		}
-	}
-	if len(ops) == 0 {
-		return 0
-	}
-	_ = s.w.ApplyBuildPlans(team, ops)
-	return len(ops)
 }
 
 func (s *Service) Tick() int {
@@ -258,7 +189,7 @@ func (s *Service) pushFront(b queuedBatch) {
 	s.queue[0] = b
 }
 
-func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan, buildSpeed float32) (world.BuildPlanOp, bool) {
+func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan) (world.BuildPlanOp, bool) {
 	if p == nil || model == nil {
 		return world.BuildPlanOp{}, false
 	}
@@ -269,10 +200,9 @@ func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan, buildSpeed flo
 	}
 	if p.Breaking {
 		return world.BuildPlanOp{
-			Breaking:   true,
-			X:          p.X,
-			Y:          p.Y,
-			BuildSpeed: buildSpeed,
+			Breaking: true,
+			X:        p.X,
+			Y:        p.Y,
 		}, true
 	}
 	if p.Block == nil {
@@ -285,12 +215,11 @@ func sanitizePlan(model *world.WorldModel, p *protocol.BuildPlan, buildSpeed flo
 		return world.BuildPlanOp{}, false
 	}
 	return world.BuildPlanOp{
-		Breaking:   false,
-		X:          p.X,
-		Y:          p.Y,
-		Rotation:   int8(p.Rotation & 0x03),
-		BlockID:    blockID,
-		BuildSpeed: buildSpeed,
+		Breaking: false,
+		X:        p.X,
+		Y:        p.Y,
+		Rotation: int8(p.Rotation & 0x03),
+		BlockID:  blockID,
 	}, true
 }
 
@@ -311,23 +240,4 @@ func sameOps(a, b []world.BuildPlanOp) bool {
 		}
 	}
 	return true
-}
-
-func applyPlanConfig(w *world.World, p *protocol.BuildPlan) {
-	if w == nil || p == nil {
-		return
-	}
-	if p.Breaking {
-		_ = w.SetBuildingConfigValue(protocol.PackPoint2(p.X, p.Y), nil)
-		return
-	}
-	if p.Config == nil {
-		return
-	}
-	pos := protocol.PackPoint2(p.X, p.Y)
-	if raw, ok := p.Config.([]byte); ok {
-		_ = w.SetBuildingConfigRaw(pos, raw)
-		return
-	}
-	_ = w.SetBuildingConfigValue(pos, p.Config)
 }

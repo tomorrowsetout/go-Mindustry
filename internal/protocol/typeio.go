@@ -32,7 +32,7 @@ func ReadBytes(r *Reader) ([]byte, error) {
 		return nil, err
 	}
 	if l < 0 {
-		return nil, fmt.Errorf("invalid bytes length: %d", l)
+		return nil, nil
 	}
 	return r.ReadBytes(int(l))
 }
@@ -175,7 +175,7 @@ func ReadInts(r *Reader) ([]int32, error) {
 		return nil, err
 	}
 	if l < 0 {
-		return nil, fmt.Errorf("invalid int array length: %d", l)
+		return nil, nil
 	}
 	out := make([]int32, l)
 	for i := 0; i < int(l); i++ {
@@ -205,9 +205,6 @@ func ReadIntSeq(r *Reader) (IntSeq, error) {
 	if err != nil {
 		return IntSeq{}, err
 	}
-	if l < 0 {
-		return IntSeq{}, fmt.Errorf("invalid intseq length: %d", l)
-	}
 	items := make([]int32, l)
 	for i := 0; i < int(l); i++ {
 		v, err := r.ReadInt32()
@@ -221,7 +218,7 @@ func ReadIntSeq(r *Reader) (IntSeq, error) {
 
 func WriteContent(w *Writer, c Content) error {
 	if c == nil {
-		return ErrUnsupportedTypeIO
+		return w.WriteByte(0)
 	}
 	if err := w.WriteByte(byte(c.ContentType())); err != nil {
 		return err
@@ -335,19 +332,12 @@ func ReadTile(r *Reader, ctx *TypeIOContext) (Tile, error) {
 	if pos == PackPoint2(-1, -1) {
 		return nil, nil
 	}
-	if ctx != nil {
-		if ctx.TileLookup != nil {
-			if t := ctx.TileLookup(pos); t != nil {
-				return t, nil
-			}
-		}
-		if ctx.BuildingLookup != nil {
-			if b := ctx.BuildingLookup(pos); b != nil {
-				return b, nil
-			}
+	if ctx != nil && ctx.BuildingLookup != nil {
+		if b := ctx.BuildingLookup(pos); b != nil {
+			return b, nil
 		}
 	}
-	return TileBox{PosValue: pos}, nil
+	return nil, nil
 }
 
 func WriteEntity(w *Writer, e Entity) error {
@@ -712,6 +702,9 @@ func ReadItemStacks(r *Reader, ctx *TypeIOContext) ([]ItemStack, error) {
 	if n < 0 {
 		return nil, fmt.Errorf("invalid item stack length: %d", n)
 	}
+	if n > 4096 {
+		return nil, fmt.Errorf("item stack length too large: %d", n)
+	}
 	out := make([]ItemStack, int(n))
 	for i := 0; i < int(n); i++ {
 		s, err := ReadItems(r, ctx)
@@ -745,6 +738,9 @@ func ReadLiquidStacks(r *Reader, ctx *TypeIOContext) ([]LiquidStack, error) {
 	}
 	if n < 0 {
 		return nil, fmt.Errorf("invalid liquid stack length: %d", n)
+	}
+	if n > 4096 {
+		return nil, fmt.Errorf("liquid stack length too large: %d", n)
 	}
 	out := make([]LiquidStack, int(n))
 	for i := 0; i < int(n); i++ {

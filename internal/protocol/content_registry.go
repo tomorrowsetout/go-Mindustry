@@ -18,9 +18,9 @@ type ContentRegistry struct {
 	effects     map[int16]Effect
 	sounds      map[int16]Sound
 
-	teams    map[byte]Team
-	commands map[int16]UnitCommand
-	stances  map[int16]UnitStance
+	teams       map[byte]Team
+	commands    map[int16]UnitCommand
+	stances     map[int16]UnitStance
 }
 
 func NewContentRegistry() *ContentRegistry {
@@ -206,19 +206,6 @@ func (r *ContentRegistry) Weather(id int16) Weather {
 	return r.weather[id]
 }
 
-func (r *ContentRegistry) IterateWeathers(fn func(Weather) bool) {
-	if r == nil || fn == nil {
-		return
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, w := range r.weather {
-		if !fn(w) {
-			return
-		}
-	}
-}
-
 func (r *ContentRegistry) Effect(id int16) Effect {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -301,32 +288,6 @@ func (r *ContentRegistry) IterateUnitTypes(fn func(UnitType) bool) {
 	defer r.mu.RUnlock()
 	for _, unit := range r.unitTypes {
 		if !fn(unit) {
-			break
-		}
-	}
-}
-
-func (r *ContentRegistry) IterateItems(fn func(Item) bool) {
-	if r == nil || fn == nil {
-		return
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, item := range r.items {
-		if !fn(item) {
-			break
-		}
-	}
-}
-
-func (r *ContentRegistry) IterateLiquids(fn func(Liquid) bool) {
-	if r == nil || fn == nil {
-		return
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, liq := range r.liquids {
-		if !fn(liq) {
 			break
 		}
 	}
