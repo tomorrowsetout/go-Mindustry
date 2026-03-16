@@ -1,24 +1,10 @@
 package protocol
 
-// RegistryStatus reports coarse protocol-registry coverage for diagnostics.
-type RegistryStatus struct {
-	BasePackets   int
-	RemotePackets int
-	TotalPackets  int
-}
-
-// GetRegistryStatus returns registration counts for a build-version registry.
-func GetRegistryStatus(buildVersion int) RegistryStatus {
-	r := NewRegistry(buildVersion)
-	total := r.Count()
-	base := 4 // StreamBegin, StreamChunk, WorldStream, ConnectPacket
-	remote := total - base
-	if remote < 0 {
-		remote = 0
-	}
-	return RegistryStatus{
-		BasePackets:   base,
-		RemotePackets: remote,
-		TotalPackets:  total,
-	}
-}
+// TODO:
+// - Map all packet types from Mindustry core: mindustry.net.Packets
+// - Implement binary read/write compatible with TypeIO (mindustry.io.TypeIO)
+// - Implement stream chunks and compression semantics (StreamBegin/StreamChunk)
+//
+// Sources:
+// - core/src/mindustry/net/Packets.java
+// - core/src/mindustry/io/TypeIO.java

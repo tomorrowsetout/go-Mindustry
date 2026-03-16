@@ -1,10 +1,10 @@
 {
-  "map_path": "assets\\worlds\\23315.msav",
-  "wave_time": 62.538063,
-  "wave": 1,
-  "tick": 3447,
-  "time_data": 60,
-  "rand0": 2793204609228827500,
-  "rand1": 1331028078610217835,
-  "saved_at": "2026-03-13T16:27:25Z"
+  "map_path": "..\\assets\\worlds\\file.msav",
+  "wave_time": 79.98119,
+  "wave": 45,
+  "tick": 238201,
+  "time_data": 17610,
+  "rand0": 0,
+  "rand1": 0,
+  "saved_at": "2026-03-16T16:09:41Z"
 }

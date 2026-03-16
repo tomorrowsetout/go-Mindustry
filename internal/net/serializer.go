@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/pierrec/lz4/v4"
 
@@ -29,8 +28,8 @@ type Serializer struct {
 // CompatIgnoredPacket is returned for client packets that are intentionally
 // ignored under custom-client compatibility mode.
 type CompatIgnoredPacket struct {
-	ID      byte
-	Length  int
+	ID     byte
+	Length int
 	Payload []byte
 }
 
@@ -202,10 +201,6 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 			if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
 				return msg, nil
 			}
-		case 82, 83, 84: // observed chat call-id variants on mixed mappings
-			if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
 		case 133: // UnitClearCallPacket (client->server carries no fields)
 			return &CompatUnitClearPacket{}, nil
 		}
@@ -223,58 +218,25 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 	}
 
 	if !compat {
-		// Force-decode critical official client->server packets by known wire IDs.
-		// This avoids accidental decoding into wrong packet classes when registry
-		// ordering differs from the target client build.
-		switch id {
-		case 127: // BeginBreakCallPacket (official build 155+)
-			if msg, err := readBeginBreakCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
-			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-		case 128: // BeginPlaceCallPacket (official build 155+)
-			if msg, err := readBeginPlaceCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
-			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-		case 9, 13: // BeginBreak call packet variants
-			if msg, err := readBeginBreakCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
-			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-		case 10, 14: // BeginPlace call packet variants
-			if msg, err := readBeginPlaceCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
-			return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-		case 24: // ClientSnapshotCallPacket (official 155)
-			if snap, err := readClientSnapshotCompat(payload, s.Ctx); err == nil {
-				return snap, nil
-			}
-		case 29: // ConnectConfirmCallPacket
-			return &protocol.Remote_NetServer_connectConfirm_47{}, nil
-		case 65: // PingCallPacket (some variants)
+		// Official wire IDs already include the +4 base-packet offset.
+		if obj, ok := tryRead(id); ok {
+			return obj, nil
+		}
+		// Some 155 official clients still send a few legacy/compat call IDs.
+		// Accept them as fallbacks to avoid noisy EOF loops.
+		if id == 65 {
 			if len(payload) >= 8 {
 				t := int64(binary.BigEndian.Uint64(payload[:8]))
 				return &protocol.Remote_NetClient_ping_18{Time: t}, nil
 			}
+			// Some variants send truncated ping payloads; treat as keepalive.
 			return &protocol.Remote_NetClient_ping_18{Time: 0}, nil
-		case 133: // UnitClearCallPacket
+		}
+		if id == 29 {
+			return &protocol.Remote_NetServer_connectConfirm_47{}, nil
+		}
+		if id == 133 {
 			return &CompatUnitClearPacket{}, nil
-		case 81, 82, 83, 84: // SendChatMessageCallPacket(message) variants
-			if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
-		}
-		// Heuristic fallback: some builds/modded clients shift call IDs.
-		// If payload is exactly one string and looks like chat, treat it as chat.
-		if msg, ok := tryReadChatPayload(payload, s.Ctx); ok {
-			return msg, nil
-		}
-
-		// Official wire IDs already include the +4 base-packet offset.
-		if obj, ok := tryRead(id); ok {
-			return obj, nil
 		}
 		// Do not tear down official connections on unknown/misaligned call IDs.
 		return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
@@ -438,46 +400,9 @@ func readSendChatMessageCompat(payload []byte, ctx *protocol.TypeIOContext) (*pr
 	if err != nil {
 		return nil, err
 	}
-	if r.Remaining() != 0 {
-		return nil, fmt.Errorf("chat payload trailing bytes=%d", r.Remaining())
-	}
 	out := &protocol.Remote_NetClient_sendChatMessage_16{}
 	if msg != nil {
 		out.Message = *msg
-	}
-	return out, nil
-}
-
-func tryReadChatPayload(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_NetClient_sendChatMessage_16, bool) {
-	if len(payload) < 2 || len(payload) > 300 {
-		return nil, false
-	}
-	out, err := readSendChatMessageCompat(payload, ctx)
-	if err != nil || out == nil {
-		return nil, false
-	}
-	m := strings.TrimSpace(out.Message)
-	if m == "" || len(m) > 240 {
-		return nil, false
-	}
-	// Commands and plain chat are both accepted.
-	return out, true
-}
-
-func readBeginBreakCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_Build_beginBreak_123, error) {
-	r := protocol.NewReaderWithContext(payload, ctx)
-	out := &protocol.Remote_Build_beginBreak_123{}
-	if err := out.Read(r, len(payload)); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func readBeginPlaceCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_Build_beginPlace_124, error) {
-	r := protocol.NewReaderWithContext(payload, ctx)
-	out := &protocol.Remote_Build_beginPlace_124{}
-	if err := out.Read(r, len(payload)); err != nil {
-		return nil, err
 	}
 	return out, nil
 }

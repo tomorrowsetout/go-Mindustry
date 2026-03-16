@@ -15,7 +15,6 @@ type Event struct {
 	Detail    string    `json:"detail,omitempty"`
 	ConnID    int32     `json:"conn_id,omitempty"`
 	UUID      string    `json:"uuid,omitempty"`
-	USID      string    `json:"usid,omitempty"`
 	IP        string    `json:"ip,omitempty"`
 	Name      string    `json:"name,omitempty"`
 }
@@ -358,11 +357,6 @@ type Recorder interface {
 	Record(Event) error
 	Close() error
 	Status() string
-}
-
-// Flusher is an optional capability for forcing buffered events to disk.
-type Flusher interface {
-	Flush() error
 }
 
 // 存储的事件列表

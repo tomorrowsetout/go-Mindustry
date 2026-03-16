@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"compress/zlib"
 	"os"
-	"strconv"
 
 	"mdt-server/internal/world"
 )
 
 // WriteMSAVFromModel writes a .msav using data stored in the model.
-// Map chunk is always encoded from current model tiles so runtime build/remove changes
-// are persisted and reloaded correctly.
+// If model.RawMap is present, it is used verbatim; otherwise a minimal map chunk is encoded.
 func WriteMSAVFromModel(dstPath string, model *world.WorldModel, updates map[string]string) error {
 	if model == nil {
 		return ErrInvalidMSAV
@@ -30,9 +28,13 @@ func WriteMSAVFromModel(dstPath string, model *world.WorldModel, updates map[str
 		return err
 	}
 
-	mapChunk, err := encodeMapChunkMinimal(model)
-	if err != nil {
-		return err
+	mapChunk := model.RawMap
+	if len(mapChunk) == 0 {
+		encoded, err := encodeMapChunkMinimal(model)
+		if err != nil {
+			return err
+		}
+		mapChunk = encoded
 	}
 
 	var raw bytes.Buffer
@@ -86,131 +88,6 @@ func WriteMSAVFromModel(dstPath string, model *world.WorldModel, updates map[str
 	return os.WriteFile(dstPath, out.Bytes(), 0644)
 }
 
-// BuildWorldStreamFromModel builds handshake world stream payload from the current runtime model.
-// Unlike MSAV-based path, this always encodes map chunk from model tiles so late-joiners
-// can see buildings placed before they connected.
-func BuildWorldStreamFromModel(model *world.WorldModel) ([]byte, error) {
-	if model == nil {
-		return nil, ErrInvalidMSAV
-	}
-
-	var out bytes.Buffer
-	w := &javaWriter{buf: &out}
-
-	rules := "{}"
-	if model.Tags != nil {
-		if v := model.Tags["rules"]; v != "" {
-			rules = v
-		}
-	}
-	locales := "{}"
-	if model.Tags != nil {
-		if v := model.Tags["locales"]; v != "" {
-			locales = v
-		}
-	}
-	if err := w.WriteUTF(rules); err != nil {
-		return nil, err
-	}
-	if err := w.WriteUTF(locales); err != nil {
-		return nil, err
-	}
-
-	tags := make(map[string]string, len(model.Tags))
-	for k, v := range model.Tags {
-		tags[k] = v
-	}
-	if err := w.WriteStringMap(tags); err != nil {
-		return nil, err
-	}
-
-	wave := int32(1)
-	if v, ok := tags["wave"]; ok {
-		if parsed, err := strconv.Atoi(v); err == nil {
-			wave = int32(parsed)
-		}
-	}
-	if err := w.WriteInt32(wave); err != nil {
-		return nil, err
-	}
-
-	wavetime := float32(0)
-	if v, ok := tags["wavetime"]; ok {
-		if parsed, err := strconv.ParseFloat(v, 32); err == nil {
-			wavetime = float32(parsed)
-		}
-	}
-	if err := w.WriteFloat32(wavetime); err != nil {
-		return nil, err
-	}
-
-	tick := float64(0)
-	if v, ok := tags["tick"]; ok {
-		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			tick = parsed
-		}
-	}
-	if err := w.WriteFloat64(tick); err != nil {
-		return nil, err
-	}
-
-	if err := w.WriteInt64(0); err != nil {
-		return nil, err
-	}
-	if err := w.WriteInt64(0); err != nil {
-		return nil, err
-	}
-
-	if err := w.WriteInt32(1); err != nil {
-		return nil, err
-	}
-	if err := writeTemplatePlayerForContent(w, model.Content); err != nil {
-		if err := writeMinimalPlayer(w); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := w.WriteBytes(model.Content); err != nil {
-		return nil, err
-	}
-	if err := w.WriteByte(0); err != nil {
-		return nil, err
-	}
-
-	mapChunk, err := encodeMapChunkMinimal(model)
-	if err != nil {
-		return nil, err
-	}
-	if err := w.WriteBytes(mapChunk); err != nil {
-		return nil, err
-	}
-	if err := writeMinimalTeamBlocks(w); err != nil {
-		return nil, err
-	}
-
-	markers := model.Markers
-	if len(markers) == 0 {
-		markers = []byte{0x7B, 0x7D}
-	}
-	if err := w.WriteBytes(markers); err != nil {
-		return nil, err
-	}
-	if err := writeMinimalCustomChunks(w); err != nil {
-		return nil, err
-	}
-
-	var compressed bytes.Buffer
-	zw := zlib.NewWriter(&compressed)
-	if _, err := zw.Write(out.Bytes()); err != nil {
-		_ = zw.Close()
-		return nil, err
-	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return compressed.Bytes(), nil
-}
-
 func encodeMapChunkMinimal(model *world.WorldModel) ([]byte, error) {
 	if model == nil {
 		return nil, ErrInvalidMSAV
@@ -225,84 +102,30 @@ func encodeMapChunkMinimal(model *world.WorldModel) ([]byte, error) {
 	}
 	total := model.Width * model.Height
 
-	// Floors + overlays (run-length encoded).
-	for i := 0; i < total; {
+	// Floors + overlays (no run-length compression for now).
+	for i := 0; i < total; i++ {
 		t := model.Tiles[i]
-		floor := t.Floor
-		overlay := t.Overlay
-		run := 0
-		for run < 255 && i+run+1 < total {
-			nt := model.Tiles[i+run+1]
-			if nt.Floor != floor || nt.Overlay != overlay {
-				break
-			}
-			run++
-		}
-		if err := w.WriteInt16(int16(floor)); err != nil {
+		if err := w.WriteInt16(int16(t.Floor)); err != nil {
 			return nil, err
 		}
-		if err := w.WriteInt16(int16(overlay)); err != nil {
+		if err := w.WriteInt16(int16(t.Overlay)); err != nil {
 			return nil, err
 		}
-		if err := w.WriteByte(byte(run)); err != nil {
-			return nil, err
-		}
-		i += run + 1
-	}
-
-	// Blocks (run-length encoded when no extra data is required).
-	for i := 0; i < total; {
-		t := model.Tiles[i]
-		block := t.Block
-		hasData := t.Rotation != 0 || t.Team != 0 || t.Build != nil
-		if !hasData {
-			run := 0
-			for run < 255 && i+run+1 < total {
-				nt := model.Tiles[i+run+1]
-				if nt.Block != block || nt.Rotation != 0 || nt.Team != 0 || nt.Build != nil {
-					break
-				}
-				run++
-			}
-			if err := w.WriteInt16(int16(block)); err != nil {
-				return nil, err
-			}
-			if err := w.WriteByte(0); err != nil { // packed: no entity/data
-				return nil, err
-			}
-			if err := w.WriteByte(byte(run)); err != nil {
-				return nil, err
-			}
-			i += run + 1
-			continue
-		}
-
-		rot := t.Rotation
-		team := t.Team
-		if t.Build != nil {
-			rot = t.Build.Rotation
-			team = t.Build.Team
-		}
-		if err := w.WriteInt16(int16(block)); err != nil {
-			return nil, err
-		}
-		if err := w.WriteByte(4); err != nil { // packed: has data, no entity
-			return nil, err
-		}
-		if err := w.WriteByte(byte(rot)); err != nil {
-			return nil, err
-		}
-		if err := w.WriteByte(byte(team)); err != nil {
-			return nil, err
-		}
-		// config type + config int (0/empty)
 		if err := w.WriteByte(0); err != nil {
 			return nil, err
 		}
-		if err := w.WriteInt32(0); err != nil {
+	}
+
+	// Blocks (no run-length compression for now).
+	for i := 0; i < total; i++ {
+		t := model.Tiles[i]
+		if err := w.WriteInt16(int16(t.Block)); err != nil {
 			return nil, err
 		}
-		i++
+		// packed: no entity/data
+		if err := w.WriteByte(0); err != nil {
+			return nil, err
+		}
 	}
 	return out.Bytes(), nil
 }
@@ -408,9 +231,6 @@ func writeEntitiesChunkFromModel(model *world.WorldModel) ([]byte, error) {
 			if err := w.WriteBytes(b.Payload); err != nil {
 				return nil, err
 			}
-		}
-		if err := w.WriteFloat32(b.MaxHealth); err != nil {
-			return nil, err
 		}
 	}
 	return out.Bytes(), nil

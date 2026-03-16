@@ -14,7 +14,7 @@ func LoadWorldModelFromMSAV(path string, content *protocol.ContentRegistry) (*wo
 	if err != nil {
 		return nil, err
 	}
-	model, err := decodeMapChunk(data.Map, content)
+	model, err := decodeMapChunk(data.Map)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func LoadWorldModelFromMSAV(path string, content *protocol.ContentRegistry) (*wo
 	return model, nil
 }
 
-func decodeMapChunk(chunk []byte, content *protocol.ContentRegistry) (*world.WorldModel, error) {
+func decodeMapChunk(chunk []byte) (*world.WorldModel, error) {
 	r := newJavaReader(chunk)
 	width, err := r.ReadInt16()
 	if err != nil {
@@ -106,29 +106,12 @@ func decodeMapChunk(chunk []byte, content *protocol.ContentRegistry) (*world.Wor
 			if err != nil {
 				return nil, err
 			}
-			// read data/floor/overlay/extra
-			dataByte, err := r.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			floorData, err := r.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			overlayData, err := r.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			extraData, err := r.ReadInt32()
-			if err != nil {
+			// skip config + extra byte
+			if err := r.Skip(1 + 4); err != nil {
 				return nil, err
 			}
 			t.Rotation = int8(rot)
 			t.Team = world.TeamID(team)
-			t.Data = dataByte
-			t.FloorData = floorData
-			t.OverlayData = overlayData
-			t.ExtraData = extraData
 		}
 		if hadEntity {
 			isCenter, err := r.ReadByte()
@@ -143,15 +126,9 @@ func decodeMapChunk(chunk []byte, content *protocol.ContentRegistry) (*world.Wor
 				if chunkLen < 0 {
 					return nil, ErrInvalidMSAV
 				}
-				chunk, err := r.ReadBytes(int(chunkLen))
-				if err != nil {
+				if err := r.Skip(int(chunkLen)); err != nil {
 					return nil, err
 				}
-				if t.Build == nil {
-					t.Build = &world.Building{X: t.X, Y: t.Y, Block: t.Block, Team: t.Team}
-				}
-				t.Build.RawData = chunk
-				decodeBuildingRaw(t.Build, content)
 			}
 		} else if !hadData {
 			con, err := r.ReadByte()
@@ -353,97 +330,4 @@ func readBuildingPayload(r *javaReader) ([]byte, error) {
 		return nil, nil
 	}
 	return r.ReadBytes(int(size))
-}
-
-// decodeBuildingRaw 解析 MSAV 中的建筑内部状态（物品/液体/电力），最佳努力。
-// Mindustry 的 build.readAll 会根据 block 类型动态读取模块，顺序通常是 items -> liquids -> power。
-// 这里按该顺序尝试读取，遇到错误会回退并停止，避免破坏后续未知数据。
-func decodeBuildingRaw(b *world.Building, _ *protocol.ContentRegistry) {
-	if b == nil || len(b.RawData) == 0 {
-		return
-	}
-	r := newJavaReader(b.RawData)
-
-	// consume revision byte
-	if _, err := r.ReadByte(); err != nil {
-		return
-	}
-
-	tryRead := func(fn func(*javaReader) error) {
-		start := r.Offset()
-		if err := fn(r); err != nil {
-			_ = r.SeekAbs(start)
-		}
-	}
-
-	// items: short count, then (short id, int amount)
-	tryRead(func(r *javaReader) error {
-		count, err := r.ReadInt16()
-		if err != nil || count < 0 {
-			return fmt.Errorf("items count err")
-		}
-		items := make([]world.ItemStack, 0, count)
-		for i := 0; i < int(count); i++ {
-			id, err := r.ReadInt16()
-			if err != nil {
-				return err
-			}
-			amt, err := r.ReadInt32()
-			if err != nil {
-				return err
-			}
-			if id >= 0 && amt > 0 {
-				items = append(items, world.ItemStack{Item: world.ItemID(id), Amount: amt})
-			}
-		}
-		b.Items = items
-		return nil
-	})
-
-	// liquids: short count, then (short id, float amount)
-	tryRead(func(r *javaReader) error {
-		count, err := r.ReadInt16()
-		if err != nil || count < 0 {
-			return fmt.Errorf("liquids count err")
-		}
-		liqs := make([]world.LiquidStack, 0, count)
-		for i := 0; i < int(count); i++ {
-			id, err := r.ReadInt16()
-			if err != nil {
-				return err
-			}
-			amt, err := r.ReadFloat32()
-			if err != nil {
-				return err
-			}
-			if id >= 0 && amt > 0 {
-				liqs = append(liqs, world.LiquidStack{Liquid: world.LiquidID(id), Amount: amt})
-			}
-		}
-		b.Liquids = liqs
-		return nil
-	})
-
-	// power: short link count, link ints, then float status
-	tryRead(func(r *javaReader) error {
-		count, err := r.ReadInt16()
-		if err != nil || count < 0 {
-			return fmt.Errorf("power links err")
-		}
-		links := make([]int32, 0, count)
-		for i := 0; i < int(count); i++ {
-			id, err := r.ReadInt32()
-			if err != nil {
-				return err
-			}
-			links = append(links, id)
-		}
-		status, err := r.ReadFloat32()
-		if err != nil {
-			return err
-		}
-		b.PowerLinks = links
-		b.PowerStatus = status
-		return nil
-	})
 }

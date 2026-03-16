@@ -17,7 +17,6 @@ type UnitTypeDef struct {
 	Speed       float32
 	HitSize     float32
 	RotateSpeed float32
-	BuildSpeed  float32
 	Weapon      WeaponDef
 }
 
@@ -29,9 +28,6 @@ type WeaponDef struct {
 	BulletSpeed  float32
 	SplashRadius float32
 	Pierce       int32
-	BurstShots   int32
-	BurstSpacing float32
-	Spread       float32
 	TargetAir    bool
 	TargetGround bool
 }
@@ -44,7 +40,6 @@ var reAssign = func(name string) *regexp.Regexp {
 var (
 	reWeaponDeclUT = regexp.MustCompile(`(?m)new\s+Weapon\([^)]*\)\s*\{\{`)
 	reBulletCtorUT = regexp.MustCompile(`(?m)new\s+([A-Za-z0-9_$.]+)BulletType\s*\(([^)]*)\)`)
-	reShootCtorUT  = regexp.MustCompile(`(?m)new\s+ShootSpread\s*\(([^)]*)\)`)
 )
 
 func GenerateUnitTypes(unitTypesPath, outPath string) error {
@@ -78,7 +73,6 @@ func extractUnitTypes(src string) []UnitTypeDef {
 		def.Speed = parseFloatAssign(body, "speed")
 		def.HitSize = parseFloatAssign(body, "hitSize")
 		def.RotateSpeed = parseFloatAssign(body, "rotateSpeed")
-		def.BuildSpeed = parseFloatAssign(body, "buildSpeed")
 
 		def.Weapon = parseWeaponDef(body)
 		out = append(out, def)
@@ -134,15 +128,6 @@ func parseWeaponDef(body string) WeaponDef {
 		if p.Pierce > out.Pierce {
 			out.Pierce = p.Pierce
 		}
-		if p.BurstShots > out.BurstShots {
-			out.BurstShots = p.BurstShots
-		}
-		if p.BurstSpacing > 0 && (out.BurstSpacing <= 0 || p.BurstSpacing < out.BurstSpacing) {
-			out.BurstSpacing = p.BurstSpacing
-		}
-		if p.Spread > out.Spread {
-			out.Spread = p.Spread
-		}
 		out.TargetAir = out.TargetAir || p.TargetAir
 		out.TargetGround = out.TargetGround || p.TargetGround
 		if p.FireMode == "beam" {
@@ -178,15 +163,6 @@ func parseWeaponProfile(body string) WeaponDef {
 	if v, ok := evalFloatFirst(body, `\bpierceCap\s*=\s*([^;]+);`); ok && v > 0 {
 		out.Pierce = int32(v)
 	}
-	if v, ok := evalFloatFirst(body, `\bshoot\s*\.\s*shots\s*=\s*([^;]+);`); ok && v > 0 {
-		out.BurstShots = int32(v)
-	}
-	if v, ok := evalFloatFirst(body, `\bshoot\s*\.\s*shotDelay\s*=\s*([^;]+);`); ok && v > 0 {
-		out.BurstSpacing = v / 60
-	}
-	if v, ok := evalFloatFirst(body, `\bshoot\s*\.\s*spread\s*=\s*([^;]+);`); ok && v > 0 {
-		out.Spread = v
-	}
 	if m := regexp.MustCompile(`(?m)\btargetAir\s*=\s*(true|false)\s*;`).FindStringSubmatch(body); len(m) == 2 {
 		out.TargetAir = (m[1] == "true")
 	}
@@ -208,26 +184,6 @@ func parseWeaponProfile(body string) WeaponDef {
 		cls := strings.ToLower(m[1])
 		if strings.Contains(cls, "laser") || strings.Contains(cls, "beam") {
 			out.FireMode = "beam"
-		}
-	}
-	if (out.BurstShots <= 0 || out.Spread <= 0) && reShootCtorUT.MatchString(body) {
-		matches := reShootCtorUT.FindAllStringSubmatch(body, -1)
-		for _, m := range matches {
-			if len(m) < 2 {
-				continue
-			}
-			args := splitArgsUT(m[1])
-			if len(args) < 2 {
-				continue
-			}
-			shots, ok1 := evalFloat(args[0])
-			spread, ok2 := evalFloat(args[1])
-			if ok1 && shots > 0 && out.BurstShots <= 0 {
-				out.BurstShots = int32(shots)
-			}
-			if ok2 && spread > 0 && out.Spread <= 0 {
-				out.Spread = spread
-			}
 		}
 	}
 	return out
@@ -452,9 +408,9 @@ func writeUnitTypesGo(outPath string, units []UnitTypeDef) error {
 	b.WriteString("package vanilla\n\n")
 	b.WriteString("var UnitTypesByName = map[string]UnitTypeDef{\n")
 	for _, u := range units {
-		fmt.Fprintf(&b, "\t%q: {Name: %q, Health: %.3f, Armor: %.3f, Speed: %.3f, HitSize: %.3f, RotateSpeed: %.3f, BuildSpeed: %.3f, Weapon: WeaponDef{FireMode: %q, Range: %.3f, Damage: %.3f, Interval: %.6f, BulletSpeed: %.3f, SplashRadius: %.3f, Pierce: %d, BurstShots: %d, BurstSpacing: %.6f, Spread: %.3f, TargetAir: %v, TargetGround: %v}},\n",
-			u.Name, u.Name, u.Health, u.Armor, u.Speed, u.HitSize, u.RotateSpeed, u.BuildSpeed,
-			u.Weapon.FireMode, u.Weapon.Range, u.Weapon.Damage, u.Weapon.Interval, u.Weapon.BulletSpeed, u.Weapon.SplashRadius, u.Weapon.Pierce, u.Weapon.BurstShots, u.Weapon.BurstSpacing, u.Weapon.Spread, u.Weapon.TargetAir, u.Weapon.TargetGround)
+		fmt.Fprintf(&b, "\t%q: {Name: %q, Health: %.3f, Armor: %.3f, Speed: %.3f, HitSize: %.3f, RotateSpeed: %.3f, Weapon: WeaponDef{FireMode: %q, Range: %.3f, Damage: %.3f, Interval: %.6f, BulletSpeed: %.3f, SplashRadius: %.3f, Pierce: %d, TargetAir: %v, TargetGround: %v}},\n",
+			u.Name, u.Name, u.Health, u.Armor, u.Speed, u.HitSize, u.RotateSpeed,
+			u.Weapon.FireMode, u.Weapon.Range, u.Weapon.Damage, u.Weapon.Interval, u.Weapon.BulletSpeed, u.Weapon.SplashRadius, u.Weapon.Pierce, u.Weapon.TargetAir, u.Weapon.TargetGround)
 	}
 	b.WriteString("}\n")
 	return os.WriteFile(outPath, []byte(b.String()), 0644)

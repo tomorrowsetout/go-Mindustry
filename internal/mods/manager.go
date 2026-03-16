@@ -5,8 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
+
+	"mdt-server/internal/mods/go"
+	"mdt-server/internal/mods/java"
+	"mdt-server/internal/mods/js"
+	"mdt-server/internal/mods/node"
 )
 
 // ====================
@@ -50,10 +56,6 @@ func (m *ModManager) AddDirectory(dir string) error {
 		if os.IsNotExist(err) {
 			// directory not exists, try to create
 			if err := os.MkdirAll(dir, 0755); err != nil {
-				return err
-			}
-			st, err = os.Stat(dir)
-			if err != nil {
 				return err
 			}
 		} else {
@@ -136,10 +138,9 @@ func (m *ModManager) LoadAll() error {
 	// load each mod
 	for _, path := range modFiles {
 		if err := m.loader.Load(path); err != nil {
-			ModLog.Warn("failed to load mod: %s (%v)", path, err)
+			Log.Warn("failed to load mod: %s (%v)", path, err)
 		}
 	}
-	m.mods = m.loader.LoadedMods()
 
 	return nil
 }
@@ -153,10 +154,9 @@ func (m *ModManager) UnloadAll() error {
 	for _, mod := range m.mods {
 		if err := m.loader.Unload(mod.Name); err != nil {
 			errors = append(errors, err)
-			ModLog.Warn("failed to unload mod: %s (%v)", mod.Name, err)
+			Log.Warn("failed to unload mod: %s (%v)", mod.Name, err)
 		}
 	}
-	m.mods = m.loader.LoadedMods()
 
 	if len(errors) > 0 {
 		return fmt.Errorf("failed to unload some mods: %v", errors)
@@ -178,10 +178,19 @@ func (m *ModManager) StartAll() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if err := m.loader.Start(); err != nil {
-		return err
+	var errors []error
+	for _, mod := range m.mods {
+		if !mod.Started {
+			if err := mod.Start(); err != nil {
+				errors = append(errors, err)
+				Log.Warn("failed to start mod: %s (%v)", mod.Name, err)
+			}
+		}
 	}
-	m.mods = m.loader.LoadedMods()
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to start some mods: %v", errors)
+	}
 
 	return nil
 }
@@ -191,10 +200,19 @@ func (m *ModManager) StopAll() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if err := m.loader.Stop(); err != nil {
-		return err
+	var errors []error
+	for _, mod := range m.mods {
+		if mod.Started {
+			if err := mod.Stop(); err != nil {
+				errors = append(errors, err)
+				Log.Warn("failed to stop mod: %s (%v)", mod.Name, err)
+			}
+		}
 	}
-	m.mods = m.loader.LoadedMods()
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to stop some mods: %v", errors)
+	}
 
 	return nil
 }

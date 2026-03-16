@@ -181,7 +181,7 @@ func (e *BinaryExpr) nodeType() string {
 
 // String returns a string representation of the binary expression.
 func (e *BinaryExpr) String() string {
-	return fmt.Sprintf("(%s %v %s)", e.Left, e.Operator, e.Right)
+	return fmt.Sprintf("(%s %s %s)", e.Left, e.Operator, e.Right)
 }
 
 // UnaryExpr represents a unary operation.
@@ -201,7 +201,7 @@ func (e *UnaryExpr) nodeType() string {
 
 // String returns a string representation of the unary expression.
 func (e *UnaryExpr) String() string {
-	return fmt.Sprintf("%v%s", e.Operator, e.Operand)
+	return fmt.Sprintf("%s%s", e.Operator, e.Operand)
 }
 
 // CallExpr represents a function call.

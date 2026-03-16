@@ -3,12 +3,11 @@ package mods
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"mdt-server/internal/config"
-	gomod "mdt-server/internal/mods/go"
+	"mdt-server/internal/mods/go"
 	"mdt-server/internal/mods/java"
 	"mdt-server/internal/mods/js"
 	"mdt-server/internal/mods/node"
@@ -29,19 +28,6 @@ type LoadedMod struct {
 	DataType string // "java", "js", "go", "node"
 	Mod      interface{}
 	Manager  interface{}
-	Started  bool
-}
-
-// Start marks the mod as started.
-func (m *LoadedMod) Start() error {
-	m.Started = true
-	return nil
-}
-
-// Stop marks the mod as stopped.
-func (m *LoadedMod) Stop() error {
-	m.Started = false
-	return nil
 }
 
 // NewModLoader create new ModLoader instance
@@ -86,24 +72,6 @@ func (ml *ModLoader) Load(path string) error {
 		return nil
 
 	case ".js":
-		cleanPath := filepath.ToSlash(path)
-		nodeDir := filepath.ToSlash(strings.TrimSpace(ml.cfg.NodeDir))
-		if nodeDir != "" && strings.Contains(cleanPath, nodeDir) {
-			manager, exists := ml.managers["node"]
-			if !exists {
-				manager = node.NewNodeModManager()
-				ml.managers["node"] = manager
-			}
-
-			mod := &LoadedMod{
-				Name:     filepath.Base(path),
-				Path:     path,
-				DataType: "node",
-			}
-			ml.loadedMods[mod.Name] = mod
-			return nil
-		}
-
 		manager, exists := ml.managers["js"]
 		if !exists {
 			manager = js.NewJSModManager()
@@ -121,7 +89,7 @@ func (ml *ModLoader) Load(path string) error {
 	case ".go":
 		manager, exists := ml.managers["go"]
 		if !exists {
-			manager = gomod.NewGoModManager()
+			manager = go.NewGoModManager()
 			ml.managers["go"] = manager
 		}
 
@@ -140,7 +108,7 @@ func (ml *ModLoader) Load(path string) error {
 
 // Unload unloads a mod by name
 func (ml *ModLoader) Unload(name string) error {
-	if _, exists := ml.loadedMods[name]; exists {
+	if mod, exists := ml.loadedMods[name]; exists {
 		delete(ml.loadedMods, name)
 		return nil
 	}
@@ -166,27 +134,13 @@ func (ml *ModLoader) ListMods() []string {
 
 // Start starts all loaded mods
 func (ml *ModLoader) Start() error {
-	for _, mod := range ml.loadedMods {
-		if mod == nil || mod.Started {
-			continue
-		}
-		if err := mod.Start(); err != nil {
-			return err
-		}
-	}
+	// Placeholder for starting mods
 	return nil
 }
 
 // Stop stops all loaded mods
 func (ml *ModLoader) Stop() error {
-	for _, mod := range ml.loadedMods {
-		if mod == nil || !mod.Started {
-			continue
-		}
-		if err := mod.Stop(); err != nil {
-			return err
-		}
-	}
+	// Placeholder for stopping mods
 	return nil
 }
 
@@ -221,18 +175,6 @@ func (ml *ModLoader) GetConfig() config.ModsConfig {
 // SetConfig sets the mod configuration
 func (ml *ModLoader) SetConfig(cfg config.ModsConfig) {
 	ml.cfg = cfg
-}
-
-// LoadedMods returns a stable snapshot of currently loaded mods.
-func (ml *ModLoader) LoadedMods() []*LoadedMod {
-	out := make([]*LoadedMod, 0, len(ml.loadedMods))
-	for _, m := range ml.loadedMods {
-		if m != nil {
-			out = append(out, m)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
 }
 
 // MarshalJSON implements json.Marshaler

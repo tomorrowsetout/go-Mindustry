@@ -37,9 +37,8 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Accept any non-negative version for broad compatibility.
-	if data.Version < 0 {
-		return nil, fmt.Errorf("%w: %d (need >= 0)", ErrUnsupportedMSAVVersion, data.Version)
+	if data.Version < 11 {
+		return nil, fmt.Errorf("%w: %d (need >= 11)", ErrUnsupportedMSAVVersion, data.Version)
 	}
 
 	var out bytes.Buffer
@@ -106,10 +105,8 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err := w.WriteInt32(1); err != nil {
 		return nil, err
 	}
-	if err := writeTemplatePlayerForContent(w, data.Content); err != nil {
-		if err := writeMinimalPlayer(w); err != nil {
-			return nil, err
-		}
+	if err := writeMinimalPlayer(w); err != nil {
+		return nil, err
 	}
 
 	if err := w.WriteBytes(data.Content); err != nil {
@@ -320,12 +317,11 @@ func FindCoreTilesFromMSAV(path string) ([]protocol.Point2, error) {
 }
 
 type javaReader struct {
-	raw []byte
 	buf *bytes.Reader
 }
 
 func newJavaReader(b []byte) *javaReader {
-	return &javaReader{raw: b, buf: bytes.NewReader(b)}
+	return &javaReader{buf: bytes.NewReader(b)}
 }
 
 func (r *javaReader) ReadBytes(n int) ([]byte, error) {
@@ -348,15 +344,6 @@ func (r *javaReader) Skip(n int) error {
 
 func (r *javaReader) Offset() int {
 	return int(r.buf.Size()) - r.buf.Len()
-}
-
-func (r *javaReader) SeekAbs(offset int) error {
-	if offset < 0 || offset > len(r.raw) {
-		return io.ErrUnexpectedEOF
-	}
-	r.buf = bytes.NewReader(r.raw)
-	_, err := r.buf.Seek(int64(offset), io.SeekStart)
-	return err
 }
 
 func (r *javaReader) ReadInt32() (int32, error) {
@@ -1416,11 +1403,7 @@ func skipPlayerPayload(r *javaReader, rev int16) error {
 			return err
 		}
 	default:
-		// Unknown player revisions: attempt to resync to content header by scanning forward.
-		if err := resyncToContentHeader(r); err != nil {
-			return fmt.Errorf("unsupported player revision: %d", rev)
-		}
-		return nil
+		return fmt.Errorf("unsupported player revision: %d", rev)
 	}
 
 	// shooting, team, typing
@@ -1433,35 +1416,6 @@ func skipPlayerPayload(r *javaReader, rev int16) error {
 	}
 	// x/y
 	return r.Skip(8)
-}
-
-func resyncToContentHeader(r *javaReader) error {
-	if r == nil || len(r.raw) == 0 {
-		return ErrInvalidMSAV
-	}
-	start := r.Offset()
-	if start < 0 || start >= len(r.raw) {
-		return ErrInvalidMSAV
-	}
-	const maxScan = 65536
-	limit := start + maxScan
-	if limit > len(r.raw) {
-		limit = len(r.raw)
-	}
-	for off := start; off < limit; off++ {
-		tr := newJavaReader(r.raw[off:])
-		if err := skipContentHeader(tr); err != nil {
-			continue
-		}
-		if err := skipContentPatches(tr); err != nil {
-			continue
-		}
-		if err := skipMapData(tr); err != nil {
-			continue
-		}
-		return r.SeekAbs(off)
-	}
-	return ErrInvalidMSAV
 }
 
 func skipContentHeader(r *javaReader) error {

@@ -34,6 +34,3 @@ func (l *simpleLogger) Warn(msg string, args ...interface{}) {
 func (l *simpleLogger) Error(msg string, args ...interface{}) {
 	fmt.Printf("[MOD ERROR] "+msg+"\n", args...)
 }
-
-// ModLog is the package-level logger used by mod manager/loader code.
-var ModLog Log = &simpleLogger{}

@@ -264,9 +264,9 @@ func GetTeamColor(team world.TeamID) Color {
 		{R: 0.95, G: 0.56, B: 0.12, A: 1.0}, // rime
 	}
 	// Ensure teamIdx is non-negative and within bounds
-	teamIdx := int(team) % len(colors)
+	teamIdx := int(team) % int32(len(colors))
 	if teamIdx < 0 {
-		teamIdx += len(colors)
+		teamIdx += int32(len(colors))
 	}
 	return colors[teamIdx]
 }

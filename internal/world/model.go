@@ -39,11 +39,6 @@ type Tile struct {
 	Rotation int8
 	Con      ConID
 	Build    *Building
-	// Raw tile data from MSAV (data/floorData/overlayData/extraData).
-	Data        byte
-	FloorData   byte
-	OverlayData byte
-	ExtraData   int32
 }
 
 type Building struct {
@@ -58,36 +53,6 @@ type Building struct {
 	Config    []byte
 	Payload   []byte
 	MaxHealth float32
-
-	// Item transport state for conveyors/ducts.
-	ConvItems [3]ItemID
-	ConvPos   [3]float32
-	ConvLen   int
-	ConvMin   float32
-
-	// Stack conveyor state (plastanium).
-	StackState    int
-	StackLink     int32
-	StackCooldown float32
-	StackLastItem ItemID
-	StackDumpIdx  int
-
-	// Overflow duct state.
-	OverflowProgress float32
-	OverflowCurrent  ItemID
-	OverflowDumpIdx  int8
-
-	// Duct state.
-	DuctProgress float32
-	DuctCurrent  ItemID
-	DuctRecDir   int8
-
-	// Raw serialized building payload from MSAV (opaque).
-	RawData []byte
-
-	// Decoded (best-effort) state.
-	PowerStatus float32
-	PowerLinks  []int32
 }
 
 // GetX 获取X坐标
@@ -216,11 +181,6 @@ type RawEntity struct {
 	AttackFragmentSpread  float32
 	AttackFragmentSpeed   float32
 	AttackFragmentLife    float32
-	AttackBurstShots      int32
-	AttackBurstSpacing    float32
-	AttackSpread          float32
-	AttackInaccuracy      float32
-	AttackVelocityRnd     float32
 	AttackTargetAir       bool
 	AttackTargetGround    bool
 	AttackTargetPriority  string
