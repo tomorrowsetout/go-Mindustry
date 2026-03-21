@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -15,30 +16,39 @@ import (
 // Core1 - Game Loop 核心（主线程）
 // 必须运行在单个核心上，处理 60 TPS 的实时游戏逻辑
 type Core1 struct {
-	name      string
-	config    Config
-	running   atomic.Bool
-	tickFn    func(tick uint64, delta time.Duration)
+	name    string
+	config  Config
+	running atomic.Bool
+	tickFn  func(tick uint64, delta time.Duration)
 }
 
 // Core2 - IO Core（第二核心）
 // 处理所有 IO 密集型任务：网络、存档、Mod、Storage、WorldStream
 type Core2 struct {
-	name      string
-	messages  chan Message
-	workerCount int
-	wg        sync.WaitGroup
-	running   atomic.Bool
-	stats     *Stats
-	serverCore atomic.Value // *ServerCore
-	recorder  storage.Recorder
+	name          string
+	messages      chan Message
+	workerCount   int
+	verboseNetLog atomic.Bool
+	wg            sync.WaitGroup
+	running       atomic.Bool
+	stats         *Stats
+	serverCore    atomic.Value // *ServerCore
+	recorder      storage.Recorder
+	connMu        sync.RWMutex
+	conns         map[int32]ConnectionMessage
+	stateProvider func() persist.State
+	onPacketIn    func(*PacketMessage)
+	onPacketOut   func(*PacketMessage)
+	onConnOpen    func(*ConnectionMessage)
+	onConnClose   func(*ConnectionMessage)
 }
 
 // Config 是核心配置（简化版，只用于Core2）
 type Config struct {
-	Name        string
-	MessageBuf  int
-	WorkerCount int
+	Name          string
+	MessageBuf    int
+	WorkerCount   int
+	VerboseNetLog bool
 }
 
 // Stats 是核心统计信息
@@ -116,14 +126,25 @@ func NewCore2(cfg Config) *Core2 {
 		}
 	}
 
-	return &Core2{
+	c2 := &Core2{
 		name:        cfg.Name,
 		messages:    make(chan Message, cfg.MessageBuf),
 		workerCount: cfg.WorkerCount,
 		stats: &Stats{
 			lastUpdate: time.Now().UnixNano(),
 		},
+		conns: make(map[int32]ConnectionMessage),
 	}
+	c2.verboseNetLog.Store(cfg.VerboseNetLog)
+	return c2
+}
+
+func (c2 *Core2) SetVerboseNetLog(enabled bool) {
+	c2.verboseNetLog.Store(enabled)
+}
+
+func (c2 *Core2) VerboseNetLogEnabled() bool {
+	return c2.verboseNetLog.Load()
 }
 
 // SetTickFn 设置 Game Loop 的 tick 函数
@@ -225,18 +246,55 @@ func (c2 *Core2) handleConnectionMessage(m *ConnectionMessage) {
 
 // handleConnectionOpen 处理连接打开
 func (c2 *Core2) handleConnectionOpen(m *ConnectionMessage) {
-	// TODO: 实现连接打开逻辑
-	// 例如：记录连接事件、初始化连接状态等
-	fmt.Printf("[Core2 %s] Connection opened: connID=%d, UUID=%s, IP=%s\n", 
-		c2.name, m.ConnID, m.UUID, m.IP)
+	if m == nil {
+		return
+	}
+	c2.connMu.Lock()
+	c2.conns[m.ConnID] = *m
+	c2.connMu.Unlock()
+	c2.recordEvent(storage.Event{
+		Timestamp: time.Now().UTC(),
+		Kind:      "connection_open",
+		Trigger:   storage.TriggerPlayerConnect,
+		Detail:    fmt.Sprintf("tcp=%s udp=%s", m.TCPAddr, m.UDPAddr),
+		ConnID:    m.ConnID,
+		UUID:      m.UUID,
+		IP:        m.IP,
+		Name:      m.Name,
+	})
+	if c2.verboseNetLog.Load() {
+		fmt.Printf("[Core2 %s] Connection opened: connID=%d, UUID=%s, IP=%s\n",
+			c2.name, m.ConnID, m.UUID, m.IP)
+	}
+	if c2.onConnOpen != nil {
+		c2.onConnOpen(m)
+	}
 }
 
 // handleConnectionClose 处理连接关闭
 func (c2 *Core2) handleConnectionClose(m *ConnectionMessage) {
-	// TODO: 实现连接关闭逻辑
-	// 例如：清理连接资源、记录断开事件等
-	fmt.Printf("[Core2 %s] Connection closed: connID=%d, UUID=%s, IP=%s\n", 
-		c2.name, m.ConnID, m.UUID, m.IP)
+	if m == nil {
+		return
+	}
+	c2.connMu.Lock()
+	delete(c2.conns, m.ConnID)
+	c2.connMu.Unlock()
+	c2.recordEvent(storage.Event{
+		Timestamp: time.Now().UTC(),
+		Kind:      "connection_close",
+		Trigger:   storage.TriggerPlayerLeave,
+		ConnID:    m.ConnID,
+		UUID:      m.UUID,
+		IP:        m.IP,
+		Name:      m.Name,
+	})
+	if c2.verboseNetLog.Load() {
+		fmt.Printf("[Core2 %s] Connection closed: connID=%d, UUID=%s, IP=%s\n",
+			c2.name, m.ConnID, m.UUID, m.IP)
+	}
+	if c2.onConnClose != nil {
+		c2.onConnClose(m)
+	}
 }
 
 // handleModMessage 处理 Mod 操作（IO Core）
@@ -268,7 +326,7 @@ func (c2 *Core2) handleModLoad(m *ModMessage) {
 
 	// TODO: 实现 Mod 加载逻辑
 	// 根据 ModType (java/js/go/node) 加载不同的 Mod
-	fmt.Printf("[Core2 %s] Loading mod: name=%s, type=%s, path=%s\n", 
+	fmt.Printf("[Core2 %s] Loading mod: name=%s, type=%s, path=%s\n",
 		c2.name, m.Name, m.ModType, m.Path)
 
 	// 模拟加载成功
@@ -286,7 +344,7 @@ func (c2 *Core2) handleModUnload(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 卸载逻辑
-	fmt.Printf("[Core2 %s] Unloading mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Unloading mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟卸载成功
@@ -303,7 +361,7 @@ func (c2 *Core2) handleModStart(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 启动逻辑
-	fmt.Printf("[Core2 %s] Starting mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Starting mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟启动成功
@@ -320,7 +378,7 @@ func (c2 *Core2) handleModStop(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 停止逻辑
-	fmt.Printf("[Core2 %s] Stopping mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Stopping mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟停止成功
@@ -337,7 +395,7 @@ func (c2 *Core2) handleModReload(m *ModMessage) {
 	result := ModResult{}
 
 	// TODO: 实现 Mod 重新加载逻辑
-	fmt.Printf("[Core2 %s] Reloading mod: name=%s, type=%s\n", 
+	fmt.Printf("[Core2 %s] Reloading mod: name=%s, type=%s\n",
 		c2.name, m.Name, m.ModType)
 
 	// 模拟重新加载成功
@@ -434,18 +492,44 @@ func (c2 *Core2) handlePacketMessage(m *PacketMessage) {
 
 // handlePacketIncoming 处理 incoming 包
 func (c2 *Core2) handlePacketIncoming(m *PacketMessage) {
-	// TODO: 实现 incoming 包处理
-	// 例如：解码包、分发到游戏逻辑等
-	fmt.Printf("[Core2 %s] Incoming packet: connID=%d, packet=%T\n", 
-		c2.name, m.ConnID, m.Packet)
+	if m == nil || m.Packet == nil {
+		return
+	}
+	c2.recordEvent(storage.Event{
+		Timestamp: time.Now().UTC(),
+		Kind:      "packet_incoming",
+		Packet:    fmt.Sprintf("%T", m.Packet),
+		Detail:    fmt.Sprintf("idle=%s bytes=%d", m.IdleTime.String(), len(m.Data)),
+		ConnID:    m.ConnID,
+	})
+	if c2.verboseNetLog.Load() {
+		fmt.Printf("[Core2 %s] Incoming packet: connID=%d, packet=%T\n",
+			c2.name, m.ConnID, m.Packet)
+	}
+	if c2.onPacketIn != nil {
+		c2.onPacketIn(m)
+	}
 }
 
 // handlePacketOutgoing 处理 outgoing 包
 func (c2 *Core2) handlePacketOutgoing(m *PacketMessage) {
-	// TODO: 实现 outgoing 包处理
-	// 例如：编码包、发送到网络等
-	fmt.Printf("[Core2 %s] Outgoing packet: connID=%d, packet=%T\n", 
-		c2.name, m.ConnID, m.Packet)
+	if m == nil || m.Packet == nil {
+		return
+	}
+	c2.recordEvent(storage.Event{
+		Timestamp: time.Now().UTC(),
+		Kind:      "packet_outgoing",
+		Packet:    fmt.Sprintf("%T", m.Packet),
+		Detail:    fmt.Sprintf("bytes=%d", len(m.Data)),
+		ConnID:    m.ConnID,
+	})
+	if c2.verboseNetLog.Load() {
+		fmt.Printf("[Core2 %s] Outgoing packet: connID=%d, packet=%T\n",
+			c2.name, m.ConnID, m.Packet)
+	}
+	if c2.onPacketOut != nil {
+		c2.onPacketOut(m)
+	}
 }
 
 // handleStorageMessage 处理 Storage 事件（IO Core）
@@ -494,7 +578,11 @@ func (c2 *Core2) handleRecordPlayer(m *StorageMessage) {
 
 // handleFlush 刷新事件
 func (c2 *Core2) handleFlush(m *StorageMessage) {
-	// TODO: 实现刷新逻辑
+	c2.recordEvent(storage.Event{
+		Timestamp: time.Now().UTC(),
+		Kind:      "storage_flush",
+		Detail:    "flush marker",
+	})
 }
 
 // handleClose 关闭记录器
@@ -526,20 +614,25 @@ func (c2 *Core2) handlePersistenceMessage(m *PersistenceMessage) {
 // handleSaveState 保存游戏状态
 func (c2 *Core2) handleSaveState(m *PersistenceMessage) {
 	result := PersistenceResult{}
+	state := persist.State{
+		MapPath: m.Path,
+	}
+	if len(m.StateData) > 0 {
+		_ = json.Unmarshal(m.StateData, &state)
+	}
+	if c2.stateProvider != nil {
+		s := c2.stateProvider()
+		if s.MapPath == "" {
+			s.MapPath = state.MapPath
+		}
+		state = s
+	}
 
 	// 从 ServerCore 获取配置
 	if sc, ok := c2.serverCore.Load().(*ServerCore); ok {
 		// 保存状态到 JSON
-		err := persist.Save(sc.persistCfg, persist.State{
-			MapPath:  m.Path,
-			WaveTime: 0, // TODO: 从游戏状态获取
-			Wave:     0, // TODO: 从游戏状态获取
-			Tick:     0, // TODO: 从游戏状态获取
-			TimeData: 0, // TODO: 从游戏状态获取
-			Rand0:    0, // TODO: 从游戏状态获取
-			Rand1:    0, // TODO: 从游戏状态获取
-			SavedAt:  time.Now().UTC().Format(time.RFC3339),
-		})
+		state.SavedAt = time.Now().UTC().Format(time.RFC3339)
+		err := persist.Save(sc.persistCfg, state)
 		if err != nil {
 			result.Error = err
 		}
@@ -576,12 +669,13 @@ func (c2 *Core2) handleLoadState(m *PersistenceMessage) {
 // handleSaveWorld 保存世界数据（MSAV）
 func (c2 *Core2) handleSaveWorld(m *PersistenceMessage) {
 	result := PersistenceResult{}
-
-	// TODO: 从世界模型保存 MSAV
-	// err := worldstream.SaveWorldModelToMSAV(m.Path, m.ModelData)
-	// if err != nil {
-	//     result.Error = err
-	// }
+	if m == nil || m.Path == "" {
+		result.Error = fmt.Errorf("save_world requires non-empty path")
+	} else if len(m.WorldData) == 0 {
+		result.Error = fmt.Errorf("save_world requires non-empty world data")
+	} else if err := os.WriteFile(m.Path, m.WorldData, 0644); err != nil {
+		result.Error = err
+	}
 
 	if m.ResultChan != nil {
 		m.ResultChan <- result
@@ -591,14 +685,16 @@ func (c2 *Core2) handleSaveWorld(m *PersistenceMessage) {
 // handleLoadWorld 加载世界数据（MSAV）
 func (c2 *Core2) handleLoadWorld(m *PersistenceMessage) {
 	result := PersistenceResult{}
-
-	// TODO: 加载 MSAV 文件
-	// model, err := worldstream.LoadWorldModelFromMSAV(m.Path)
-	// if err != nil {
-	//     result.Error = err
-	// } else {
-	//     result.WorldData = worldstream.BuildWorldStreamFromModel(model)
-	// }
+	if m == nil || m.Path == "" {
+		result.Error = fmt.Errorf("load_world requires non-empty path")
+	} else {
+		b, err := os.ReadFile(m.Path)
+		if err != nil {
+			result.Error = err
+		} else {
+			result.WorldData = b
+		}
+	}
 
 	if m.ResultChan != nil {
 		m.ResultChan <- result
@@ -613,6 +709,7 @@ func (c2 *Core2) Send(msg Message) bool {
 		return true
 	default:
 		c2.stats.AddDropped(1)
+		c2.stats.AddQueueSize(-1)
 		return false
 	}
 }
@@ -635,9 +732,33 @@ func (c2 *Core2) SetRecorder(rec storage.Recorder) {
 	c2.recorder = rec
 }
 
+// SetStateProvider 设置持久化状态提供器。
+func (c2 *Core2) SetStateProvider(fn func() persist.State) {
+	c2.stateProvider = fn
+}
+
+// SetPacketHandlers 设置 Core2 包处理回调。
+func (c2 *Core2) SetPacketHandlers(incoming func(*PacketMessage), outgoing func(*PacketMessage)) {
+	c2.onPacketIn = incoming
+	c2.onPacketOut = outgoing
+}
+
+// SetConnectionHandlers 设置 Core2 连接处理回调。
+func (c2 *Core2) SetConnectionHandlers(open func(*ConnectionMessage), close func(*ConnectionMessage)) {
+	c2.onConnOpen = open
+	c2.onConnClose = close
+}
+
 // Recorder 获取事件记录器
 func (c2 *Core2) Recorder() storage.Recorder {
 	return c2.recorder
+}
+
+// ConnectionCount 返回 Core2 当前管理的连接数量。
+func (c2 *Core2) ConnectionCount() int {
+	c2.connMu.RLock()
+	defer c2.connMu.RUnlock()
+	return len(c2.conns)
 }
 
 // Stats 获取 IO Core 统计信息
@@ -654,4 +775,11 @@ func (c2 *Core2) updateStats() {
 		c2.stats.lastUpdate = now
 	}
 	c2.stats.mu.Unlock()
+}
+
+func (c2 *Core2) recordEvent(ev storage.Event) {
+	if c2.recorder == nil {
+		return
+	}
+	_ = c2.recorder.Record(ev)
 }

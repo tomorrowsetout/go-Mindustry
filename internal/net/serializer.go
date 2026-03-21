@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/pierrec/lz4/v4"
 
@@ -28,8 +29,8 @@ type Serializer struct {
 // CompatIgnoredPacket is returned for client packets that are intentionally
 // ignored under custom-client compatibility mode.
 type CompatIgnoredPacket struct {
-	ID     byte
-	Length int
+	ID      byte
+	Length  int
 	Payload []byte
 }
 
@@ -119,6 +120,10 @@ func officialPacketID(p protocol.Packet) (byte, bool) {
 		return 13, true
 	case *protocol.Remote_Units_unitDestroy_52:
 		return 137, true
+	case *protocol.Remote_Build_beginBreak_123:
+		return 9, true
+	case *protocol.Remote_Build_beginPlace_124:
+		return 10, true
 	}
 	if p == nil {
 		return 0, false
@@ -136,6 +141,7 @@ func officialPacketID(p protocol.Packet) (byte, bool) {
 	if err != nil || n < 0 || n > 251 {
 		return 0, false
 	}
+	// Fallback for packets not covered above.
 	return byte(n + 4), true
 }
 
@@ -218,6 +224,16 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 	}
 
 	if !compat {
+		// Some official/modified 155 clients still send legacy chat call-id 81
+		// with payload = string(message). If we decode by registry first,
+		// id=81 may be misinterpreted as requestUnitPayload and chat is lost.
+		if id == 81 {
+			if msg, ferr := readSendChatMessageCompat(payload, s.Ctx); ferr == nil {
+				if strings.TrimSpace(msg.Message) != "" {
+					return msg, nil
+				}
+			}
+		}
 		// Official wire IDs already include the +4 base-packet offset.
 		if obj, ok := tryRead(id); ok {
 			return obj, nil

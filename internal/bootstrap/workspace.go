@@ -21,6 +21,25 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 	var out Result
 	createdDirSet := map[string]struct{}{}
 	createdFileSet := map[string]struct{}{}
+	configDir := filepath.FromSlash("configs")
+	rootDir := "."
+	if p := strings.TrimSpace(cfgPath); p != "" {
+		configDir = filepath.Dir(p)
+		rootDir = filepath.Dir(configDir)
+	}
+	if strings.TrimSpace(configDir) == "" {
+		configDir = filepath.FromSlash("configs")
+	}
+	if strings.TrimSpace(rootDir) == "" || rootDir == configDir {
+		rootDir = "."
+	}
+	toRoot := func(p string) string {
+		p = strings.TrimSpace(p)
+		if p == "" || filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(rootDir, p)
+	}
 
 	mkdir := func(dir string) error {
 		dir = strings.TrimSpace(dir)
@@ -74,22 +93,31 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 			return out, err
 		}
 	}
+	policy, err := loadReleasePolicy(configDir)
+	if err != nil {
+		return out, err
+	}
 
 	dirs := []string{
-		"assets/worlds",
-		"logs",
+		configDir, // configs 目录只存 INI 配置文件
+		cfg.Runtime.WorldsDir,
+		cfg.Runtime.LogsDir,
 		cfg.Storage.Directory,
 		filepath.Join(cfg.Storage.Directory, "players"),
 		cfg.Persist.Directory,
 		cfg.Persist.MSAVDir,
-		filepath.Dir(strings.TrimSpace(cfg.Script.File)),
-		filepath.Dir(strings.TrimSpace(cfg.Admin.OpsFile)),
 		cfg.Mods.Directory,
 		cfg.Mods.JSDir,
 		cfg.Mods.NodeDir,
 		cfg.Mods.GoDir,
+		filepath.Dir(strings.TrimSpace(cfg.Script.File)),
+		filepath.Dir(strings.TrimSpace(cfg.Admin.OpsFile)),
 		filepath.Dir(strings.TrimSpace(cfg.Runtime.VanillaProfiles)),
 	}
+	dirs = append(dirs,
+		filepath.Dir(cfgPath),
+	)
+	dirs = uniqDirs(dirs)
 	for _, d := range dirs {
 		if err := mkdir(d); err != nil {
 			return out, err
@@ -136,9 +164,29 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 	_ = writeIfMissing(filepath.Join(cfg.Mods.JSDir, "hello.js"), []byte("console.log('hello from mods/js/hello.js');\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(cfg.Mods.NodeDir, "hello.js"), []byte("console.log('hello from mods/node/hello.js');\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(cfg.Mods.GoDir, "hello.go"), []byte("package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello from mods/go/hello.go\")\n}\n"), 0o644)
+	if strings.TrimSpace(cfg.API.ConfigFile) != "" {
+		apiCfgPath := strings.TrimSpace(cfg.API.ConfigFile)
+		if !filepath.IsAbs(apiCfgPath) {
+			apiCfgPath = filepath.Join(configDir, apiCfgPath)
+		}
+		_ = writeIfMissing(apiCfgPath, []byte("; api settings\n[api]\nenabled = 1\nbind = 0.0.0.0:8090\nkey =\nkeys =\n"), 0o644)
+	}
 
-	if err := seedMapIfMissing("assets/worlds"); err != nil {
+	if err := seedMapIfMissing(cfg.Runtime.WorldsDir); err != nil {
 		return out, err
+	}
+
+	if shouldReleaseEmbedded(policy) {
+		if err := releaseEmbeddedConfigs(configDir); err != nil {
+			return out, err
+		}
+		worldsDirAbs := toRoot(cfg.Runtime.WorldsDir)
+		if err := releaseEmbeddedWorlds(worldsDirAbs); err != nil {
+			return out, err
+		}
+		if err := markEmbeddedReleasedAt(configDir, policy); err != nil {
+			return out, err
+		}
 	}
 
 	return out, nil
@@ -153,7 +201,7 @@ func seedMapIfMissing(dstDir string) error {
 		filepath.Join("..", "assets", "worlds", "23315.msav"),
 		filepath.Join("go-server", "assets", "worlds", "23315.msav"),
 		filepath.Join("..", "go-server", "assets", "worlds", "23315.msav"),
-		filepath.Join("assets", "worlds", "file.msav"),
+		filepath.Join(filepath.Dir(dstDir), "worlds", "file.msav"),
 		filepath.Join("..", "assets", "worlds", "file.msav"),
 	}
 	var src string

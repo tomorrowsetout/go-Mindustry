@@ -45,9 +45,17 @@ func TestApplyBuildPlansIsAsync(t *testing.T) {
 		t.Fatalf("expected still pending build at 0.5s, got block=%d build=%v", tile.Block, tile.Build != nil)
 	}
 
-	w.Step(600 * time.Millisecond)
-	tile, _ = w.Model().TileAt(2, 3)
-	if tile.Block != 45 || tile.Build == nil {
+	placed := false
+	for i := 0; i < 16; i++ { // up to 3.2s
+		w.Step(200 * time.Millisecond)
+		tile, _ = w.Model().TileAt(2, 3)
+		if tile.Block == 45 && tile.Build != nil {
+			placed = true
+			break
+		}
+	}
+	if !placed {
+		tile, _ = w.Model().TileAt(2, 3)
 		t.Fatalf("expected placed block after progress, got block=%d build=%v", tile.Block, tile.Build != nil)
 	}
 }
@@ -61,7 +69,7 @@ func TestDeconstructRefund(t *testing.T) {
 	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
 		X: 2, Y: 2, BlockID: 45,
 	}})
-	w.Step(1200 * time.Millisecond)
+	w.Step(3 * time.Second)
 	mid := w.TeamItems(TeamID(1))[0]
 	if mid >= 3000 {
 		t.Fatalf("expected build to consume copper from starter inventory, mid=%d", mid)
@@ -70,7 +78,7 @@ func TestDeconstructRefund(t *testing.T) {
 	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
 		Breaking: true, X: 2, Y: 2,
 	}})
-	w.Step(1200 * time.Millisecond)
+	w.Step(3 * time.Second)
 	after := w.TeamItems(TeamID(1))[0]
 	if after <= mid {
 		t.Fatalf("expected deconstruct refund, mid=%d after=%d", mid, after)
@@ -88,7 +96,7 @@ func TestFactoryProductionSpawnsUnit(t *testing.T) {
 		X: 3, Y: 3, BlockID: 100, Rotation: 0,
 	}}
 	w.ApplyBuildPlans(TeamID(1), ops)
-	w.Step(1200 * time.Millisecond)
+	w.Step(3 * time.Second)
 	if len(w.Model().Entities) != 0 {
 		t.Fatalf("expected no unit before factory cycle, got=%d", len(w.Model().Entities))
 	}

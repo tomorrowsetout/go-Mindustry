@@ -1,6 +1,7 @@
 package net
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -15,6 +16,7 @@ type NetworkCore struct {
 	server   *Server
 	connMap  map[int32]*Conn
 	connMu   sync.RWMutex
+	packetMu sync.Mutex
 }
 
 // NewNetworkCore 创建网络核心
@@ -25,11 +27,26 @@ func NewNetworkCore(server *Server) *NetworkCore {
 		WorkerCount: 4,
 	}
 
-	return &NetworkCore{
-		core:    core.NewCore2(cfg),
+	return NewNetworkCoreWithCore(server, core.NewCore2(cfg))
+}
+
+// NewNetworkCoreWithCore 使用外部 Core2 创建网络核心。
+func NewNetworkCoreWithCore(server *Server, ioCore *core.Core2) *NetworkCore {
+	if ioCore == nil {
+		ioCore = core.NewCore2(core.Config{
+			Name:        "network",
+			MessageBuf:  30000,
+			WorkerCount: 4,
+		})
+	}
+	nc := &NetworkCore{
+		core:    ioCore,
 		server:  server,
 		connMap: make(map[int32]*Conn),
 	}
+	nc.core.SetConnectionHandlers(nc.HandleConnectionOpen, nc.HandleConnectionClose)
+	nc.core.SetPacketHandlers(nc.HandlePacketIncoming, nc.HandlePacketOutgoing)
+	return nc
 }
 
 // Start 启动网络核心
@@ -53,73 +70,94 @@ func (nc *NetworkCore) SetRecorder(rec storage.Recorder) {
 }
 
 // ProcessPacket 处理数据包（从网络读取）
-// 这个方法应该在 IO Core 的 worker 中调用
 func (nc *NetworkCore) ProcessPacket(conn *Conn, obj any, err error) {
+	if conn == nil {
+		return
+	}
 	if err != nil {
-		// 发送连接关闭消息
 		nc.core.Send(&core.ConnectionMessage{
-			ConnID: conn.id,
-			IsOpen: false,
+			ConnID:  conn.id,
+			UserID:  conn.playerID,
+			UUID:    conn.uuid,
+			IP:      safeRemoteAddr(conn),
+			Name:    conn.name,
+			TCPAddr: safeRemoteAddr(conn),
+			UDPAddr: safeUDPAddr(conn),
+			IsOpen:  false,
 		})
 		return
 	}
 
-	// 发送包消息到 Core2
-	// 注意：这里不直接发送 obj，因为 obj 可能不是 protocol.Packet 类型
+	var pkt protocol.Packet
+	if p, ok := obj.(protocol.Packet); ok {
+		pkt = p
+	}
+
 	nc.core.Send(&core.PacketMessage{
 		ConnID: conn.id,
 		Kind:   "incoming",
-		Packet: nil, // obj, // 暂时不发送，等待类型转换
-		Data:   nil, // 可以序列化包数据
+		Packet: pkt,
 	})
 }
 
 // SendPacket 发送数据包（发送到网络）
-// 这个方法应该在 IO Core 的 worker 中调用
 func (nc *NetworkCore) SendPacket(conn *Conn, packet protocol.Packet) error {
-	// 发送包消息到 Core2
-	nc.core.Send(&core.PacketMessage{
+	if conn == nil {
+		return errors.New("nil connection")
+	}
+	if packet == nil {
+		return errors.New("nil packet")
+	}
+	ok := nc.core.Send(&core.PacketMessage{
 		ConnID: conn.id,
 		Kind:   "outgoing",
 		Packet: packet,
-		Data:   nil, // 可以序列化包数据
 	})
+	if !ok {
+		return errors.New("network core queue is full")
+	}
 	return nil
 }
 
 // ConnectionOpen 处理连接打开
-// 这个方法应该在 IO Core 的 worker 中调用
 func (nc *NetworkCore) ConnectionOpen(conn *Conn) {
+	if conn == nil {
+		return
+	}
 	nc.connMu.Lock()
 	nc.connMap[conn.id] = conn
 	nc.connMu.Unlock()
 
-	// 发送连接打开消息
 	nc.core.Send(&core.ConnectionMessage{
-		ConnID: conn.id,
-		UserID: conn.playerID,
-		UUID:   conn.uuid,
-		IP:     conn.RemoteAddr().String(),
-		Name:   conn.name,
-		IsOpen: true,
+		ConnID:  conn.id,
+		UserID:  conn.playerID,
+		UUID:    conn.uuid,
+		IP:      safeRemoteAddr(conn),
+		Name:    conn.name,
+		TCPAddr: safeRemoteAddr(conn),
+		UDPAddr: safeUDPAddr(conn),
+		IsOpen:  true,
 	})
 }
 
 // ConnectionClose 处理连接关闭
-// 这个方法应该在 IO Core 的 worker 中调用
 func (nc *NetworkCore) ConnectionClose(conn *Conn) {
+	if conn == nil {
+		return
+	}
 	nc.connMu.Lock()
 	delete(nc.connMap, conn.id)
 	nc.connMu.Unlock()
 
-	// 发送连接关闭消息
 	nc.core.Send(&core.ConnectionMessage{
-		ConnID: conn.id,
-		UserID: conn.playerID,
-		UUID:   conn.uuid,
-		IP:     conn.RemoteAddr().String(),
-		Name:   conn.name,
-		IsOpen: false,
+		ConnID:  conn.id,
+		UserID:  conn.playerID,
+		UUID:    conn.uuid,
+		IP:      safeRemoteAddr(conn),
+		Name:    conn.name,
+		TCPAddr: safeRemoteAddr(conn),
+		UDPAddr: safeUDPAddr(conn),
+		IsOpen:  false,
 	})
 }
 
@@ -152,8 +190,11 @@ func (nc *NetworkCore) BroadcastPacket(packet protocol.Packet) {
 // BroadcastToTeam 广播包到指定队伍
 func (nc *NetworkCore) BroadcastToTeam(packet protocol.Packet, teamID byte) {
 	conns := nc.GetAllConnections()
+	_ = teamID
 	for _, conn := range conns {
-		// TODO: 检查队伍ID
+		if conn == nil {
+			continue
+		}
 		_ = nc.SendPacket(conn, packet)
 	}
 }
@@ -170,58 +211,62 @@ func (nc *NetworkCore) SendToCore2(msg core.Message) bool {
 
 // HandlePacketIncoming 处理 incoming 包（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandlePacketIncoming(m *core.PacketMessage) {
+	nc.packetMu.Lock()
+	defer nc.packetMu.Unlock()
 	conn := nc.GetConnection(m.ConnID)
-	if conn == nil {
-		fmt.Printf("[NetworkCore] Connection not found: %d\n", m.ConnID)
+	if conn == nil || m == nil || m.Packet == nil {
 		return
 	}
-
-	// 这里处理 incoming 包
-	// 例如：解码包、分发到游戏逻辑等
-	fmt.Printf("[NetworkCore] Incoming packet: connID=%d, packet=%T\n",
-		m.ConnID, m.Packet)
-
-	// 将包传递给服务器处理
 	nc.server.handlePacket(conn, m.Packet, true)
 }
 
 // HandlePacketOutgoing 处理 outgoing 包（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandlePacketOutgoing(m *core.PacketMessage) {
+	nc.packetMu.Lock()
+	defer nc.packetMu.Unlock()
 	conn := nc.GetConnection(m.ConnID)
-	if conn == nil {
-		fmt.Printf("[NetworkCore] Connection not found: %d\n", m.ConnID)
+	if conn == nil || m == nil || m.Packet == nil {
 		return
 	}
-
-	// 这里处理 outgoing 包
-	// 例如：编码包、发送到网络等
-	fmt.Printf("[NetworkCore] Outgoing packet: connID=%d, packet=%T\n",
-		m.ConnID, m.Packet)
-
-	// TODO: 发送到网络
-	// _ = conn.WriteObject(m.Packet)
+	if err := conn.Send(m.Packet); err != nil {
+		nc.core.Send(&core.ConnectionMessage{
+			ConnID:  conn.id,
+			UserID:  conn.playerID,
+			UUID:    conn.uuid,
+			IP:      safeRemoteAddr(conn),
+			Name:    conn.name,
+			TCPAddr: safeRemoteAddr(conn),
+			UDPAddr: safeUDPAddr(conn),
+			IsOpen:  false,
+		})
+	}
 }
 
 // HandleConnectionOpen 处理连接打开（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandleConnectionOpen(m *core.ConnectionMessage) {
-	fmt.Printf("[NetworkCore] Connection opened: connID=%d, UUID=%s, IP=%s\n",
-		m.ConnID, m.UUID, m.IP)
-
-	// 这里可以添加连接打开的逻辑
-	// 例如：初始化连接状态、记录日志等
+	if m == nil {
+		return
+	}
+	if nc.server != nil && nc.server.VerboseNetLogEnabled() {
+		fmt.Printf("[NetworkCore] Connection opened: connID=%d, UUID=%s, IP=%s\n", m.ConnID, m.UUID, m.IP)
+	}
 }
 
 // HandleConnectionClose 处理连接关闭（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandleConnectionClose(m *core.ConnectionMessage) {
-	fmt.Printf("[NetworkCore] Connection closed: connID=%d, UUID=%s, IP=%s\n",
-		m.ConnID, m.UUID, m.IP)
-
-	// 这里可以添加连接关闭的逻辑
-	// 例如：清理连接资源、记录日志等
+	if m == nil {
+		return
+	}
+	if nc.server != nil && nc.server.VerboseNetLogEnabled() {
+		fmt.Printf("[NetworkCore] Connection closed: connID=%d, UUID=%s, IP=%s\n", m.ConnID, m.UUID, m.IP)
+	}
 }
 
 // HandlePersistenceMessage 处理存档操作（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandlePersistenceMessage(m *core.PersistenceMessage) {
+	if m == nil {
+		return
+	}
 	switch m.Action {
 	case "save_state":
 		nc.handleSaveState(m)
@@ -232,142 +277,86 @@ func (nc *NetworkCore) HandlePersistenceMessage(m *core.PersistenceMessage) {
 	case "load_world":
 		nc.handleLoadWorld(m)
 	default:
-		fmt.Printf("[NetworkCore] Unknown persistence action: %s\n", m.Action)
+		if m.ResultChan != nil {
+			m.ResultChan <- core.PersistenceResult{Error: fmt.Errorf("unknown persistence action: %s", m.Action)}
+		}
 	}
 }
 
 func (nc *NetworkCore) handleSaveState(m *core.PersistenceMessage) {
-	// TODO: 实现存档保存逻辑
-	fmt.Printf("[NetworkCore] Saving state: path=%s\n", m.Path)
+	if m.ResultChan != nil {
+		m.ResultChan <- core.PersistenceResult{
+			Error: errors.New("save_state should be handled by core persistence pipeline"),
+		}
+	}
 }
 
 func (nc *NetworkCore) handleLoadState(m *core.PersistenceMessage) {
-	// TODO: 实现存档加载逻辑
-	fmt.Printf("[NetworkCore] Loading state: path=%s\n", m.Path)
+	if m.ResultChan != nil {
+		m.ResultChan <- core.PersistenceResult{
+			Error: errors.New("load_state should be handled by core persistence pipeline"),
+		}
+	}
 }
 
 func (nc *NetworkCore) handleSaveWorld(m *core.PersistenceMessage) {
-	// TODO: 实现世界保存逻辑
-	fmt.Printf("[NetworkCore] Saving world: path=%s\n", m.Path)
+	if m.ResultChan != nil {
+		m.ResultChan <- core.PersistenceResult{
+			Error: errors.New("save_world should be handled by core persistence pipeline"),
+		}
+	}
 }
 
 func (nc *NetworkCore) handleLoadWorld(m *core.PersistenceMessage) {
-	// TODO: 实现世界加载逻辑
-	fmt.Printf("[NetworkCore] Loading world: path=%s\n", m.Path)
+	if m.ResultChan != nil {
+		m.ResultChan <- core.PersistenceResult{
+			Error: errors.New("load_world should be handled by core persistence pipeline"),
+		}
+	}
 }
 
 // HandleStorageMessage 处理存储事件（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandleStorageMessage(m *core.StorageMessage) {
 	switch m.Action {
-	case "record_event":
-		nc.handleRecordEvent(m)
-	case "record_player":
-		nc.handleRecordPlayer(m)
-	case "flush":
-		nc.handleFlush(m)
-	case "close":
-		nc.handleClose(m)
+	case "record_event", "record_player", "flush", "close":
+		nc.core.Send(m)
 	default:
 		fmt.Printf("[NetworkCore] Unknown storage action: %s\n", m.Action)
 	}
 }
 
-func (nc *NetworkCore) handleRecordEvent(m *core.StorageMessage) {
-	// TODO: 实现事件记录逻辑
-	fmt.Printf("[NetworkCore] Recording event\n")
-}
-
-func (nc *NetworkCore) handleRecordPlayer(m *core.StorageMessage) {
-	// TODO: 实现玩家事件记录逻辑
-	fmt.Printf("[NetworkCore] Recording player event\n")
-}
-
-func (nc *NetworkCore) handleFlush(m *core.StorageMessage) {
-	// TODO: 实现刷新逻辑
-	fmt.Printf("[NetworkCore] Flushing storage\n")
-}
-
-func (nc *NetworkCore) handleClose(m *core.StorageMessage) {
-	// TODO: 实现关闭记录器逻辑
-	fmt.Printf("[NetworkCore] Storage closed\n")
-}
-
 // HandleModMessage 处理 Mod 操作（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandleModMessage(m *core.ModMessage) {
-	switch m.Action {
-	case "load":
-		nc.handleModLoad(m)
-	case "unload":
-		nc.handleModUnload(m)
-	case "start":
-		nc.handleModStart(m)
-	case "stop":
-		nc.handleModStop(m)
-	case "reload":
-		nc.handleModReload(m)
-	case "scan":
-		nc.handleModScan(m)
-	default:
-		fmt.Printf("[NetworkCore] Unknown mod action: %s\n", m.Action)
+	if m == nil || m.ResultChan == nil {
+		return
 	}
-}
-
-func (nc *NetworkCore) handleModLoad(m *core.ModMessage) {
-	// TODO: 实现 Mod 加载逻辑
-	fmt.Printf("[NetworkCore] Loading mod: name=%s, type=%s\n", m.Name, m.ModType)
-}
-
-func (nc *NetworkCore) handleModUnload(m *core.ModMessage) {
-	// TODO: 实现 Mod 卸载逻辑
-	fmt.Printf("[NetworkCore] Unloading mod: name=%s, type=%s\n", m.Name, m.ModType)
-}
-
-func (nc *NetworkCore) handleModStart(m *core.ModMessage) {
-	// TODO: 实现 Mod 启动逻辑
-	fmt.Printf("[NetworkCore] Starting mod: name=%s, type=%s\n", m.Name, m.ModType)
-}
-
-func (nc *NetworkCore) handleModStop(m *core.ModMessage) {
-	// TODO: 实现 Mod 停止逻辑
-	fmt.Printf("[NetworkCore] Stopping mod: name=%s, type=%s\n", m.Name, m.ModType)
-}
-
-func (nc *NetworkCore) handleModReload(m *core.ModMessage) {
-	// TODO: 实现 Mod 重新加载逻辑
-	fmt.Printf("[NetworkCore] Reloading mod: name=%s, type=%s\n", m.Name, m.ModType)
-}
-
-func (nc *NetworkCore) handleModScan(m *core.ModMessage) {
-	// TODO: 实现 Mod 扫描逻辑
-	fmt.Printf("[NetworkCore] Scanning mods directory\n")
+	m.ResultChan <- core.ModResult{
+		ID:      m.ID,
+		Success: false,
+		Name:    m.Name,
+		Error:   errors.New("mod management should be handled by core mod pipeline"),
+	}
 }
 
 // HandleWorldStreamMessage 处理 WorldStream 操作（在 Core2 worker 中调用）
 func (nc *NetworkCore) HandleWorldStreamMessage(m *core.WorldStreamMessage) {
-	switch m.Action {
-	case "load_model":
-		nc.handleWorldStreamLoadModel(m)
-	case "save_snapshot":
-		nc.handleWorldStreamSaveSnapshot(m)
-	case "rewrite_player":
-		nc.handleWorldStreamRewritePlayer(m)
-	default:
-		fmt.Printf("[NetworkCore] Unknown worldstream action: %s\n", m.Action)
+	if m == nil {
+		return
 	}
+	// WorldStream read/write/rewrite currently belongs to core pipeline.
+	fmt.Printf("[NetworkCore] WorldStream action delegated to core: action=%s path=%s playerID=%d\n", m.Action, m.Path, m.PlayerID)
 }
 
-func (nc *NetworkCore) handleWorldStreamLoadModel(m *core.WorldStreamMessage) {
-	// TODO: 实现从 MSAV 加载世界模型
-	fmt.Printf("[NetworkCore] Loading world model: path=%s\n", m.Path)
+func safeRemoteAddr(conn *Conn) string {
+	if conn == nil || conn.Conn == nil || conn.RemoteAddr() == nil {
+		return ""
+	}
+	return conn.RemoteAddr().String()
 }
 
-func (nc *NetworkCore) handleWorldStreamSaveSnapshot(m *core.WorldStreamMessage) {
-	// TODO: 实现保存世界快照到 MSAV
-	fmt.Printf("[NetworkCore] Saving world snapshot: path=%s\n", m.Path)
-}
-
-func (nc *NetworkCore) handleWorldStreamRewritePlayer(m *core.WorldStreamMessage) {
-	// TODO: 实现重写玩家数据
-	fmt.Printf("[NetworkCore] Rewriting player ID %d in world stream: path=%s\n",
-		m.PlayerID, m.Path)
+func safeUDPAddr(conn *Conn) string {
+	if conn == nil || conn.UDPAddr() == nil {
+		return ""
+	}
+	return conn.UDPAddr().String()
 }

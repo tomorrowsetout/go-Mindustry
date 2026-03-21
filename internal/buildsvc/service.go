@@ -131,6 +131,49 @@ func (s *Service) EnqueuePlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	s.mu.Unlock()
 }
 
+// SyncPlans applies authoritative client queue snapshots for one team.
+// Unlike EnqueuePlans, this reconciles removals and order directly in world state.
+func (s *Service) SyncPlans(team world.TeamID, plans []*protocol.BuildPlan) {
+	if s == nil || s.w == nil {
+		return
+	}
+	model := s.w.Model()
+	if model == nil || model.Width <= 0 || model.Height <= 0 {
+		return
+	}
+	ops := make([]world.BuildPlanOp, 0, len(plans))
+	seenByPosType := make(map[[3]int32]struct{}, len(plans))
+	for _, p := range plans {
+		if p == nil {
+			continue
+		}
+		op, ok := sanitizePlan(model, p)
+		if !ok {
+			continue
+		}
+		key := [3]int32{op.X, op.Y, 0}
+		if op.Breaking {
+			key[2] = 1
+		}
+		if _, ok := seenByPosType[key]; ok {
+			continue
+		}
+		seenByPosType[key] = struct{}{}
+		ops = append(ops, op)
+	}
+
+	s.mu.Lock()
+	if prev := s.lastByTeam[team]; sameOps(prev, ops) {
+		s.mu.Unlock()
+		return
+	}
+	s.lastByTeam[team] = append(s.lastByTeam[team][:0], ops...)
+	s.lastAtByTeam[team] = time.Now()
+	s.mu.Unlock()
+
+	s.w.ApplyBuildPlanSnapshot(team, ops)
+}
+
 func (s *Service) Tick() int {
 	if s == nil || s.w == nil {
 		return 0

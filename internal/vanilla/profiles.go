@@ -43,40 +43,63 @@ type TurretProfile struct {
 	HitBuildings   bool    `json:"hit_buildings"`
 }
 
+type BlockRequirementProfile struct {
+	Item   string  `json:"item"`
+	ItemID int16   `json:"item_id"`
+	Amount int32   `json:"amount"`
+	Cost   float32 `json:"cost"`
+}
+
+type BlockProfile struct {
+	Name                string                    `json:"name"`
+	BuildCostMultiplier float32                   `json:"build_cost_multiplier"`
+	BuildTimeSec        float32                   `json:"build_time_sec"`
+	Requirements        []BlockRequirementProfile `json:"requirements"`
+}
+
 type ProfilesFile struct {
 	UnitsByName []UnitProfile   `json:"units_by_name"`
 	Turrets     []TurretProfile `json:"turrets"`
+	Blocks      []BlockProfile  `json:"blocks"`
 }
 
-func GenerateProfiles(repoRoot, outPath string) (int, int, error) {
+func GenerateProfiles(repoRoot, outPath string) (int, int, int, error) {
 	unitPath, blocksPath := resolveSourcePaths(repoRoot)
+	itemsPath := filepath.Join(filepath.Dir(unitPath), "Items.java")
 	unitSrc, err := os.ReadFile(unitPath)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	blockSrc, err := os.ReadFile(blocksPath)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
+	}
+	itemSrc, err := os.ReadFile(itemsPath)
+	if err != nil {
+		return 0, 0, 0, err
 	}
 
+	itemsByVar := extractItems(string(itemSrc))
 	units := extractUnits(string(unitSrc))
 	turrets := extractTurrets(string(blockSrc))
+	blocks := extractBlocks(string(blockSrc), itemsByVar)
 	payload := ProfilesFile{
 		UnitsByName: units,
 		Turrets:     turrets,
+		Blocks:      blocks,
 	}
 
 	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	if err := os.WriteFile(outPath, b, 0644); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	return len(units), len(turrets), nil
+	return len(units), len(turrets), len(blocks), nil
 }
 
 func resolveSourcePaths(repoRoot string) (string, string) {
@@ -89,7 +112,9 @@ func resolveSourcePaths(repoRoot string) (string, string) {
 }
 
 var (
+	reItemDecl   = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+Item\s*\(\s*"([^"]+)"`)
 	reUnitDecl   = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+UnitType\("([^"]+)"\)\s*\{\{`)
+	reBlockDecl  = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+[A-Za-z0-9_$.]+\("([^"]+)"\)\s*\{\{`)
 	reTurretDecl = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+([A-Za-z0-9_$.]+)\("([^"]+)"\)\s*\{\{`)
 
 	reRange        = regexp.MustCompile(`(?m)\brange\s*=\s*([^;]+);`)
@@ -104,7 +129,126 @@ var (
 	rePierceCap    = regexp.MustCompile(`(?m)\bpierceCap\s*=\s*([^;]+);`)
 	reWeaponDecl   = regexp.MustCompile(`(?m)new\s+Weapon\([^)]*\)\s*\{\{`)
 	reBulletCtor   = regexp.MustCompile(`(?m)new\s+[A-Za-z0-9_$.]*BulletType\s*\(([^)]*)\)`)
+	reItemCost     = regexp.MustCompile(`(?m)\bcost\s*=\s*([^;]+);`)
+	reBuildCostMul = regexp.MustCompile(`(?m)\bbuildCostMultiplier\s*=\s*([^;]+);`)
+	reBuildTime    = regexp.MustCompile(`(?m)\bbuildTime\s*=\s*([^;]+);`)
+	reReqWith      = regexp.MustCompile(`(?s)requirements\s*\([^;]*?\bwith\s*\((.*?)\)\s*\)\s*;`)
+	reReqItemPair  = regexp.MustCompile(`Items\.(\w+)\s*,\s*([^,\)]+)`)
 )
+
+type itemMeta struct {
+	ID   int16
+	Name string
+	Cost float32
+}
+
+func extractItems(src string) map[string]itemMeta {
+	matches := reItemDecl.FindAllStringSubmatchIndex(src, -1)
+	out := make(map[string]itemMeta, len(matches))
+	var nextID int16
+	for _, m := range matches {
+		varName := strings.TrimSpace(src[m[2]:m[3]])
+		name := strings.ToLower(strings.TrimSpace(src[m[4]:m[5]]))
+		body, ok := "", false
+		if off := strings.Index(src[m[1]:], "{{"); off >= 0 {
+			body, ok = extractInitBody(src, m[1]+off+2)
+		}
+		cost := float32(1.0)
+		if ok {
+			if v, vok := lastValue(body, reItemCost); vok && v > 0 {
+				cost = v
+			}
+		}
+		out[varName] = itemMeta{ID: nextID, Name: name, Cost: cost}
+		nextID++
+	}
+	return out
+}
+
+func extractBlocks(src string, items map[string]itemMeta) []BlockProfile {
+	matches := reBlockDecl.FindAllStringSubmatchIndex(src, -1)
+	out := make([]BlockProfile, 0, len(matches))
+	for _, m := range matches {
+		name := strings.ToLower(strings.TrimSpace(src[m[4]:m[5]]))
+		if name == "" {
+			continue
+		}
+		body, ok := extractInitBody(src, m[1])
+		if !ok {
+			continue
+		}
+		req := parseRequirements(body, items)
+		if len(req) == 0 {
+			continue
+		}
+		mul := float32(1.0)
+		if v, vok := lastValue(body, reBuildCostMul); vok && v > 0 {
+			mul = v
+		}
+		buildTimeSec := float32(0)
+		if v, vok := lastValue(body, reBuildTime); vok && v > 0 {
+			buildTimeSec = (v * mul) / 60.0
+		} else {
+			sum := float32(0)
+			for _, r := range req {
+				sum += float32(r.Amount) * r.Cost
+			}
+			buildTimeSec = (sum * mul) / 60.0
+		}
+		out = append(out, BlockProfile{
+			Name:                name,
+			BuildCostMultiplier: mul,
+			BuildTimeSec:        buildTimeSec,
+			Requirements:        req,
+		})
+	}
+	return out
+}
+
+func parseRequirements(body string, items map[string]itemMeta) []BlockRequirementProfile {
+	ms := reReqWith.FindAllStringSubmatch(body, -1)
+	if len(ms) == 0 {
+		return nil
+	}
+	seen := map[string]int{}
+	out := make([]BlockRequirementProfile, 0, 6)
+	for _, m := range ms {
+		if len(m) < 2 {
+			continue
+		}
+		pairs := reReqItemPair.FindAllStringSubmatch(m[1], -1)
+		for _, p := range pairs {
+			if len(p) < 3 {
+				continue
+			}
+			meta, ok := items[strings.TrimSpace(p[1])]
+			if !ok {
+				continue
+			}
+			v, vok := evalNumericExpr(p[2])
+			if !vok {
+				continue
+			}
+			amount := int32(v + 0.5)
+			if amount <= 0 {
+				continue
+			}
+			key := meta.Name
+			if idx, exists := seen[key]; exists {
+				out[idx].Amount += amount
+				continue
+			}
+			seen[key] = len(out)
+			out = append(out, BlockRequirementProfile{
+				Item:   meta.Name,
+				ItemID: meta.ID,
+				Amount: amount,
+				Cost:   meta.Cost,
+			})
+		}
+	}
+	return out
+}
 
 func extractUnits(src string) []UnitProfile {
 	matches := reUnitDecl.FindAllStringSubmatchIndex(src, -1)
@@ -580,5 +724,5 @@ func (p *numParser) parseFactor() (float64, bool) {
 }
 
 func ExampleUsage() string {
-	return fmt.Sprintf("vanilla gen [out-path], default out: %s", filepath.FromSlash("data/vanilla/profiles.json"))
+	return fmt.Sprintf("vanilla gen [repo-root] [out-path], default out: %s", filepath.FromSlash("data/vanilla/profiles.json"))
 }

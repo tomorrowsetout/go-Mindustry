@@ -14,10 +14,10 @@ func main() {
 	out := flag.String("out", filepath.FromSlash("data/vanilla/profiles.json"), "output profiles file")
 	flag.Parse()
 
-	units, turrets, err := vanilla.GenerateProfiles(*repoRoot, *out)
+	units, turrets, blocks, err := vanilla.GenerateProfiles(*repoRoot, *out)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "generate failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("generated profiles: units_by_name=%d turrets=%d out=%s\n", units, turrets, *out)
+	fmt.Printf("generated profiles: units_by_name=%d turrets=%d blocks=%d out=%s\n", units, turrets, blocks, *out)
 }

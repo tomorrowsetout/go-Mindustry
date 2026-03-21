@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -21,6 +22,8 @@ import (
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/storage"
 )
+
+var globalVerboseNetLog atomic.Bool
 
 type NetEvent struct {
 	Timestamp time.Time
@@ -71,6 +74,11 @@ type Server struct {
 	PlayerUnitTypeFn func() int16
 	// Optional hook: apply client build plans from snapshot.
 	OnBuildPlans func(*Conn, []*protocol.BuildPlan)
+	// Optional hook: apply authoritative plans queue from client snapshots.
+	OnBuildPlanSnapshot func(*Conn, []*protocol.BuildPlan)
+	// Optional hooks: cancel queued build plans from client side.
+	OnDeletePlans      func(*Conn, []int32)
+	OnRemoveQueueBlock func(*Conn, int32, int32, bool)
 	// Respawn delay in "frames" (Mindustry Time.delta units). Defaults to 60 if zero.
 	RespawnDelayFrames float32
 	// Optional hook: spawn player unit in world/state. Uses provided unitID, returns world coords.
@@ -79,8 +87,16 @@ type Server struct {
 	DropUnitFn func(unitID int32)
 	// Optional hook: query unit info from world/state.
 	UnitInfoFn func(unitID int32) (UnitInfo, bool)
+	// Optional hooks: apply client snapshot motion/position into authoritative world state.
+	// If unset, clientSnapshot will only update connection state but will not move entities in the world.
+	SetUnitMotionFn   func(unitID int32, vx, vy, rotVel float32) bool
+	SetUnitPositionFn func(unitID int32, x, y, rotation float32) bool
 	// Optional hook: called once after initial connect/spawn sequence starts.
 	OnPostConnect func(*Conn)
+	// Optional network hooks for external core scheduling.
+	OnConnOpen      func(*Conn)
+	OnConnClose     func(*Conn)
+	OnPacketDecoded func(*Conn, any, error) bool
 
 	StateSnapshotFn func() *protocol.Remote_NetClient_stateSnapshot_35
 	// Appends additional entities into entity snapshot stream.
@@ -94,6 +110,8 @@ type Server struct {
 	entitySnapshotIntervalNs atomic.Int64
 	stateSnapshotIntervalNs  atomic.Int64
 	infoMu                   sync.RWMutex
+	verboseNetLog            atomic.Bool
+	translatedConnLog        atomic.Bool
 
 	// DevLogger 开发者日志（可选）
 	DevLogger *devlog.DevLogger
@@ -131,7 +149,32 @@ func NewServer(addr string, buildVersion int) *Server {
 		RespawnDelayFrames: 60,
 	}
 	s.SetSnapshotIntervals(100, 250)
+	s.verboseNetLog.Store(false)
+	s.translatedConnLog.Store(true)
 	return s
+}
+
+func (s *Server) SetVerboseNetLog(enabled bool) {
+	s.verboseNetLog.Store(enabled)
+	globalVerboseNetLog.Store(enabled)
+}
+
+func (s *Server) VerboseNetLogEnabled() bool {
+	return s.verboseNetLog.Load()
+}
+
+func (s *Server) SetTranslatedConnLog(enabled bool) {
+	s.translatedConnLog.Store(enabled)
+}
+
+func (s *Server) TranslatedConnLogEnabled() bool {
+	return s.translatedConnLog.Load()
+}
+
+func (s *Server) verbosef(format string, args ...any) {
+	if s.verboseNetLog.Load() {
+		fmt.Printf(format, args...)
+	}
 }
 
 func normalizeSyncInterval(ms int, def int) time.Duration {
@@ -215,12 +258,15 @@ func (s *Server) Serve() error {
 		}
 		s.addConn(conn)
 		s.addPending(conn)
+		if s.OnConnOpen != nil {
+			s.OnConnOpen(conn)
+		}
 
 		// 记录详细连接日志
 		if s.DevLogger != nil {
 			s.DevLogger.LogConnection("tcp accepted", conn.id, c.RemoteAddr().String(), "unknown", "")
 		} else {
-			fmt.Printf("[net] tcp accepted remote=%s id=%d\n", c.RemoteAddr().String(), conn.id)
+			s.verbosef("[net] tcp accepted remote=%s id=%d\n", c.RemoteAddr().String(), conn.id)
 		}
 
 		_ = conn.Send(&protocol.RegisterTCP{ConnectionID: conn.id})
@@ -239,12 +285,22 @@ func (s *Server) handleConn(c *Conn) {
 		if c.hasConnected && c.playerID != 0 {
 			s.broadcastPlayerDisconnect(c.playerID, c)
 		}
+		s.logPlayerLeaveCN(c)
+		if s.OnConnClose != nil {
+			s.OnConnClose(c)
+		}
 		c.Close()
 		s.removeConn(c)
 	}()
 
 	for {
 		obj, err := c.ReadObject()
+		if s.OnPacketDecoded != nil && s.OnPacketDecoded(c, obj, err) {
+			if err != nil {
+				return
+			}
+			continue
+		}
 		if err != nil {
 			if !c.hasConnected && c.hasBegunConnecting && strings.Contains(err.Error(), "item stack length") {
 				fmt.Printf("[net] compat ignore early packet id=%d packet_id=%d err=%v\n", c.id, c.lastRecvPacketID, err)
@@ -252,7 +308,7 @@ func (s *Server) handleConn(c *Conn) {
 				continue
 			}
 			if errors.Is(err, io.EOF) || isConnReadClosed(err) {
-				fmt.Printf("[net] tcp closed id=%d remote=%s\n", c.id, c.RemoteAddr().String())
+				s.verbosef("[net] tcp closed id=%d remote=%s\n", c.id, c.RemoteAddr().String())
 				s.emitEvent(c, "tcp_closed", "", err.Error())
 				return
 			}
@@ -263,6 +319,32 @@ func (s *Server) handleConn(c *Conn) {
 		}
 		s.handlePacket(c, obj, true)
 	}
+}
+
+func (s *Server) logPlayerJoinCN(c *Conn) {
+	if c == nil || !s.translatedConnLog.Load() {
+		return
+	}
+	ip, port := c.remoteEndpoint()
+	name := strings.TrimSpace(c.name)
+	if name == "" {
+		name = "未知玩家"
+	}
+	fmt.Printf("[终端] 玩家进入了游戏: 名称=%s UUID=%s connID=%d 登录IP=%s 远程端口=%s\n",
+		name, c.uuid, c.id, ip, port)
+}
+
+func (s *Server) logPlayerLeaveCN(c *Conn) {
+	if c == nil || !s.translatedConnLog.Load() || !c.hasBegunConnecting {
+		return
+	}
+	ip, port := c.remoteEndpoint()
+	name := strings.TrimSpace(c.name)
+	if name == "" {
+		name = "未知玩家"
+	}
+	fmt.Printf("[终端] 玩家退出了游戏: 名称=%s UUID=%s connID=%d 登录IP=%s 远程端口=%s\n",
+		name, c.uuid, c.id, ip, port)
 }
 
 func isConnReadClosed(err error) bool {
@@ -309,6 +391,28 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			if s.OnBuildPlans != nil {
 				if plan, ok := decodeCompatBeginPlace(v.Payload, s.TypeIO); ok {
 					s.OnBuildPlans(c, []*protocol.BuildPlan{plan})
+				}
+			}
+		case 69: // DeletePlansCallPacket
+			if s.OnDeletePlans != nil {
+				if positions, ok := decodeCompatDeletePlans(v.Payload, s.TypeIO); ok && len(positions) > 0 {
+					s.OnDeletePlans(c, positions)
+				}
+			}
+		case 76: // RemoveQueueBlockCallPacket
+			if s.OnRemoveQueueBlock != nil {
+				if x, y, breaking, ok := decodeCompatRemoveQueueBlock(v.Payload, s.TypeIO); ok {
+					s.OnRemoveQueueBlock(c, x, y, breaking)
+				}
+			}
+		case 81: // SendChatMessageCallPacket
+			if msg, ok := decodeCompatChatMessage(v.Payload, s.TypeIO); ok {
+				msg = sanitizeChatMessage(msg)
+				if msg != "" {
+					if s.OnChat != nil && s.OnChat(c, msg) {
+						return
+					}
+					s.broadcastPlayerChat(c, msg)
 				}
 			}
 		case 124, 134: // BeginPlace/TileTapCallPacket / UnitControlCallPacket
@@ -370,7 +474,7 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 				devlog.StringFld("version_type", v.VersionType),
 				devlog.IntFld("mods", len(v.Mods)))
 		} else {
-			fmt.Printf("[net] connect packet id=%d name=%q version=%d type=%q mods=%d\n",
+			s.verbosef("[net] connect packet id=%d name=%q version=%d type=%q mods=%d\n",
 				c.id, v.Name, v.Version, v.VersionType, len(v.Mods))
 		}
 
@@ -455,22 +559,69 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			fmt.Printf("[net] world handshake failed id=%d err=%v\n", c.id, err)
 			return
 		}
-		fmt.Printf("[net] world handshake sent id=%d\n", c.id)
+		s.verbosef("[net] world handshake sent id=%d\n", c.id)
 		s.emitEvent(c, "world_handshake_sent", "", "")
 	case *protocol.Remote_NetServer_connectConfirm_47:
+		wasConnected := c.hasConnected
 		c.hasConnected = true
-		fmt.Printf("[net] connect confirm id=%d\n", c.id)
+		if !wasConnected {
+			s.logPlayerJoinCN(c)
+		}
+		s.verbosef("[net] connect confirm id=%d\n", c.id)
 		s.emitEvent(c, "connect_confirm", fmt.Sprintf("%T", v), "")
 		s.ensurePostConnectStarted(c)
 	case *protocol.Remote_NetServer_clientSnapshot_45:
 		if !c.hasConnected {
 			c.hasConnected = true
-			fmt.Printf("[net] connect confirm via clientSnapshot id=%d\n", c.id)
+			s.logPlayerJoinCN(c)
+			s.verbosef("[net] connect confirm via clientSnapshot id=%d\n", c.id)
 			s.emitEvent(c, "connect_confirm_client_snapshot", fmt.Sprintf("%T", v), "")
 			s.ensurePostConnectStarted(c)
 		}
-		c.snapX = v.X
-		c.snapY = v.Y
+		// Drop out-of-order snapshots.
+		if last := c.lastClientSnapshot.Load(); last >= 0 && v.SnapshotID < last {
+			return
+		}
+		c.lastClientSnapshot.Store(v.SnapshotID)
+
+		nowMs := time.Now().UnixMilli()
+		elapsed := int64(16)
+		if prev := c.lastClientTimeMs.Load(); prev > 0 {
+			elapsed = nowMs - prev
+			if elapsed < 0 {
+				elapsed = 0
+			}
+			if elapsed > 1500 {
+				elapsed = 1500
+			}
+		}
+		c.lastClientTimeMs.Store(nowMs)
+
+		// Sanitize floats (avoid NaN/Inf poisoning).
+		safeF := func(f float32) float32 {
+			if math.IsNaN(float64(f)) || math.IsInf(float64(f), 0) {
+				return 0
+			}
+			return f
+		}
+		v.X = safeF(v.X)
+		v.Y = safeF(v.Y)
+		v.PointerX = safeF(v.PointerX)
+		v.PointerY = safeF(v.PointerY)
+		v.Rotation = safeF(v.Rotation)
+		v.BaseRotation = safeF(v.BaseRotation)
+		v.XVelocity = safeF(v.XVelocity)
+		v.YVelocity = safeF(v.YVelocity)
+		v.ViewX = safeF(v.ViewX)
+		v.ViewY = safeF(v.ViewY)
+		v.ViewWidth = safeF(v.ViewWidth)
+		v.ViewHeight = safeF(v.ViewHeight)
+
+		c.viewX = v.ViewX
+		c.viewY = v.ViewY
+		c.viewWidth = v.ViewWidth
+		c.viewHeight = v.ViewHeight
+
 		c.pointerX = v.PointerX
 		c.pointerY = v.PointerY
 		c.shooting = v.Shooting
@@ -525,14 +676,72 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if prevUnitID != 0 && prevUnitID != c.unitID {
 			s.dropPlayerUnitEntity(c, prevUnitID)
 		}
+
+		// Apply motion/position into authoritative world state when possible.
+		ignorePosition := v.Dead || c.unitID == 0 || (v.UnitID != 0 && v.UnitID != c.unitID)
+		if !ignorePosition {
+			// If the client jumps too far away, correct them back to server position.
+			// Vanilla uses tilesize*14. tilesize=8, so correctDist=112.
+			const correctDist = 112.0
+			var curX, curY float32
+			var hasCur bool
+			if s.UnitInfoFn != nil {
+				if info, ok := s.UnitInfoFn(c.unitID); ok {
+					curX, curY, hasCur = info.X, info.Y, true
+				}
+			}
+			if !hasCur {
+				// Fallback to last known snapshot position.
+				curX, curY, hasCur = c.snapX, c.snapY, true
+			}
+			dx := float64(v.X - curX)
+			dy := float64(v.Y - curY)
+			dist := math.Hypot(dx, dy)
+			if dist > correctDist {
+				_ = c.SendAsync(&protocol.Remote_NetClient_setPosition_29{X: curX, Y: curY})
+				// Keep server-side snap in sync with authoritative position.
+				c.snapX, c.snapY = curX, curY
+			} else {
+				// Non-strict mode: accept client-reported state and apply to world.
+				c.snapX = v.X
+				c.snapY = v.Y
+				if s.SetUnitMotionFn != nil {
+					_ = s.SetUnitMotionFn(c.unitID, v.XVelocity, v.YVelocity, 0)
+				}
+				if s.SetUnitPositionFn != nil {
+					_ = s.SetUnitPositionFn(c.unitID, v.X, v.Y, v.Rotation)
+				}
+			}
+		} else {
+			// When dead or mismatched, keep player coords updated but do not move unit.
+			c.snapX = v.X
+			c.snapY = v.Y
+		}
+
 		c.building = v.Building
 		c.selectedRotation = v.SelectedRotation
 		c.selectedBlockID = -1
 		if v.SelectedBlock != nil {
 			c.selectedBlockID = v.SelectedBlock.ID()
 		}
-		if s.OnBuildPlans != nil {
-			if plans := extractBuildPlans(v.Plans); len(plans) > 0 {
+		// Keep sync entities updated for snapshot stream.
+		if p := s.ensurePlayerEntity(c); p != nil {
+			s.updatePlayerEntity(p, c)
+		}
+		if u := s.ensurePlayerUnitEntity(c); u != nil {
+			u.Shooting = c.shooting
+			u.MineTile = v.Mining
+			u.UpdateBuilding = c.building
+			u.Rotation = v.Rotation
+			u.Vel = protocol.Vec2{X: v.XVelocity, Y: v.YVelocity}
+			// X/Y will be refreshed from world by syncUnitFromWorld if UnitInfoFn is set.
+			u.X = c.snapX
+			u.Y = c.snapY
+		}
+		if plans := extractBuildPlans(v.Plans); len(plans) > 0 {
+			if s.OnBuildPlanSnapshot != nil {
+				s.OnBuildPlanSnapshot(c, plans)
+			} else if s.OnBuildPlans != nil {
 				s.OnBuildPlans(c, plans)
 			}
 		}
@@ -540,6 +749,15 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// Temporary compatibility: some 155 clients misdecode pingResponse call IDs.
 		// Keep connection alive via framework keepalive loop only.
 		_ = v
+	case *protocol.Remote_NetClient_sendChatMessage_16:
+		msg := sanitizeChatMessage(v.Message)
+		if msg == "" {
+			return
+		}
+		if s.OnChat != nil && s.OnChat(c, msg) {
+			return
+		}
+		s.broadcastPlayerChat(c, msg)
 	case *protocol.Remote_Units_unitSpawn_48:
 		// Handle unit spawn from server (unit from WorldStream)
 		// This is called when a unit is spawned on the server and needs to be synced to clients
@@ -690,6 +908,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 69, "Remote_InputHandler_deletePlans_69", "delete_plans")
 		}
+		if s.OnDeletePlans != nil && len(v.Positions) > 0 {
+			s.OnDeletePlans(c, v.Positions)
+		}
 	case *protocol.Remote_InputHandler_commandUnits_70:
 		// 指挥多个单位
 		if s.DevLogger != nil {
@@ -724,6 +945,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// 从队列中移除方块
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 76, "Remote_InputHandler_removeQueueBlock_76", fmt.Sprintf("remove_queue(x=%d y=%d breaking=%v)", v.X, v.Y, v.Breaking))
+		}
+		if s.OnRemoveQueueBlock != nil {
+			s.OnRemoveQueueBlock(c, v.X, v.Y, v.Breaking)
 		}
 	case *protocol.Remote_InputHandler_requestUnitPayload_77:
 		// 请求单位载荷
@@ -768,8 +992,8 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 	case *protocol.Remote_NetServer_requestDebugStatus_36:
 		resp := &protocol.Remote_NetServer_debugStatusClient_37{
 			Value:              0,
-			LastClientSnapshot: 0,
-			SnapshotsSent:      0,
+			LastClientSnapshot: c.lastClientSnapshot.Load(),
+			SnapshotsSent:      c.snapshotsSent.Load(),
 		}
 		_ = c.Send(resp)
 	case *protocol.Remote_Build_beginBreak_123:
@@ -1198,8 +1422,7 @@ func extractBuildPlans(v any) []*protocol.BuildPlan {
 
 func decodeCompatBeginBreak(payload []byte, ctx *protocol.TypeIOContext) (*protocol.BuildPlan, bool) {
 	r := protocol.NewReaderWithContext(payload, ctx)
-	// beginBreak starts with unit object in call payload.
-	if _, err := protocol.ReadObject(r, false, ctx); err != nil {
+	if _, err := protocol.ReadUnit(r, ctx); err != nil {
 		return nil, false
 	}
 	if _, err := protocol.ReadTeam(r, ctx); err != nil {
@@ -1222,8 +1445,7 @@ func decodeCompatBeginBreak(payload []byte, ctx *protocol.TypeIOContext) (*proto
 
 func decodeCompatBeginPlace(payload []byte, ctx *protocol.TypeIOContext) (*protocol.BuildPlan, bool) {
 	r := protocol.NewReaderWithContext(payload, ctx)
-	// beginPlace starts with unit object in call payload.
-	if _, err := protocol.ReadObject(r, false, ctx); err != nil {
+	if _, err := protocol.ReadUnit(r, ctx); err != nil {
 		return nil, false
 	}
 	block, err := protocol.ReadBlock(r, ctx)
@@ -1258,6 +1480,50 @@ func decodeCompatBeginPlace(payload []byte, ctx *protocol.TypeIOContext) (*proto
 	}, true
 }
 
+func decodeCompatDeletePlans(payload []byte, ctx *protocol.TypeIOContext) ([]int32, bool) {
+	r := protocol.NewReaderWithContext(payload, ctx)
+	positions, err := protocol.ReadInts(r)
+	if err != nil {
+		return nil, false
+	}
+	return positions, true
+}
+
+func decodeCompatRemoveQueueBlock(payload []byte, ctx *protocol.TypeIOContext) (int32, int32, bool, bool) {
+	r := protocol.NewReaderWithContext(payload, ctx)
+	x, err := r.ReadInt32()
+	if err != nil {
+		return 0, 0, false, false
+	}
+	y, err := r.ReadInt32()
+	if err != nil {
+		return 0, 0, false, false
+	}
+	breaking, err := r.ReadBool()
+	if err != nil {
+		return 0, 0, false, false
+	}
+	return x, y, breaking, true
+}
+
+func decodeCompatChatMessage(payload []byte, ctx *protocol.TypeIOContext) (string, bool) {
+	r := protocol.NewReaderWithContext(payload, ctx)
+	if _, err := protocol.ReadEntity(r, ctx); err != nil {
+		// Some clients encode compat chat as plain string without leading entity.
+		r2 := protocol.NewReaderWithContext(payload, ctx)
+		msg2, err2 := protocol.ReadString(r2)
+		if err2 != nil || msg2 == nil {
+			return "", false
+		}
+		return *msg2, true
+	}
+	msg, err := protocol.ReadString(r)
+	if err != nil || msg == nil {
+		return "", false
+	}
+	return *msg, true
+}
+
 func sanitizeChatMessage(s string) string {
 	s = strings.ReplaceAll(s, "\n", "")
 	s = strings.ReplaceAll(s, "\r", "")
@@ -1290,6 +1556,37 @@ func (s *Server) broadcastSimpleMessage(message string) {
 
 	for _, peer := range peers {
 		_ = peer.SendAsync(&protocol.Remote_NetClient_sendMessage_15{Message: message})
+	}
+}
+
+func (s *Server) broadcastPlayerChat(sender *Conn, message string) {
+	if sender == nil {
+		return
+	}
+	message = sanitizeChatMessage(message)
+	if message == "" {
+		return
+	}
+	if sender.playerID == 0 {
+		// Fallback for unexpected state.
+		s.broadcastSimpleMessage(formatChatName(sender.name) + message)
+		return
+	}
+	s.mu.Lock()
+	peers := make([]*Conn, 0, len(s.conns))
+	for c := range s.conns {
+		peers = append(peers, c)
+	}
+	s.mu.Unlock()
+	player := &protocol.EntityBox{IDValue: sender.playerID}
+	formatted := formatChatName(sender.name) + message
+	for _, peer := range peers {
+		// Send both forms for client compatibility.
+		_ = peer.SendAsync(&protocol.Remote_NetClient_sendChatMessage_16{
+			Player:  player,
+			Message: message,
+		})
+		_ = peer.SendAsync(&protocol.Remote_NetClient_sendMessage_15{Message: formatted})
 	}
 }
 
@@ -1428,6 +1725,13 @@ type Conn struct {
 	building            bool
 	selectedBlockID     int16
 	selectedRotation    int32
+	viewX               float32
+	viewY               float32
+	viewWidth           float32
+	viewHeight          float32
+	lastClientSnapshot  atomic.Int32
+	lastClientTimeMs    atomic.Int64
+	snapshotsSent       atomic.Int32
 	lastRecvPacketID    int
 	lastRecvFrameworkID int
 	closed              chan struct{}
@@ -1475,6 +1779,7 @@ func NewConn(c net.Conn, serial *Serializer) *Conn {
 		byTypeSent:          make(map[string]int64),
 		byTypeBytes:         make(map[string]int64),
 	}
+	conn.lastClientSnapshot.Store(-1)
 	go conn.sendLoop()
 	return conn
 }
@@ -1579,7 +1884,7 @@ func (c *Conn) sendNow(obj any) error {
 		}
 	}
 	// Keep per-packet logs off by default to avoid log flood.
-	if packetID >= 0 && c.sendCount.Load() < 40 {
+	if packetID >= 0 && c.sendCount.Load() < 40 && globalVerboseNetLog.Load() {
 		fmt.Printf("[net] tx id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 	}
 	if len(payload) > 0xFFFF {
@@ -1658,8 +1963,16 @@ func (c *Conn) PlayerID() int32 {
 	return c.playerID
 }
 
+func (c *Conn) UnitID() int32 {
+	return c.unitID
+}
+
 func (c *Conn) UUID() string {
 	return c.uuid
+}
+
+func (c *Conn) Name() string {
+	return c.name
 }
 
 func (c *Conn) VersionType() string {
@@ -1778,6 +2091,17 @@ func (c *Conn) remoteIP() string {
 	return host
 }
 
+func (c *Conn) remoteEndpoint() (string, string) {
+	if c == nil || c.Conn == nil || c.Conn.RemoteAddr() == nil {
+		return "", ""
+	}
+	host, port, err := net.SplitHostPort(c.Conn.RemoteAddr().String())
+	if err != nil {
+		return c.Conn.RemoteAddr().String(), ""
+	}
+	return host, port
+}
+
 func (s *Server) addPending(c *Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1853,7 +2177,7 @@ func (s *Server) serveUDP(conn *net.UDPConn) {
 				if err := s.sendUDPRegisterAck(addr, v.ConnectionID); err != nil {
 					fmt.Printf("[net] udp register ack failed remote=%s id=%d err=%v\n", addr.String(), c.id, err)
 				}
-				fmt.Printf("[net] udp registered remote=%s id=%d\n", addr.String(), c.id)
+				s.verbosef("[net] udp registered remote=%s id=%d\n", addr.String(), c.id)
 			}
 			s.mu.Unlock()
 			// ArcNet clients treat this TCP framework message as UDP registration completion.
@@ -2040,6 +2364,7 @@ func (s *Server) postConnectLoop(c *Conn) {
 				s.emitEvent(c, "state_snapshot_send_failed", "*protocol.Remote_NetClient_stateSnapshot_35", err.Error())
 				return
 			}
+			c.snapshotsSent.Add(1)
 		case <-entityTicker.C:
 			amount, data, err := s.buildPlayerEntitySnapshot()
 			if err != nil {
@@ -2053,6 +2378,7 @@ func (s *Server) postConnectLoop(c *Conn) {
 				s.emitEvent(c, "entity_snapshot_send_failed", "*protocol.Remote_NetClient_entitySnapshot_32", err.Error())
 				return
 			}
+			c.snapshotsSent.Add(1)
 		case <-keepAliveTicker.C:
 			if err := c.SendAsync(&protocol.KeepAlive{}); err != nil {
 				fmt.Printf("[net] keepalive send failed id=%d err=%v\n", c.id, err)
@@ -2103,7 +2429,7 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 				return err
 			}
 			if packetID >= 0 && c.sendCount.Load() < 80 {
-				fmt.Printf("[net] tx-udp id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
+				s.verbosef("[net] tx-udp id=%d packet_id=%d type=%T len=%d sendCompat=%v recvCompat=%v\n", c.id, packetID, obj, len(payload), c.sendCompatIDs, c.recvCompatIDs)
 			}
 			retries := s.UdpRetryCount
 			delay := s.UdpRetryDelay

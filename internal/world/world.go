@@ -2,6 +2,7 @@ package world
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/rand"
 	"os"
@@ -64,10 +65,14 @@ type World struct {
 	unitMountCDs     map[int32][]float32
 	unitTargets      map[int32]targetTrackState
 	teamItems        map[TeamID]map[ItemID]int32
+	teamBuilderSpeed map[TeamID]float32
+	nextPlanOrder    uint64
 
 	unitProfilesByType     map[int16]weaponProfile
 	unitProfilesByName     map[string]weaponProfile
 	buildingProfilesByName map[string]buildingWeaponProfile
+	blockCostsByName       map[string][]ItemStack
+	blockBuildTimesByName  map[string]float32
 }
 
 type BuildPlanOp struct {
@@ -89,21 +94,24 @@ type BuildSyncState struct {
 }
 
 type pendingBuildState struct {
-	Team     TeamID
-	BlockID  int16
-	Rotation int8
-	Progress float32
+	Team         TeamID
+	BlockID      int16
+	Rotation     int8
+	QueueOrder   uint64
+	Progress     float32
 	VisualPlaced bool
 	LastHP       float32
 }
 
 type pendingBreakState struct {
-	Team       TeamID
-	BlockID    int16
-	Rotation   int8
-	Progress   float32
-	MaxHealth  float32
-	LastHP     float32
+	Team        TeamID
+	BlockID     int16
+	Rotation    int8
+	QueueOrder  uint64
+	VisualStart bool
+	Progress    float32
+	MaxHealth   float32
+	LastHP      float32
 }
 
 type factoryState struct {
@@ -114,27 +122,36 @@ type factoryState struct {
 type EntityEventKind string
 
 const (
-	EntityEventRemoved        EntityEventKind = "removed"
-	EntityEventBuildPlaced    EntityEventKind = "build_placed"
-	EntityEventBuildDestroyed EntityEventKind = "build_destroyed"
-	EntityEventBuildHealth    EntityEventKind = "build_health"
-	EntityEventBulletFired    EntityEventKind = "bullet_fired"
+	EntityEventRemoved             EntityEventKind = "removed"
+	EntityEventBuildPlaced         EntityEventKind = "build_placed"
+	EntityEventBuildConstructed    EntityEventKind = "build_constructed"
+	EntityEventBuildDeconstructing EntityEventKind = "build_deconstructing"
+	EntityEventBuildDestroyed      EntityEventKind = "build_destroyed"
+	EntityEventBuildHealth         EntityEventKind = "build_health"
+	EntityEventTeamItems           EntityEventKind = "team_items"
+	EntityEventBulletFired         EntityEventKind = "bullet_fired"
 )
 
 type EntityEvent struct {
-	Kind       EntityEventKind
-	Entity     RawEntity
+	Kind   EntityEventKind
+	Entity RawEntity
 	// BuildPos is packed tile position (Point2), not linear tile index.
 	BuildPos   int32
 	BuildTeam  TeamID
 	BuildBlock int16
 	BuildRot   int8
 	BuildHP    float32
+	ItemID     ItemID
+	ItemAmount int32
 	Bullet     BulletEvent
 }
 
 func packTilePos(x, y int) int32 {
 	return (int32(x)&0xFFFF)<<16 | (int32(y) & 0xFFFF)
+}
+
+func unpackTilePos(pos int32) (int, int) {
+	return int(uint16((pos >> 16) & 0xFFFF)), int(uint16(pos & 0xFFFF))
 }
 
 type BulletEvent struct {
@@ -260,6 +277,21 @@ type vanillaProfilesFile struct {
 	Units       []vanillaUnitProfile   `json:"units"`
 	UnitsByName []vanillaUnitProfile   `json:"units_by_name"`
 	Turrets     []vanillaTurretProfile `json:"turrets"`
+	Blocks      []vanillaBlockProfile  `json:"blocks"`
+}
+
+type vanillaBlockRequirement struct {
+	Item   string  `json:"item"`
+	ItemID int16   `json:"item_id"`
+	Amount int32   `json:"amount"`
+	Cost   float32 `json:"cost"`
+}
+
+type vanillaBlockProfile struct {
+	Name                string                    `json:"name"`
+	BuildCostMultiplier float32                   `json:"build_cost_multiplier"`
+	BuildTimeSec        float32                   `json:"build_time_sec"`
+	Requirements        []vanillaBlockRequirement `json:"requirements"`
 }
 
 type vanillaUnitProfile struct {
@@ -461,9 +493,12 @@ func New(cfg Config) *World {
 		unitMountCDs:           map[int32][]float32{},
 		unitTargets:            map[int32]targetTrackState{},
 		teamItems:              map[TeamID]map[ItemID]int32{},
+		teamBuilderSpeed:       map[TeamID]float32{1: 0.5},
 		unitProfilesByType:     cloneUnitWeaponProfiles(weaponProfilesByType),
 		unitProfilesByName:     map[string]weaponProfile{},
 		buildingProfilesByName: cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
+		blockCostsByName:       map[string][]ItemStack{},
+		blockBuildTimesByName:  map[string]float32{},
 		rulesMgr:               NewRulesManager(nil),
 		wavesMgr:               NewWaveManager(nil),
 	}
@@ -562,6 +597,7 @@ func (w *World) SetModel(m *WorldModel) {
 	w.unitMountCDs = map[int32][]float32{}
 	w.unitTargets = map[int32]targetTrackState{}
 	w.teamItems = map[TeamID]map[ItemID]int32{}
+	w.nextPlanOrder = 0
 	w.blockNamesByID = nil
 	w.unitNamesByID = nil
 	w.unitTypeDefsByID = nil
@@ -603,13 +639,40 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 	if dt <= 0 {
 		return
 	}
-	// Keep construction visibly asynchronous without stalling gameplay.
-	rules := w.rulesMgr.Get()
-	progressPerSec := float32(1.0)
-	if rules != nil && rules.BuildSpeedMultiplier > 0 {
-		progressPerSec *= rules.BuildSpeedMultiplier
-	}
+	activePosByTeam := make(map[TeamID]int32, len(w.pendingBuilds))
+	activeOrderByTeam := make(map[TeamID]uint64, len(w.pendingBuilds))
 	for pos, st := range w.pendingBuilds {
+		if st.Team == 0 {
+			continue
+		}
+		if st.QueueOrder == 0 {
+			w.nextPlanOrder++
+			st.QueueOrder = w.nextPlanOrder
+			w.pendingBuilds[pos] = st
+		}
+		if curOrder, ok := activeOrderByTeam[st.Team]; !ok || st.QueueOrder < curOrder {
+			activeOrderByTeam[st.Team] = st.QueueOrder
+			activePosByTeam[st.Team] = pos
+		}
+	}
+	earliestBreakByTeam := make(map[TeamID]uint64, len(w.pendingBreaks))
+	for _, st := range w.pendingBreaks {
+		if st.Team == 0 {
+			continue
+		}
+		if cur, ok := earliestBreakByTeam[st.Team]; !ok || st.QueueOrder < cur {
+			earliestBreakByTeam[st.Team] = st.QueueOrder
+		}
+	}
+	rules := w.rulesMgr.Get()
+	for team, pos := range activePosByTeam {
+		st, ok := w.pendingBuilds[pos]
+		if !ok {
+			continue
+		}
+		if breakOrder, ok := earliestBreakByTeam[team]; ok && breakOrder < st.QueueOrder {
+			continue
+		}
 		x := int(pos % int32(w.model.Width))
 		y := int(pos / int32(w.model.Width))
 		if !w.model.InBounds(x, y) {
@@ -637,12 +700,13 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 				BuildHP:  st.LastHP,
 			})
 		}
-		st.Progress += dt * progressPerSec
+		buildDuration := w.buildDurationSecondsForTeam(st.BlockID, st.Team, rules)
+		st.Progress += dt / buildDuration
 		hpNow := float32(1000) * clampf(st.Progress, 0, 1)
 		if hpNow < 1 {
 			hpNow = 1
 		}
-		if hpNow-st.LastHP >= 120 {
+		if hpNow-st.LastHP >= 25 || st.Progress >= 1 {
 			st.LastHP = hpNow
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
@@ -671,9 +735,11 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			BuildPos: packTilePos(tile.X, tile.Y),
 			BuildHP:  tile.Build.Health,
 		}, EntityEvent{
-			Kind:     EntityEventBuildHealth,
-			BuildPos: packTilePos(tile.X, tile.Y),
-			BuildHP:  tile.Build.Health,
+			Kind:       EntityEventBuildConstructed,
+			BuildPos:   packTilePos(tile.X, tile.Y),
+			BuildTeam:  st.Team,
+			BuildBlock: st.BlockID,
+			BuildRot:   st.Rotation,
 		})
 		delete(w.pendingBuilds, pos)
 	}
@@ -687,13 +753,40 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 	if dt <= 0 {
 		return
 	}
-	rules := w.rulesMgr.Get()
-	progressPerSec := float32(1.0)
-	if rules != nil && rules.BuildSpeedMultiplier > 0 {
-		progressPerSec *= rules.BuildSpeedMultiplier
-	}
-	progressPerSec *= 2.5
+	activePosByTeam := make(map[TeamID]int32, len(w.pendingBreaks))
+	activeOrderByTeam := make(map[TeamID]uint64, len(w.pendingBreaks))
 	for pos, st := range w.pendingBreaks {
+		if st.Team == 0 {
+			continue
+		}
+		if st.QueueOrder == 0 {
+			w.nextPlanOrder++
+			st.QueueOrder = w.nextPlanOrder
+			w.pendingBreaks[pos] = st
+		}
+		if curOrder, ok := activeOrderByTeam[st.Team]; !ok || st.QueueOrder < curOrder {
+			activeOrderByTeam[st.Team] = st.QueueOrder
+			activePosByTeam[st.Team] = pos
+		}
+	}
+	earliestBuildByTeam := make(map[TeamID]uint64, len(w.pendingBuilds))
+	for _, st := range w.pendingBuilds {
+		if st.Team == 0 {
+			continue
+		}
+		if cur, ok := earliestBuildByTeam[st.Team]; !ok || st.QueueOrder < cur {
+			earliestBuildByTeam[st.Team] = st.QueueOrder
+		}
+	}
+	rules := w.rulesMgr.Get()
+	for team, pos := range activePosByTeam {
+		st, ok := w.pendingBreaks[pos]
+		if !ok {
+			continue
+		}
+		if buildOrder, ok := earliestBuildByTeam[team]; ok && buildOrder < st.QueueOrder {
+			continue
+		}
 		x := int(pos % int32(w.model.Width))
 		y := int(pos / int32(w.model.Width))
 		if !w.model.InBounds(x, y) {
@@ -705,12 +798,29 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 			delete(w.pendingBreaks, pos)
 			continue
 		}
-		st.Progress += dt * progressPerSec
+		breakDuration := w.buildDurationSecondsForTeam(st.BlockID, st.Team, rules)
+		if breakDuration < 0.6 {
+			breakDuration = 0.6
+		}
+		if !st.VisualStart {
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildDeconstructing,
+				BuildPos:   packTilePos(tile.X, tile.Y),
+				BuildTeam:  st.Team,
+				BuildBlock: st.BlockID,
+				BuildRot:   st.Rotation,
+			})
+			st.VisualStart = true
+		}
+		st.Progress += dt / breakDuration
 		hpNow := st.MaxHealth * (1 - clampf(st.Progress, 0, 1))
 		if hpNow < 1 && st.Progress < 1 {
 			hpNow = 1
 		}
-		if st.LastHP-hpNow >= 140 || st.Progress >= 1 {
+		if tile.Build != nil {
+			tile.Build.Health = hpNow
+		}
+		if st.LastHP-hpNow >= 25 || st.Progress >= 1 {
 			st.LastHP = hpNow
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
@@ -724,15 +834,22 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 		}
 		w.refundDeconstructCost(tile, st.Team)
 		teamOld := tile.Team
+		if tile.Build != nil && tile.Build.Team != 0 {
+			teamOld = tile.Build.Team
+		}
+		if teamOld == 0 {
+			teamOld = st.Team
+		}
 		tile.Build = nil
 		tile.Block = 0
 		tile.Team = 0
 		tile.Rotation = 0
 		delete(w.buildStates, pos)
 		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:      EntityEventBuildDestroyed,
-			BuildPos:  packTilePos(tile.X, tile.Y),
-			BuildTeam: teamOld,
+			Kind:       EntityEventBuildDestroyed,
+			BuildPos:   packTilePos(tile.X, tile.Y),
+			BuildTeam:  teamOld,
+			BuildBlock: st.BlockID,
 		})
 		delete(w.pendingBreaks, pos)
 	}
@@ -853,6 +970,38 @@ func (w *World) LoadVanillaProfiles(path string) error {
 			base[name] = p
 		}
 		w.buildingProfilesByName = base
+	}
+	if len(payload.Blocks) > 0 {
+		costs := make(map[string][]ItemStack, len(payload.Blocks))
+		times := make(map[string]float32, len(payload.Blocks))
+		for _, b := range payload.Blocks {
+			name := strings.ToLower(strings.TrimSpace(b.Name))
+			if name == "" {
+				continue
+			}
+			if b.BuildTimeSec > 0 {
+				times[name] = b.BuildTimeSec
+			}
+			if len(b.Requirements) == 0 {
+				continue
+			}
+			items := make([]ItemStack, 0, len(b.Requirements))
+			for _, r := range b.Requirements {
+				if r.Amount <= 0 || r.ItemID < 0 {
+					continue
+				}
+				items = append(items, ItemStack{Item: ItemID(r.ItemID), Amount: r.Amount})
+			}
+			if len(items) > 0 {
+				costs[name] = items
+			}
+		}
+		if len(costs) > 0 {
+			w.blockCostsByName = costs
+		}
+		if len(times) > 0 {
+			w.blockBuildTimesByName = times
+		}
 	}
 	return nil
 }
@@ -1070,6 +1219,67 @@ func (w *World) TeamItems(team TeamID) map[ItemID]int32 {
 	return out
 }
 
+func unitBuildSpeedByName(name string) float32 {
+	switch normalizeUnitName(name) {
+	case "alpha":
+		return 0.5
+	case "beta":
+		return 0.75
+	case "gamma":
+		return 1.0
+	case "evoke":
+		return 1.2
+	case "incite":
+		return 1.4
+	case "emanate":
+		return 1.5
+	default:
+		return 0.5
+	}
+}
+
+func (w *World) BuilderSpeedForUnitType(typeID int16) float32 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.unitNamesByID == nil {
+		return 0.5
+	}
+	name := w.unitNamesByID[typeID]
+	return unitBuildSpeedByName(name)
+}
+
+func (w *World) SetTeamBuilderSpeed(team TeamID, speed float32) {
+	if team == 0 || speed <= 0 {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.teamBuilderSpeed == nil {
+		w.teamBuilderSpeed = make(map[TeamID]float32)
+	}
+	w.teamBuilderSpeed[team] = speed
+}
+
+func (w *World) TeamCorePositions(team TeamID) []int32 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.model == nil || team == 0 {
+		return nil
+	}
+	out := make([]int32, 0, 4)
+	for i := range w.model.Tiles {
+		t := &w.model.Tiles[i]
+		if t.Team != team || t.Block <= 0 {
+			continue
+		}
+		name := w.blockNameByID(int16(t.Block))
+		if strings.Contains(name, "core-") {
+			out = append(out, packTilePos(t.X, t.Y))
+		}
+	}
+	return out
+}
+
 func (w *World) BuildSyncSnapshot() []BuildSyncState {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -1102,8 +1312,7 @@ func (w *World) BuildSyncSnapshot() []BuildSyncState {
 	return out
 }
 
-// ApplyBuildPlans applies simplified build/break operations from client plans.
-// It updates server world state and returns changed tile positions.
+// ApplyBuildPlans applies incremental build/break operations from client packets.
 func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -1112,7 +1321,33 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 	}
 	changed := make([]int32, 0, len(ops))
 	seen := make(map[int32]struct{}, len(ops))
+	addChanged := func(pos int32) {
+		if _, ok := seen[pos]; ok {
+			return
+		}
+		seen[pos] = struct{}{}
+		changed = append(changed, pos)
+	}
+	for _, op := range ops {
+		if !w.model.InBounds(int(op.X), int(op.Y)) {
+			continue
+		}
+		w.nextPlanOrder++
+		w.applyBuildPlanOpLocked(team, op, w.nextPlanOrder, addChanged)
+	}
+	return changed
+}
 
+// ApplyBuildPlanSnapshot reconciles one team's queue with authoritative snapshot plans.
+// This matches vanilla queue semantics: absent plans are removed, present plans are ordered.
+func (w *World) ApplyBuildPlanSnapshot(team TeamID, ops []BuildPlanOp) []int32 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil {
+		return nil
+	}
+	changed := make([]int32, 0, len(ops))
+	seen := make(map[int32]struct{}, len(ops))
 	addChanged := func(pos int32) {
 		if _, ok := seen[pos]; ok {
 			return
@@ -1121,61 +1356,208 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 		changed = append(changed, pos)
 	}
 
+	ordered := make([]BuildPlanOp, 0, len(ops))
+	wantBuild := make(map[int32]struct{}, len(ops))
+	wantBreak := make(map[int32]struct{}, len(ops))
 	for _, op := range ops {
 		if !w.model.InBounds(int(op.X), int(op.Y)) {
 			continue
 		}
-		tile, err := w.model.TileAt(int(op.X), int(op.Y))
-		if err != nil || tile == nil {
-			continue
-		}
-		pos := int32(tile.Y*w.model.Width + tile.X)
+		pos := int32(int(op.Y)*w.model.Width + int(op.X))
 		if op.Breaking {
-			delete(w.pendingBuilds, pos)
-			delete(w.factoryStates, pos)
-			if tile.Build != nil || tile.Block != 0 {
-				maxHP := float32(1000)
-				if tile.Build != nil && tile.Build.Health > 0 {
-					maxHP = tile.Build.Health
-				}
-				w.pendingBreaks[pos] = pendingBreakState{
-					Team:      team,
-					BlockID:   int16(tile.Block),
-					Rotation:  tile.Rotation,
-					Progress:  0,
-					MaxHealth: maxHP,
-					LastHP:    maxHP,
-				}
-				addChanged(pos)
+			if _, ok := wantBreak[pos]; ok {
+				continue
 			}
+			wantBreak[pos] = struct{}{}
+			ordered = append(ordered, BuildPlanOp{
+				Breaking: true,
+				X:        op.X,
+				Y:        op.Y,
+			})
 			continue
 		}
 		if op.BlockID <= 0 {
 			continue
 		}
-		// Skip idempotent placements to avoid event spam and packet floods.
-		if pending, ok := w.pendingBuilds[pos]; ok &&
-			pending.BlockID == op.BlockID &&
-			pending.Team == team &&
-			pending.Rotation == op.Rotation {
+		if _, ok := wantBuild[pos]; ok {
 			continue
 		}
-		if tile.Block == BlockID(op.BlockID) && tile.Team == team && tile.Rotation == op.Rotation && tile.Build != nil {
-			continue
-		}
-		if !w.consumeBuildCost(team, op.BlockID) {
-			continue
-		}
-		w.pendingBuilds[pos] = pendingBuildState{
-			Team:     team,
-			BlockID:  op.BlockID,
-			Rotation: op.Rotation,
-			Progress: 0,
-		}
-		delete(w.pendingBreaks, pos)
-		addChanged(pos)
+		wantBuild[pos] = struct{}{}
+		ordered = append(ordered, op)
+	}
+
+	_ = wantBuild
+	_ = wantBreak
+
+	for i, op := range ordered {
+		w.applyBuildPlanOpLocked(team, op, uint64(i+1), addChanged)
 	}
 	return changed
+}
+
+func (w *World) applyBuildPlanOpLocked(team TeamID, op BuildPlanOp, queueOrder uint64, addChanged func(int32)) {
+	if w.model == nil || !w.model.InBounds(int(op.X), int(op.Y)) {
+		return
+	}
+	tile, err := w.model.TileAt(int(op.X), int(op.Y))
+	if err != nil || tile == nil {
+		return
+	}
+	pos := int32(tile.Y*w.model.Width + tile.X)
+
+	if op.Breaking {
+		if st, ok := w.pendingBuilds[pos]; ok {
+			delete(w.pendingBuilds, pos)
+			w.refundBuildCost(st.Team, st.BlockID, 1.0)
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildDestroyed,
+				BuildPos:   packTilePos(tile.X, tile.Y),
+				BuildTeam:  st.Team,
+				BuildBlock: st.BlockID,
+			})
+			addChanged(pos)
+		}
+		delete(w.factoryStates, pos)
+		if st, ok := w.pendingBreaks[pos]; ok {
+			if st.BlockID == int16(tile.Block) {
+				st.QueueOrder = queueOrder
+				w.pendingBreaks[pos] = st
+				return
+			}
+		}
+		if tile.Build == nil && tile.Block == 0 {
+			delete(w.pendingBreaks, pos)
+			return
+		}
+		maxHP := float32(1000)
+		if tile.Build != nil && tile.Build.Health > 0 {
+			maxHP = tile.Build.Health
+		}
+		w.pendingBreaks[pos] = pendingBreakState{
+			Team:        team,
+			BlockID:     int16(tile.Block),
+			Rotation:    tile.Rotation,
+			QueueOrder:  queueOrder,
+			VisualStart: false,
+			Progress:    0,
+			MaxHealth:   maxHP,
+			LastHP:      maxHP,
+		}
+		addChanged(pos)
+		return
+	}
+
+	if op.BlockID <= 0 {
+		return
+	}
+	if pending, ok := w.pendingBuilds[pos]; ok {
+		if pending.BlockID == op.BlockID && pending.Team == team && pending.Rotation == op.Rotation {
+			pending.QueueOrder = queueOrder
+			w.pendingBuilds[pos] = pending
+			return
+		}
+		w.refundBuildCost(pending.Team, pending.BlockID, 1.0)
+	}
+	if tile.Block == BlockID(op.BlockID) && tile.Team == team && tile.Rotation == op.Rotation && tile.Build != nil {
+		delete(w.pendingBreaks, pos)
+		delete(w.pendingBuilds, pos)
+		return
+	}
+	if !w.consumeBuildCost(team, op.BlockID) {
+		fmt.Printf("[buildtrace] reject plan xy=(%d,%d) block=%d team=%d reason=insufficient_items\n", tile.X, tile.Y, op.BlockID, team)
+		return
+	}
+	w.pendingBuilds[pos] = pendingBuildState{
+		Team:       team,
+		BlockID:    op.BlockID,
+		Rotation:   op.Rotation,
+		QueueOrder: queueOrder,
+		Progress:   0,
+	}
+	delete(w.pendingBreaks, pos)
+	addChanged(pos)
+}
+
+func (w *World) CancelBuildPlansPacked(positions []int32) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil || len(positions) == 0 {
+		return
+	}
+	for _, packed := range positions {
+		x, y := unpackTilePos(packed)
+		if !w.model.InBounds(x, y) {
+			continue
+		}
+		pos := int32(y*w.model.Width + x)
+		if st, ok := w.pendingBuilds[pos]; ok {
+			delete(w.pendingBuilds, pos)
+			w.refundBuildCost(st.Team, st.BlockID, 1.0)
+			// Ensure client-side construct ghost is cleared when queue cancellation happens mid-build.
+			w.entityEvents = append(w.entityEvents, EntityEvent{
+				Kind:       EntityEventBuildDestroyed,
+				BuildPos:   packTilePos(x, y),
+				BuildTeam:  st.Team,
+				BuildBlock: st.BlockID,
+			})
+		}
+		delete(w.pendingBreaks, pos)
+	}
+}
+
+func (w *World) CancelBuildAt(x, y int32, breaking bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil || !w.model.InBounds(int(x), int(y)) {
+		return
+	}
+	pos := int32(int(y)*w.model.Width + int(x))
+	if breaking {
+		delete(w.pendingBreaks, pos)
+		return
+	}
+	if st, ok := w.pendingBuilds[pos]; ok {
+		delete(w.pendingBuilds, pos)
+		w.refundBuildCost(st.Team, st.BlockID, 1.0)
+		// Ensure client-side construct ghost is cleared when queue cancellation happens mid-build.
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:       EntityEventBuildDestroyed,
+			BuildPos:   packTilePos(int(x), int(y)),
+			BuildTeam:  st.Team,
+			BuildBlock: st.BlockID,
+		})
+	}
+}
+
+func (w *World) CancelBuildPlansByTeam(team TeamID) {
+	if team == 0 {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil {
+		return
+	}
+	for pos, st := range w.pendingBuilds {
+		if st.Team != team {
+			continue
+		}
+		delete(w.pendingBuilds, pos)
+		w.refundBuildCost(st.Team, st.BlockID, 1.0)
+		x := int(pos % int32(w.model.Width))
+		y := int(pos / int32(w.model.Width))
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:       EntityEventBuildDestroyed,
+			BuildPos:   packTilePos(x, y),
+			BuildTeam:  st.Team,
+			BuildBlock: st.BlockID,
+		})
+	}
+	for pos, st := range w.pendingBreaks {
+		if st.Team == team {
+			delete(w.pendingBreaks, pos)
+		}
+	}
 }
 
 func (w *World) SetEntityMotion(id int32, vx, vy, rotVel float32) (RawEntity, bool) {
@@ -2142,6 +2524,7 @@ func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
 	if t.Build == nil {
 		return false
 	}
+	prevBlock := int16(t.Block)
 	t.Build.Health -= damage
 	if t.Build.Health > 0 {
 		w.entityEvents = append(w.entityEvents, EntityEvent{
@@ -2156,9 +2539,10 @@ func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
 	t.Block = 0
 	delete(w.buildStates, pos)
 	w.entityEvents = append(w.entityEvents, EntityEvent{
-		Kind:      EntityEventBuildDestroyed,
-		BuildPos:  packTilePos(x, y),
-		BuildTeam: team,
+		Kind:       EntityEventBuildDestroyed,
+		BuildPos:   packTilePos(x, y),
+		BuildTeam:  team,
+		BuildBlock: prevBlock,
 	})
 	return true
 }

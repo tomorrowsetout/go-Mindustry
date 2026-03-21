@@ -1,0 +1,6659 @@
+{
+  "units_by_name": [
+    {
+      "name": "dagger",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 9,
+      "interval": 0.21666667,
+      "bullet_type": 0,
+      "bullet_speed": 2.5,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "mace",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 74,
+      "interval": 0.36666667,
+      "bullet_type": 0,
+      "bullet_speed": 4.2,
+      "splash_radius": 0,
+      "pierce": 2,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "fortress",
+      "fire_mode": "projectile",
+      "range": 240,
+      "damage": 80,
+      "interval": 1,
+      "bullet_type": 0,
+      "bullet_speed": 2,
+      "splash_radius": 35,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "scepter",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 70,
+      "interval": 0.25,
+      "bullet_type": 0,
+      "bullet_speed": 8,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "reign",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 80,
+      "interval": 0.15,
+      "bullet_type": 0,
+      "bullet_speed": 13,
+      "splash_radius": 13,
+      "pierce": 10,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "nova",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 13,
+      "interval": 0.4,
+      "bullet_type": 0,
+      "bullet_speed": 5.2,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "pulsar",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 15,
+      "interval": 0.6,
+      "bullet_type": 0,
+      "bullet_speed": 0.7,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "quasar",
+      "fire_mode": "beam",
+      "range": 0,
+      "damage": 45,
+      "interval": 0.9166667,
+      "bullet_type": 0,
+      "bullet_speed": 0.5,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "vela",
+      "fire_mode": "beam",
+      "range": 120,
+      "damage": 35,
+      "interval": 2.5833333,
+      "bullet_type": 0,
+      "bullet_speed": 0.44,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "corvus",
+      "fire_mode": "beam",
+      "range": 0,
+      "damage": 560,
+      "interval": 5.8333335,
+      "bullet_type": 0,
+      "bullet_speed": 0.3,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "crawler",
+      "fire_mode": "projectile",
+      "range": 40,
+      "damage": 80,
+      "interval": 0.4,
+      "bullet_type": 0,
+      "bullet_speed": 1,
+      "splash_radius": 44,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "atrax",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 13,
+      "interval": 0.15,
+      "bullet_type": 0,
+      "bullet_speed": 2.5,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "spiroct",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 23,
+      "interval": 0.23333333,
+      "bullet_type": 0,
+      "bullet_speed": 0.54,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "arkyid",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 65,
+      "interval": 0.75,
+      "bullet_type": 0,
+      "bullet_speed": 2,
+      "splash_radius": 70,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "toxopid",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 110,
+      "interval": 0.5,
+      "bullet_type": 0,
+      "bullet_speed": 3,
+      "splash_radius": 80,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "flare",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 9,
+      "interval": 1.3333334,
+      "bullet_type": 0,
+      "bullet_speed": 2.7,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "horizon",
+      "fire_mode": "projectile",
+      "range": 140,
+      "damage": 25,
+      "interval": 0.2,
+      "bullet_type": 0,
+      "bullet_speed": 27,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "zenith",
+      "fire_mode": "projectile",
+      "range": 140,
+      "damage": 15,
+      "interval": 0.6666667,
+      "bullet_type": 0,
+      "bullet_speed": 3,
+      "splash_radius": 25,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "antumbra",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 55,
+      "interval": 0.2,
+      "bullet_type": 0,
+      "bullet_speed": 7,
+      "splash_radius": 20,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "eclipse",
+      "fire_mode": "beam",
+      "range": 0,
+      "damage": 115,
+      "interval": 0.2,
+      "bullet_type": 0,
+      "bullet_speed": 0.54,
+      "splash_radius": 25,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "poly",
+      "fire_mode": "projectile",
+      "range": 130,
+      "damage": 12,
+      "interval": 0.5,
+      "bullet_type": 0,
+      "bullet_speed": 4,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "mega",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 10,
+      "interval": 0.25,
+      "bullet_type": 0,
+      "bullet_speed": 5.2,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "quad",
+      "fire_mode": "projectile",
+      "range": 140,
+      "damage": 220,
+      "interval": 0.9166667,
+      "bullet_type": 0,
+      "bullet_speed": 1.2,
+      "splash_radius": 80,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "risso",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 12,
+      "interval": 0.21666667,
+      "bullet_type": 0,
+      "bullet_speed": 2.7,
+      "splash_radius": 25,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "minke",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 40.5,
+      "interval": 0.16666667,
+      "bullet_type": 0,
+      "bullet_speed": 4.2,
+      "splash_radius": 22.5,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "bryde",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 70,
+      "interval": 0.33333334,
+      "bullet_type": 0,
+      "bullet_speed": 3.2,
+      "splash_radius": 40,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "sei",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 57,
+      "interval": 0.75,
+      "bullet_type": 0,
+      "bullet_speed": 7,
+      "splash_radius": 35,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "omura",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 1250,
+      "interval": 1.8333334,
+      "bullet_type": 0,
+      "bullet_speed": 0.62,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "retusa",
+      "fire_mode": "projectile",
+      "range": 100,
+      "damage": 40,
+      "interval": 0.36666667,
+      "bullet_type": 0,
+      "bullet_speed": 5.2,
+      "splash_radius": 32,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "oxynoe",
+      "fire_mode": "projectile",
+      "range": 100,
+      "damage": 23,
+      "interval": 0.083333336,
+      "bullet_type": 0,
+      "bullet_speed": 3.4,
+      "splash_radius": 0,
+      "pierce": 1,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "cyerce",
+      "fire_mode": "projectile",
+      "range": 130,
+      "damage": 25,
+      "interval": 1,
+      "bullet_type": 0,
+      "bullet_speed": 3.9,
+      "splash_radius": 30,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "aegires",
+      "fire_mode": "projectile",
+      "range": 180,
+      "damage": 30,
+      "interval": 0.06666667,
+      "bullet_type": 0,
+      "bullet_speed": 0.7,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "navanax",
+      "fire_mode": "beam",
+      "range": 90,
+      "damage": 70,
+      "interval": 1.0833334,
+      "bullet_type": 0,
+      "bullet_speed": 5,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "alpha",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 11,
+      "interval": 0.28333333,
+      "bullet_type": 0,
+      "bullet_speed": 3,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "beta",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 11,
+      "interval": 0.33333334,
+      "bullet_type": 0,
+      "bullet_speed": 3.3,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    },
+    {
+      "name": "gamma",
+      "fire_mode": "projectile",
+      "range": 0,
+      "damage": 11,
+      "interval": 0.25,
+      "bullet_type": 0,
+      "bullet_speed": 3.55,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true,
+      "prefer_buildings": false
+    }
+  ],
+  "turrets": [
+    {
+      "name": "duo",
+      "fire_mode": "projectile",
+      "range": 160,
+      "damage": 18,
+      "interval": 0.33333334,
+      "bullet_type": 0,
+      "bullet_speed": 3.5,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "scatter",
+      "fire_mode": "projectile",
+      "range": 220,
+      "damage": 45,
+      "interval": 0.3,
+      "bullet_type": 0,
+      "bullet_speed": 4.2,
+      "splash_radius": 24,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": false,
+      "target_priority": "nearest",
+      "hit_buildings": false
+    },
+    {
+      "name": "scorch",
+      "fire_mode": "projectile",
+      "range": 60,
+      "damage": 30,
+      "interval": 0.1,
+      "bullet_type": 0,
+      "bullet_speed": 4,
+      "splash_radius": 0,
+      "pierce": 1,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "hail",
+      "fire_mode": "projectile",
+      "range": 235,
+      "damage": 45,
+      "interval": 1,
+      "bullet_type": 0,
+      "bullet_speed": 3,
+      "splash_radius": 18.75,
+      "pierce": 0,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "wave",
+      "fire_mode": "projectile",
+      "range": 110,
+      "damage": 4,
+      "interval": 0.05,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "lancer",
+      "fire_mode": "beam",
+      "range": 165,
+      "damage": 140,
+      "interval": 1.3333334,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 4,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "arc",
+      "fire_mode": "projectile",
+      "range": 90,
+      "damage": 20,
+      "interval": 0.5833333,
+      "bullet_type": 0,
+      "bullet_speed": 0.0001,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "swarmer",
+      "fire_mode": "projectile",
+      "range": 240,
+      "damage": 45,
+      "interval": 0.57142854,
+      "bullet_type": 0,
+      "bullet_speed": 3.7,
+      "splash_radius": 30,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "salvo",
+      "fire_mode": "projectile",
+      "range": 190,
+      "damage": 31,
+      "interval": 0.48333332,
+      "bullet_type": 0,
+      "bullet_speed": 4,
+      "splash_radius": 22,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "tsunami",
+      "fire_mode": "projectile",
+      "range": 190,
+      "damage": 4.75,
+      "interval": 0.05,
+      "bullet_type": 0,
+      "bullet_speed": 4,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "fuse",
+      "fire_mode": "projectile",
+      "range": 90,
+      "damage": 105,
+      "interval": 0.5833333,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "ripple",
+      "fire_mode": "projectile",
+      "range": 290,
+      "damage": 90,
+      "interval": 2,
+      "bullet_type": 0,
+      "bullet_speed": 3.4,
+      "splash_radius": 37.5,
+      "pierce": 0,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "cyclone",
+      "fire_mode": "projectile",
+      "range": 200,
+      "damage": 75,
+      "interval": 0.16666667,
+      "bullet_type": 0,
+      "bullet_speed": 4.5,
+      "splash_radius": 60,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "foreshadow",
+      "fire_mode": "projectile",
+      "range": 500,
+      "damage": 1350,
+      "interval": 3.3333333,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "spectre",
+      "fire_mode": "projectile",
+      "range": 260,
+      "damage": 80,
+      "interval": 0.11666667,
+      "bullet_type": 0,
+      "bullet_speed": 8,
+      "splash_radius": 25,
+      "pierce": 2,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "meltdown",
+      "fire_mode": "beam",
+      "range": 195,
+      "damage": 78,
+      "interval": 1.5,
+      "bullet_type": 0,
+      "bullet_speed": 0,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "breach",
+      "fire_mode": "projectile",
+      "range": 190,
+      "damage": 433.33334,
+      "interval": 0.6666667,
+      "bullet_type": 0,
+      "bullet_speed": 12,
+      "splash_radius": 0,
+      "pierce": 4,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "diffuse",
+      "fire_mode": "projectile",
+      "range": 125,
+      "damage": 90,
+      "interval": 0.5,
+      "bullet_type": 0,
+      "bullet_speed": 8,
+      "splash_radius": 0,
+      "pierce": 0,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "titan",
+      "fire_mode": "projectile",
+      "range": 390,
+      "damage": 750,
+      "interval": 2.3,
+      "bullet_type": 0,
+      "bullet_speed": 3.25,
+      "splash_radius": 110,
+      "pierce": 1,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "disperse",
+      "fire_mode": "projectile",
+      "range": 310,
+      "damage": 90,
+      "interval": 0.15,
+      "bullet_type": 0,
+      "bullet_speed": 8.5,
+      "splash_radius": 0,
+      "pierce": 2,
+      "target_air": true,
+      "target_ground": false,
+      "target_priority": "nearest",
+      "hit_buildings": false
+    },
+    {
+      "name": "afflict",
+      "fire_mode": "projectile",
+      "range": 368,
+      "damage": 180,
+      "interval": 0.8333333,
+      "bullet_type": 0,
+      "bullet_speed": 5,
+      "splash_radius": 0,
+      "pierce": 3,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "scathe",
+      "fire_mode": "projectile",
+      "range": 1350,
+      "damage": 120,
+      "interval": 10,
+      "bullet_type": 0,
+      "bullet_speed": 4.6,
+      "splash_radius": 56,
+      "pierce": 0,
+      "target_air": false,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "smite",
+      "fire_mode": "projectile",
+      "range": 300,
+      "damage": 250,
+      "interval": 1.6666666,
+      "bullet_type": 0,
+      "bullet_speed": 7,
+      "splash_radius": 0,
+      "pierce": 4,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    },
+    {
+      "name": "malign",
+      "fire_mode": "beam",
+      "range": 410,
+      "damage": 70,
+      "interval": 0.058333334,
+      "bullet_type": 0,
+      "bullet_speed": 8,
+      "splash_radius": 0,
+      "pierce": 2,
+      "target_air": true,
+      "target_ground": true,
+      "target_priority": "nearest",
+      "hit_buildings": true
+    }
+  ],
+  "blocks": [
+    {
+      "name": "graphite-press",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.975,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 75,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "multi-press",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 100,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 25,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 50,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "silicon-smelter",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.5416667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 25,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "silicon-crucible",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.5583334,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 120,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 80,
+          "cost": 1.5
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 35,
+          "cost": 1.3
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 60,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "kiln",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.35,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 60,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 30,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "plastanium-compressor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.741667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 115,
+          "cost": 0.7
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 60,
+          "cost": 1
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 80,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "phase-weaver",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.508333,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 130,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 120,
+          "cost": 0.7
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 75,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "surge-smelter",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.2833333,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 80,
+          "cost": 0.7
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 70,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "cryofluid-mixer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.2916667,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 65,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 40,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 60,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "pyratite-mixer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.7083333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 50,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 25,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "blast-mixer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.68333334,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 20,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "melter",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.4083333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 35,
+          "cost": 0.7
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 45,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "separator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.6666667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 25,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "disassembler",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6,
+      "requirements": [
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 40,
+          "cost": 1.3
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 100,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 80,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "spore-press",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.80833334,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 35,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "pulverizer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.5416667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 25,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "coal-centrifuge",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.35,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 20,
+          "cost": 1
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 40,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "incinerator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.25833333,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 5,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 15,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "silicon-arc-furnace",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.7333333,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 70,
+          "cost": 1.2
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "electrolyzer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.9333334,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 50,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 40,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 130,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 80,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "atmospheric-concentrator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.8,
+      "requirements": [
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 60,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 180,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "oxidation-chamber",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 8.066667,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 120,
+          "cost": 1.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 120,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "electric-heater",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.95,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 30,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 30,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 30,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "slag-heater",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.05,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 50,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 20,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 20,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "phase-heater",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.9,
+      "requirements": [
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 30,
+          "cost": 1.2
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 30,
+          "cost": 1.4
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 30,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "heat-redirector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.41666666,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 10,
+          "cost": 1.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 10,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "small-heat-redirector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.29333335,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 8,
+          "cost": 1.2
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 8,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "heat-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.5416667,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 15,
+          "cost": 1.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 10,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "slag-incinerator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.375,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 15,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "carbide-crucible",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.7,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 110,
+          "cost": 1.5
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 150,
+          "cost": 1.1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 60,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "slag-centrifuge",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.9666667,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 70,
+          "cost": 1.4
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 60,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 40,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "surge-crucible",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.266667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 80,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 80,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "cyanogen-synthesizer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 7.0666666,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 80,
+          "cost": 1.4
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 120,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 140,
+          "cost": 1.2
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "phase-synthesizer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 10.266666,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 90,
+          "cost": 1.4
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 100,
+          "cost": 1.1
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 200,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "heat-reactor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.4333334,
+      "requirements": [
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 70,
+          "cost": 1.2
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 20,
+          "cost": 1
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 10,
+          "cost": 1.4
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 80,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "copper-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.05,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 6,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "titanium-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.1,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 6,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "plastanium-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.15833333,
+      "requirements": [
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 5,
+          "cost": 1.3
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 2,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "thorium-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.11000001,
+      "requirements": [
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 6,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "phase-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.13,
+      "requirements": [
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 6,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "surge-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.120000005,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 6,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "door",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.15333334,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 6,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 4,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "scrap-wall",
+      "build_cost_multiplier": 4,
+      "build_time_sec": 0.2,
+      "requirements": [
+        {
+          "item": "scrap",
+          "item_id": 8,
+          "amount": 6,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "thruster",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.8,
+      "requirements": [
+        {
+          "item": "scrap",
+          "item_id": 8,
+          "amount": 96,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "beryllium-wall",
+      "build_cost_multiplier": 8,
+      "build_time_sec": 0.96000004,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 6,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "tungsten-wall",
+      "build_cost_multiplier": 8,
+      "build_time_sec": 1.2,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 6,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "blast-door",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.92,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 24,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 24,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "reinforced-surge-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.17000002,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 6,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 2,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "carbide-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.25,
+      "requirements": [
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 6,
+          "cost": 1.1
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 6,
+          "cost": 1.4
+        }
+      ]
+    },
+    {
+      "name": "shielded-wall",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.91333336,
+      "requirements": [
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 20,
+          "cost": 1.3
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 12,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 12,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "mender",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.55833334,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 25,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "mend-projector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.5333333,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 25,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 40,
+          "cost": 0.8
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 50,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "overdrive-projector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.0666666,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 75,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 75,
+          "cost": 0.8
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 30,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "overdrive-dome",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 10.366667,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 200,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 130,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 130,
+          "cost": 0.8
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 80,
+          "cost": 1.3
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 120,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "force-projector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.0833335,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 75,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 125,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "shock-mine",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.45166668,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 25,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 12,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "radar",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.8333334,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 60,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 50,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 10,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "build-tower",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.9,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 60,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "regen-projector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.9666667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 60,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 80,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "barrier-projector",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.6666667,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 125,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "shockwave-tower",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.1,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 50,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 30,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 100,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "conveyor",
+      "build_cost_multiplier": 2,
+      "build_time_sec": 0.016666668,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 1,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "titanium-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.03666667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 1,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 1,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 1,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "plastanium-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.051666666,
+      "requirements": [
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 1,
+          "cost": 1.3
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 1,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 1,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "armored-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.065000005,
+      "requirements": [
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 1,
+          "cost": 1.3
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 1,
+          "cost": 1.1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 1,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "junction",
+      "build_cost_multiplier": 6,
+      "build_time_sec": 0.15,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 3,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "bridge-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.12,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 6,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 6,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "phase-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.485,
+      "requirements": [
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 5,
+          "cost": 1.3
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 7,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 10,
+          "cost": 0.7
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 10,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "sorter",
+      "build_cost_multiplier": 3,
+      "build_time_sec": 0.120000005,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 2,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 2,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "inverted-sorter",
+      "build_cost_multiplier": 3,
+      "build_time_sec": 0.120000005,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 2,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 2,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "router",
+      "build_cost_multiplier": 4,
+      "build_time_sec": 0.1,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 3,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "distributor",
+      "build_cost_multiplier": 3,
+      "build_time_sec": 0.24000001,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 4,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 4,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "overflow-gate",
+      "build_cost_multiplier": 3,
+      "build_time_sec": 0.17000002,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 2,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 4,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "underflow-gate",
+      "build_cost_multiplier": 3,
+      "build_time_sec": 0.17000002,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 2,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 4,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "unloader",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.81666666,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 25,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "mass-driver",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.4583335,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 125,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 75,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 125,
+          "cost": 0.7
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 50,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "duct",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.020000001,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 1,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "armored-duct",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.065000005,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 2,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 1,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "duct-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.2,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 10,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "overflow-duct",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.29333335,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 8,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 8,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "underflow-duct",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.29333335,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 8,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 8,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "duct-bridge",
+      "build_cost_multiplier": 2,
+      "build_time_sec": 0.6,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 15,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "duct-unloader",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.85,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 20,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 20,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 10,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "surge-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.045,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 1,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 1,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "surge-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.125,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 5,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 1,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "unit-cargo-loader",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.4666667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 50,
+          "cost": 1.2
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 20,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "unit-cargo-unload-point",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.3,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 60,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 60,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "mechanical-pump",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.375,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 15,
+          "cost": 0.5
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 10,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "rotary-pump",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.6833334,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 70,
+          "cost": 0.5
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 50,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 20,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 35,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "impulse-pump",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.625,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 80,
+          "cost": 0.5
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 90,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 40,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 35,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.025,
+      "requirements": [
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 1,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "pulse-conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.058333334,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 2,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 1,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "plated-conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.083333336,
+      "requirements": [
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 2,
+          "cost": 1.1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 1,
+          "cost": 1.5
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 1,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "liquid-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.11666667,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 4,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 2,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "liquid-container",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.5416667,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 10,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 15,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "liquid-tank",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.5,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 30,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 40,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "liquid-junction",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.26666668,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 4,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 8,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "bridge-conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.26666668,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 4,
+          "cost": 1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 8,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "phase-conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.8683333,
+      "requirements": [
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 5,
+          "cost": 1.3
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 7,
+          "cost": 0.8
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 20,
+          "cost": 1.5
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 10,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "reinforced-pump",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.8166667,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 40,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 30,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 20,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "reinforced-conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.040000003,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 2,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "reinforced-liquid-junction",
+      "build_cost_multiplier": 3,
+      "build_time_sec": 0.68000007,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 4,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 8,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "reinforced-bridge-conduit",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.53333336,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 8,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 20,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "reinforced-liquid-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.21333334,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 8,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 4,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "reinforced-liquid-container",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.57,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 10,
+          "cost": 1.5
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 16,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "reinforced-liquid-tank",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 40,
+          "cost": 1.5
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 50,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "power-node",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.086666666,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 2,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 6,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "power-node-large",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.24,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 5,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 10,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 3,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "surge-tower",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.73333335,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 7,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 10,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 15,
+          "cost": 0.8
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 15,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "diode",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.49166667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 10,
+          "cost": 0.8
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 5,
+          "cost": 1.3
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 10,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "battery",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.275,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 5,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 20,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "battery-large",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.3166667,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 20,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 50,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "combustion-generator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.38333333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 25,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 15,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "thermal-generator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.9666667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 40,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 35,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 50,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 35,
+          "cost": 0.8
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 40,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "steam-generator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.575,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 35,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 25,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 40,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "differential-generator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.7,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 70,
+          "cost": 0.5
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 50,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 65,
+          "cost": 0.8
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 50,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "rtg-generator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.25,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 75,
+          "cost": 0.8
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 25,
+          "cost": 1.3
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 75,
+          "cost": 1.3
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 50,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "solar-panel",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.22333333,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 10,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 8,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "solar-panel-large",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.9583334,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 60,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 70,
+          "cost": 0.8
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 15,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "thorium-reactor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 12.666667,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 300,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 150,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 150,
+          "cost": 1.1
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 50,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "impact-reactor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 29.583334,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 500,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 300,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 400,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 100,
+          "cost": 1.1
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 250,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "beam-node",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.16000001,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 8,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "beam-tower",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.93333334,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 30,
+          "cost": 1.2
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 10,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 10,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "beam-link",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 16.208334,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 250,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 150,
+          "cost": 1.2
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 75,
+          "cost": 1.4
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 75,
+          "cost": 1.2
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 75,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "turbine-condenser",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.2,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 60,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "chemical-combustion-chamber",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.3666666,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 40,
+          "cost": 1
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 20,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "pyrolysis-generator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.6,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 100,
+          "cost": 1
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 60,
+          "cost": 1.4
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 60,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "flux-reactor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 15.8,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 240,
+          "cost": 1
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 60,
+          "cost": 1.4
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 80,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 480,
+          "cost": 0.8
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 120,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "neoplasia-reactor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 42.666668,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 750,
+          "cost": 1.5
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 300,
+          "cost": 1.4
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 150,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 500,
+          "cost": 0.8
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 150,
+          "cost": 1.3
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 200,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "mechanical-drill",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.1,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 12,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "pneumatic-drill",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.31666666,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 18,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 10,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "laser-drill",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.525,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 35,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 30,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 20,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "blast-drill",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.55,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 65,
+          "cost": 0.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 60,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 50,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 75,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "water-extractor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.85,
+      "requirements": [
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 30,
+          "cost": 1.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 30,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "cultivator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.6333333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 25,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 25,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 10,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "oil-extractor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 8.616667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 150,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 175,
+          "cost": 1
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 115,
+          "cost": 0.7
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 115,
+          "cost": 1.1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 75,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "vent-condenser",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.5333333,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 20,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 60,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "cliff-crusher",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.81666666,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 25,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 20,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "large-cliff-crusher",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.616667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 15,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 50,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "plasma-bore",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.8,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 40,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "large-plasma-bore",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.5833335,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 25,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 70,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "impact-drill",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.7333333,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 70,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 90,
+          "cost": 1.2
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 60,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "eruption-drill",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 13.4,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 300,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 20,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 250,
+          "cost": 1.5
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 150,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "core-shard",
+      "build_cost_multiplier": 2,
+      "build_time_sec": 35.333332,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 1000,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 800,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "core-foundation",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 86.666664,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 3000,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 3000,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 2000,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "core-nucleus",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 300,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 8000,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 8000,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 5000,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 4000,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "core-bastion",
+      "build_cost_multiplier": 0.7,
+      "build_time_sec": 32.2,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 1000,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 1000,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 800,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "core-citadel",
+      "build_cost_multiplier": 0.7,
+      "build_time_sec": 159.83333,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 4000,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 4000,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 3000,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 1000,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "core-acropolis",
+      "build_cost_multiplier": 0.7,
+      "build_time_sec": 309.16666,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 6000,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 5000,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 5000,
+          "cost": 1.5
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 3000,
+          "cost": 1.4
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 3000,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "container",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.6666666,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 100,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "vault",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.4583335,
+      "requirements": [
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 250,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 125,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "reinforced-container",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.4166666,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 30,
+          "cost": 1.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 40,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "reinforced-vault",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.4083333,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 125,
+          "cost": 1.5
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 70,
+          "cost": 1.1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 100,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "duo",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.29166666,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 35,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "scatter",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.2333333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 85,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 45,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "scorch",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.575,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 25,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 22,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "hail",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.6166667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 40,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 17,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "wave",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.2083333,
+      "requirements": [
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 45,
+          "cost": 1.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 75,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 25,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "lancer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.6166666,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 60,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 70,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 60,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 30,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "arc",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 50,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 50,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "parallax",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.8,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 160,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 110,
+          "cost": 1
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 50,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "swarmer",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.5416667,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 35,
+          "cost": 1
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 35,
+          "cost": 1
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 45,
+          "cost": 1.3
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "salvo",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 100,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 50,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "segment",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.733333,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 130,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 80,
+          "cost": 1.1
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 40,
+          "cost": 1.3
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 40,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "tsunami",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 13.166667,
+      "requirements": [
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 100,
+          "cost": 1.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 400,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 250,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 100,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "fuse",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 7.4583335,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 225,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 225,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 100,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "ripple",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.5,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 150,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 135,
+          "cost": 1
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 60,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "cyclone",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.483333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 200,
+          "cost": 0.5
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 125,
+          "cost": 1
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 80,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "foreshadow",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 41.666668,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 1000,
+          "cost": 0.5
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 600,
+          "cost": 1.5
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 300,
+          "cost": 1.2
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 200,
+          "cost": 1.3
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 600,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "spectre",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 25.875,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 900,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 300,
+          "cost": 1
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 175,
+          "cost": 1.3
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 250,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "meltdown",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 29.916666,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 1200,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 350,
+          "cost": 0.7
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 300,
+          "cost": 1
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 325,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 325,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "breach",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 9,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 150,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 125,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "diffuse",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 10.25,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 150,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 200,
+          "cost": 1
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 50,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "sublimate",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 15.216666,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 150,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 400,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "titan",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 17.583334,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 250,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 300,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 400,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "disperse",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 13.583333,
+      "requirements": [
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 50,
+          "cost": 1.1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 150,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 350,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "afflict",
+      "build_cost_multiplier": 1.5,
+      "build_time_sec": 14.45,
+      "requirements": [
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 250,
+          "cost": 1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "lustre",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 9.766666,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 250,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 200,
+          "cost": 1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 50,
+          "cost": 1.2
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 90,
+          "cost": 1.4
+        }
+      ]
+    },
+    {
+      "name": "scathe",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 31.833334,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 450,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 400,
+          "cost": 1
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 500,
+          "cost": 1.5
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 200,
+          "cost": 1.4
+        }
+      ]
+    },
+    {
+      "name": "smite",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 40.833332,
+      "requirements": [
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 200,
+          "cost": 1.2
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 400,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 800,
+          "cost": 0.8
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 500,
+          "cost": 1.4
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 300,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "malign",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 44,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 200,
+          "cost": 1.4
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 1000,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 500,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 500,
+          "cost": 1
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 200,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "ground-factory",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.8833334,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 50,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 120,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "air-factory",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2.1166666,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 60,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 70,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 60,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "naval-factory",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.766667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 150,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 130,
+          "cost": 0.7
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 120,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "additive-reconstructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.266667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 200,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 120,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 90,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "multiplicative-reconstructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 31.333334,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 650,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 450,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 350,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 650,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "exponential-reconstructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 106.5,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 2000,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 1000,
+          "cost": 0.8
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 2000,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 750,
+          "cost": 1.1
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 450,
+          "cost": 1.3
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 600,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "tetrative-reconstructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 147,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 4000,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 3000,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 1000,
+          "cost": 1.1
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 600,
+          "cost": 1.3
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 600,
+          "cost": 1.3
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 800,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "repair-point",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.8666667,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 30,
+          "cost": 0.7
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 20,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "repair-turret",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.9666667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 90,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 80,
+          "cost": 1.1
+        },
+        {
+          "item": "plastanium",
+          "item_id": 10,
+          "amount": 60,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "tank-fabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.6666665,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 150,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "ship-fabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 7.3333335,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 250,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 200,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "mech-fabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 7.9166665,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 10,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "tank-refabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 7.3333335,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 200,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 80,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "ship-refabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 10.3,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 120,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 15,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "mech-refabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 11.375,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 175,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "prime-refabricator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 18.916666,
+      "requirements": [
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 250,
+          "cost": 1.1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 200,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 200,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 400,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "tank-assembler",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 22.7,
+      "requirements": [
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 500,
+          "cost": 1.1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 150,
+          "cost": 1.2
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 80,
+          "cost": 1.4
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 650,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "ship-assembler",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 39.416668,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 100,
+          "cost": 1.4
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 200,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 550,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 900,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 400,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "mech-assembler",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 46.75,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 200,
+          "cost": 1.4
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 600,
+          "cost": 1.1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 200,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 550,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 1000,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "basic-assembler-module",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 29.833334,
+      "requirements": [
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 300,
+          "cost": 1.4
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 500,
+          "cost": 1.1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 400,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "unit-repair-tower",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 4.7,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 90,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 90,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 80,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "payload-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.25,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 10,
+          "cost": 1
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 10,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "payload-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.33333334,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 15,
+          "cost": 1
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 10,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "reinforced-payload-conveyor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.25,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 10,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "reinforced-payload-router",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.375,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 15,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "payload-mass-driver",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2,
+      "requirements": [
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 40,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 50,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 20,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "large-payload-mass-driver",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 10.366667,
+      "requirements": [
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 20,
+          "cost": 1.3
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 200,
+          "cost": 1.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 200,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 100,
+          "cost": 1
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 30,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "small-deconstructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.4666667,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 100,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 40,
+          "cost": 1.2
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "deconstructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 11.5,
+      "requirements": [
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 250,
+          "cost": 1.2
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 250,
+          "cost": 0.8
+        },
+        {
+          "item": "carbide",
+          "item_id": 19,
+          "amount": 50,
+          "cost": 1.4
+        }
+      ]
+    },
+    {
+      "name": "constructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.1666667,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 50,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 75,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 40,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "large-constructor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 10.466666,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "oxide",
+          "item_id": 18,
+          "amount": 100,
+          "cost": 1.2
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 200,
+          "cost": 1.5
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 80,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "payload-loader",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5.7166667,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 160,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 90,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "payload-unloader",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 9.766666,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 140,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 220,
+          "cost": 0.8
+        },
+        {
+          "item": "tungsten",
+          "item_id": 17,
+          "amount": 180,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "illuminator",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.4,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 12,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 8,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 8,
+          "cost": 0.7
+        }
+      ]
+    },
+    {
+      "name": "launch-pad",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 9.616667,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 350,
+          "cost": 0.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 140,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 200,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 150,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "advanced-launch-pad",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 13.083333,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 350,
+          "cost": 0.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 250,
+          "cost": 0.8
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 300,
+          "cost": 0.7
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 200,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "landing-pad",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 5,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 200,
+          "cost": 0.5
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 100,
+          "cost": 1
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 100,
+          "cost": 1
+        }
+      ]
+    },
+    {
+      "name": "interplanetary-accelerator",
+      "build_cost_multiplier": 0.5,
+      "build_time_sec": 473.33334,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 16000,
+          "cost": 0.5
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 11000,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 13000,
+          "cost": 1.1
+        },
+        {
+          "item": "titanium",
+          "item_id": 6,
+          "amount": 12000,
+          "cost": 1
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 6000,
+          "cost": 1.2
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 5000,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "message",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.125,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 5,
+          "cost": 1
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 5,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "switch",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.125,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 5,
+          "cost": 1
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 5,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "micro-processor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 2,
+      "requirements": [
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 90,
+          "cost": 0.5
+        },
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 50,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 50,
+          "cost": 0.8
+        }
+      ]
+    },
+    {
+      "name": "logic-processor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 6.7166667,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 320,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 60,
+          "cost": 1
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 50,
+          "cost": 1.1
+        }
+      ]
+    },
+    {
+      "name": "hyper-processor",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 9.625,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 450,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "thorium",
+          "item_id": 7,
+          "amount": 75,
+          "cost": 1.1
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 50,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "memory-cell",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 1.15,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 30,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 30,
+          "cost": 0.8
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "memory-bank",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.3,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 80,
+          "cost": 1
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 80,
+          "cost": 0.8
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 30,
+          "cost": 1.3
+        },
+        {
+          "item": "copper",
+          "item_id": 0,
+          "amount": 30,
+          "cost": 0.5
+        }
+      ]
+    },
+    {
+      "name": "logic-display",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 3.0833333,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 100,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 50,
+          "cost": 0.8
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 50,
+          "cost": 1.5
+        }
+      ]
+    },
+    {
+      "name": "large-logic-display",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 8.458333,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 200,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 150,
+          "cost": 0.8
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 100,
+          "cost": 1.5
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 75,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "tile-logic-display",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.465,
+      "requirements": [
+        {
+          "item": "lead",
+          "item_id": 1,
+          "amount": 8,
+          "cost": 0.7
+        },
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 8,
+          "cost": 0.8
+        },
+        {
+          "item": "metaglass",
+          "item_id": 2,
+          "amount": 8,
+          "cost": 1.5
+        },
+        {
+          "item": "phase-fabric",
+          "item_id": 11,
+          "amount": 3,
+          "cost": 1.3
+        }
+      ]
+    },
+    {
+      "name": "canvas",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.33333334,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 10,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 10,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "reinforced-message",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.26666668,
+      "requirements": [
+        {
+          "item": "graphite",
+          "item_id": 3,
+          "amount": 10,
+          "cost": 1
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 5,
+          "cost": 1.2
+        }
+      ]
+    }
+  ]
+}

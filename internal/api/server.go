@@ -46,11 +46,11 @@ func New(cfg config.APIConfig, srv *netserver.Server, engineStats func() *sim.Ti
 	}
 	for _, k := range cfg.Keys {
 		k = strings.TrimSpace(k)
-		if k != "" {
+		if k != "" && config.IsValidAPIKey(k) {
 			s.keys[k] = struct{}{}
 		}
 	}
-	if k := strings.TrimSpace(cfg.Key); k != "" {
+	if k := strings.TrimSpace(cfg.Key); k != "" && config.IsValidAPIKey(k) {
 		s.keys[k] = struct{}{}
 	}
 	mux := http.NewServeMux()
@@ -641,6 +641,9 @@ func (s *Server) ListAPIKeys() []string {
 func (s *Server) AddAPIKey(key string) bool {
 	key = strings.TrimSpace(key)
 	if key == "" {
+		return false
+	}
+	if !config.IsValidAPIKey(key) {
 		return false
 	}
 	s.keyMu.Lock()

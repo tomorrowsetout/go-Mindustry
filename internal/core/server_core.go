@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"mdt-server/internal/config"
+	"mdt-server/internal/persist"
 )
 
 // ServerCore 协调两个核心的运行
@@ -15,11 +16,13 @@ type ServerCore struct {
 
 // NewServerCore 创建服务器核心控制器（两核心架构）
 func NewServerCore(gameInterval time.Duration, ioConfig Config, persistCfg config.PersistConfig) *ServerCore {
-	return &ServerCore{
+	sc := &ServerCore{
 		Core1:      NewCore1("game-loop"),
 		Core2:      NewCore2(ioConfig),
 		persistCfg: persistCfg,
 	}
+	sc.Core2.SetServerCore(sc)
+	return sc
 }
 
 // SetGameTickFn 设置 Game Loop 的 tick 函数
@@ -54,4 +57,9 @@ func (sc *ServerCore) Stats() (core1Running bool, core2Stats [5]int64) {
 // GetPersistConfig 获取持久化配置
 func (sc *ServerCore) GetPersistConfig() config.PersistConfig {
 	return sc.persistCfg
+}
+
+// SetPersistStateProvider 设置 Core2 的持久化状态提供器。
+func (sc *ServerCore) SetPersistStateProvider(fn func() persist.State) {
+	sc.Core2.SetStateProvider(fn)
 }

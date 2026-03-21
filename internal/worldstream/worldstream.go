@@ -480,6 +480,11 @@ func readContentNamesOfType(chunk []byte, typeID byte, registry *protocol.Conten
 }
 
 func isCoreBlockName(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	// core-zone is a floor marker in Erekir, not an actual CoreBlock.
+	if name == "core-zone" {
+		return false
+	}
 	return strings.HasPrefix(name, "core-")
 }
 

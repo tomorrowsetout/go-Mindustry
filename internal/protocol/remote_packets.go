@@ -4829,14 +4829,14 @@ func (p *Remote_HudFragment_setPlayerTeamEditor_122) Write(w *Writer) error {
 func (p *Remote_HudFragment_setPlayerTeamEditor_122) Priority() int { return PriorityNormal }
 
 type Remote_Build_beginBreak_123 struct {
-	Unit any
+	Unit Unit
 	Team Team
 	X    int32
 	Y    int32
 }
 
 func (p *Remote_Build_beginBreak_123) Read(r *Reader, _ int) error {
-	if v, err := ReadObject(r, false, r.Ctx); err != nil {
+	if v, err := ReadUnit(r, r.Ctx); err != nil {
 		return err
 	} else {
 		p.Unit = v
@@ -4860,7 +4860,7 @@ func (p *Remote_Build_beginBreak_123) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Build_beginBreak_123) Write(w *Writer) error {
-	if err := WriteObject(w, p.Unit, w.Ctx); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteTeam(w, &p.Team); err != nil {
@@ -4878,7 +4878,7 @@ func (p *Remote_Build_beginBreak_123) Write(w *Writer) error {
 func (p *Remote_Build_beginBreak_123) Priority() int { return PriorityNormal }
 
 type Remote_Build_beginPlace_124 struct {
-	Unit        any
+	Unit        Unit
 	Result      Block
 	Team        Team
 	X           int32
@@ -4888,7 +4888,7 @@ type Remote_Build_beginPlace_124 struct {
 }
 
 func (p *Remote_Build_beginPlace_124) Read(r *Reader, _ int) error {
-	if v, err := ReadObject(r, false, r.Ctx); err != nil {
+	if v, err := ReadUnit(r, r.Ctx); err != nil {
 		return err
 	} else {
 		p.Unit = v
@@ -4927,7 +4927,7 @@ func (p *Remote_Build_beginPlace_124) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Build_beginPlace_124) Write(w *Writer) error {
-	if err := WriteObject(w, p.Unit, w.Ctx); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteBlock(w, p.Result); err != nil {

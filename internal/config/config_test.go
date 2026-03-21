@@ -6,25 +6,75 @@ import (
 	"testing"
 )
 
-func TestLoadConfig(t *testing.T) {
+func TestLoadConfigINI(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	payload := `{
-  "api": { "enabled": true, "key": "abc", "keys": ["k1","k2"], "bind": "127.0.0.1:9000" },
-  "runtime": { "cores": 2, "scheduler_enabled": true },
-  "storage": { "mode": "file", "directory": "data/events", "database_enabled": false, "dsn": "" },
-  "mods": { "enabled": true, "directory": "mods", "java_home": "" },
-  "persist": { "enabled": true, "directory": "data/state", "file": "server-state.json", "interval_sec": 15, "save_msav": true, "msav_dir": "data/snapshots", "msav_file": "" },
-  "script": { "file":"data/state/scripts.json", "startup_tasks": [{"delay_sec":2,"runtime":"node","target":"boot.js","args":["a"]}], "daily_gc_time":"04:30" }
-}`
-	if err := os.WriteFile(path, []byte(payload), 0644); err != nil {
+	path := filepath.Join(dir, "config.ini")
+	payload := `
+[runtime]
+cores = 2
+scheduler_enabled = 1
+
+[server]
+name = test-server
+desc = hello
+virtual_players = 9
+
+[sync]
+entity_ms = 120
+state_ms = 260
+
+[data]
+mode = file
+directory = data/events
+database_enabled = 0
+
+[mods]
+enabled = 1
+directory = mods
+
+[persist]
+enabled = 1
+directory = data/state
+file = server-state.json
+interval_sec = 15
+save_msav = 1
+msav_dir = data/snapshots
+
+[script]
+file = data/state/scripts.json
+daily_gc_time = 04:30
+
+[api]
+enabled = 1
+bind = 127.0.0.1:9000
+key = mdt-server-go-aaaaaaaaaaaaaaa-bbbbbbbbbbbbb-ccccccccccccccc-ddddddddddddddddddd-eeeeeeeeeeee-yzf-ffffffffff
+keys = mdt-server-go-111111111111111-2222222222222-333333333333333-4444444444444444444-555555555555-yzf-6666666666,mdt-server-go-777777777777777-8888888888888-999999999999999-0000000000000000000-aaaaaaaaaaaa-yzf-bbbbbbbbbb
+config_file = api.ini
+`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write temp config: %v", err)
+	}
+	// core.ini sidecar
+	corePath := filepath.Join(dir, "core.ini")
+	corePayload := `
+[core]
+dual_core_enabled = 0
+
+[memory]
+limit_mb = 0
+startup_max_mb = 0
+gc_trigger_mb = 0
+check_interval_sec = 5
+free_os_memory = 0
+`
+	if err := os.WriteFile(corePath, []byte(corePayload), 0o644); err != nil {
+		t.Fatalf("write temp core config: %v", err)
 	}
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if !cfg.API.Enabled || cfg.API.Key != "abc" || cfg.API.Bind != "127.0.0.1:9000" {
+	if !cfg.API.Enabled || cfg.API.Key == "" || cfg.API.Bind != "127.0.0.1:9000" {
 		t.Fatalf("api config not loaded: %+v", cfg.API)
 	}
 	if len(cfg.API.Keys) != 2 {
@@ -42,7 +92,27 @@ func TestLoadConfig(t *testing.T) {
 	if !cfg.Persist.SaveMSAV || cfg.Persist.MSAVDir != "data/snapshots" {
 		t.Fatalf("persist msav config not loaded: %+v", cfg.Persist)
 	}
-	if cfg.Script.File != "data/state/scripts.json" || cfg.Script.DailyGCTime != "04:30" || len(cfg.Script.StartupTasks) != 1 {
+	if cfg.Script.File != "data/state/scripts.json" || cfg.Script.DailyGCTime != "04:30" {
 		t.Fatalf("script config not loaded: %+v", cfg.Script)
+	}
+	if cfg.Core.DualCoreEnabled {
+		t.Fatalf("core sidecar not loaded: %+v", cfg.Core)
+	}
+}
+
+func TestLoadConfigINI_InvalidAPIKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+	payload := `
+[api]
+enabled = 1
+bind = 127.0.0.1:9000
+key = abc
+`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatalf("expected invalid api key error")
 	}
 }
