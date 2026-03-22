@@ -63,6 +63,18 @@ type ProfilesFile struct {
 	Blocks      []BlockProfile  `json:"blocks"`
 }
 
+func LoadProfiles(path string) (*ProfilesFile, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out ProfilesFile
+	if err := json.Unmarshal(src, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func GenerateProfiles(repoRoot, outPath string) (int, int, int, error) {
 	unitPath, blocksPath := resolveSourcePaths(repoRoot)
 	itemsPath := filepath.Join(filepath.Dir(unitPath), "Items.java")

@@ -309,6 +309,11 @@ func FindCoreTilesFromMSAV(path string) ([]protocol.Point2, error) {
 				count++
 			}
 		}
+		// Fallback by known core IDs when content names are unavailable.
+		for _, id := range knownCoreBlockIDs() {
+			coreIDs[id] = struct{}{}
+		}
+		fmt.Printf("[worldstream] fallback core IDs enabled: %v\n", knownCoreBlockIDs())
 	}
 	if len(coreIDs) == 0 {
 		return []protocol.Point2{}, nil
@@ -486,6 +491,15 @@ func isCoreBlockName(name string) bool {
 		return false
 	}
 	return strings.HasPrefix(name, "core-")
+}
+
+func knownCoreBlockIDs() []int16 {
+	// Official content IDs from Blocks.java generation and
+	// runtime/world-content IDs observed in 155.4 map streams.
+	return []int16{
+		316, 317, 318, 319, 320, 321,
+		339, 340, 341, 342, 343, 344,
+	}
 }
 
 func findCoresInMapChunk(chunk []byte, coreIDs map[int16]struct{}) ([]protocol.Point2, error) {

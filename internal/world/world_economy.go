@@ -178,6 +178,37 @@ func (w *World) consumeBuildCost(team TeamID, blockID int16) bool {
 	return w.consumeItemsForTeam(team, scaled)
 }
 
+func (w *World) firstMissingBuildCost(team TeamID, blockID int16) (ItemID, int32, bool) {
+	if team == 0 || blockID <= 0 {
+		return 0, 0, false
+	}
+	name := w.blockNameByID(blockID)
+	cost := w.buildCostByName(name)
+	if len(cost) == 0 {
+		return 0, 0, false
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.InfiniteResources {
+		return 0, 0, false
+	}
+	scaled := w.scaleBuildCost(cost, rules)
+	if len(scaled) == 0 {
+		return 0, 0, false
+	}
+	w.ensureTeamInventory(team)
+	inv := w.teamItems[team]
+	for _, s := range scaled {
+		if s.Amount <= 0 {
+			continue
+		}
+		cur := inv[s.Item]
+		if cur < s.Amount {
+			return s.Item, s.Amount - cur, true
+		}
+	}
+	return 0, 0, false
+}
+
 func (w *World) buildDurationSeconds(blockID int16, rules *Rules) float32 {
 	return w.buildDurationSecondsForTeam(blockID, 0, rules)
 }
@@ -204,9 +235,6 @@ func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *R
 		if v, ok := w.teamBuilderSpeed[team]; ok && v > 0 {
 			builderSpeed = v
 		}
-	}
-	if rules != nil && rules.UnitBuildSpeedMultiplier > 0 {
-		builderSpeed *= rules.UnitBuildSpeedMultiplier
 	}
 	if builderSpeed > 0 {
 		base /= builderSpeed
@@ -290,6 +318,32 @@ func (w *World) addTeamItems(team TeamID, item ItemID, delta int32) {
 		ItemID:     item,
 		ItemAmount: w.teamItems[team][item],
 	})
+}
+
+// AdjustTeamItem applies item delta to a team inventory and emits sync events.
+// Returns false when subtraction would make inventory negative.
+func (w *World) AdjustTeamItem(team TeamID, item ItemID, delta int32) bool {
+	if team == 0 || delta == 0 {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ensureTeamInventory(team)
+	inv := w.teamItems[team]
+	if delta < 0 {
+		need := -delta
+		if inv[item] < need {
+			return false
+		}
+	}
+	inv[item] += delta
+	w.entityEvents = append(w.entityEvents, EntityEvent{
+		Kind:       EntityEventTeamItems,
+		BuildTeam:  team,
+		ItemID:     item,
+		ItemAmount: inv[item],
+	})
+	return true
 }
 
 func (w *World) consumeItemsForTeam(team TeamID, cost []ItemStack) bool {

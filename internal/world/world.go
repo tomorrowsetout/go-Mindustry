@@ -55,18 +55,21 @@ type World struct {
 	bullets      []simBullet
 	bulletNextID int32
 
-	blockNamesByID   map[int16]string
-	unitNamesByID    map[int16]string
-	unitTypeDefsByID map[int16]vanilla.UnitTypeDef
-	buildStates      map[int32]buildCombatState
-	pendingBuilds    map[int32]pendingBuildState
-	pendingBreaks    map[int32]pendingBreakState
-	factoryStates    map[int32]factoryState
-	unitMountCDs     map[int32][]float32
-	unitTargets      map[int32]targetTrackState
-	teamItems        map[TeamID]map[ItemID]int32
-	teamBuilderSpeed map[TeamID]float32
-	nextPlanOrder    uint64
+	blockNamesByID         map[int16]string
+	unitNamesByID          map[int16]string
+	fallbackBlockNamesByID map[int16]string
+	fallbackUnitNamesByID  map[int16]string
+	coreBlockIDs           map[int16]struct{}
+	unitTypeDefsByID       map[int16]vanilla.UnitTypeDef
+	buildStates            map[int32]buildCombatState
+	pendingBuilds          map[int32]pendingBuildState
+	pendingBreaks          map[int32]pendingBreakState
+	factoryStates          map[int32]factoryState
+	unitMountCDs           map[int32][]float32
+	unitTargets            map[int32]targetTrackState
+	teamItems              map[TeamID]map[ItemID]int32
+	teamBuilderSpeed       map[TeamID]float32
+	nextPlanOrder          uint64
 
 	unitProfilesByType     map[int16]weaponProfile
 	unitProfilesByName     map[string]weaponProfile
@@ -127,6 +130,7 @@ const (
 	EntityEventBuildConstructed    EntityEventKind = "build_constructed"
 	EntityEventBuildDeconstructing EntityEventKind = "build_deconstructing"
 	EntityEventBuildDestroyed      EntityEventKind = "build_destroyed"
+	EntityEventBuildRejected       EntityEventKind = "build_rejected"
 	EntityEventBuildHealth         EntityEventKind = "build_health"
 	EntityEventTeamItems           EntityEventKind = "team_items"
 	EntityEventBulletFired         EntityEventKind = "bullet_fired"
@@ -136,14 +140,15 @@ type EntityEvent struct {
 	Kind   EntityEventKind
 	Entity RawEntity
 	// BuildPos is packed tile position (Point2), not linear tile index.
-	BuildPos   int32
-	BuildTeam  TeamID
-	BuildBlock int16
-	BuildRot   int8
-	BuildHP    float32
-	ItemID     ItemID
-	ItemAmount int32
-	Bullet     BulletEvent
+	BuildPos    int32
+	BuildTeam   TeamID
+	BuildBlock  int16
+	BuildRot    int8
+	BuildHP     float32
+	BuildReason string
+	ItemID      ItemID
+	ItemAmount  int32
+	Bullet      BulletEvent
 }
 
 func packTilePos(x, y int) int32 {
@@ -494,6 +499,9 @@ func New(cfg Config) *World {
 		unitTargets:            map[int32]targetTrackState{},
 		teamItems:              map[TeamID]map[ItemID]int32{},
 		teamBuilderSpeed:       map[TeamID]float32{1: 0.5},
+		fallbackBlockNamesByID: map[int16]string{},
+		fallbackUnitNamesByID:  map[int16]string{},
+		coreBlockIDs:           map[int16]struct{}{},
 		unitProfilesByType:     cloneUnitWeaponProfiles(weaponProfilesByType),
 		unitProfilesByName:     map[string]weaponProfile{},
 		buildingProfilesByName: cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
@@ -617,6 +625,16 @@ func (w *World) SetModel(m *WorldModel) {
 			w.blockNamesByID[k] = strings.ToLower(strings.TrimSpace(v))
 		}
 	}
+	if len(w.fallbackBlockNamesByID) > 0 {
+		if w.blockNamesByID == nil {
+			w.blockNamesByID = make(map[int16]string, len(w.fallbackBlockNamesByID))
+		}
+		for id, name := range w.fallbackBlockNamesByID {
+			if strings.TrimSpace(w.blockNamesByID[id]) == "" {
+				w.blockNamesByID[id] = strings.ToLower(strings.TrimSpace(name))
+			}
+		}
+	}
 	if m != nil && len(m.UnitNames) > 0 {
 		w.unitNamesByID = make(map[int16]string, len(m.UnitNames))
 		for k, v := range m.UnitNames {
@@ -629,6 +647,61 @@ func (w *World) SetModel(m *WorldModel) {
 			}
 		}
 	}
+	if len(w.fallbackUnitNamesByID) > 0 {
+		if w.unitNamesByID == nil {
+			w.unitNamesByID = make(map[int16]string, len(w.fallbackUnitNamesByID))
+		}
+		for id, name := range w.fallbackUnitNamesByID {
+			if strings.TrimSpace(w.unitNamesByID[id]) == "" {
+				w.unitNamesByID[id] = strings.ToLower(strings.TrimSpace(name))
+			}
+		}
+	}
+	w.refreshCoreBlockIDsLocked()
+}
+
+// SetFallbackContentNames installs vanilla content-id name fallbacks.
+// These names are used when current map content chunk lacks entries for some IDs.
+func (w *World) SetFallbackContentNames(blocks, units map[int16]string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if blocks != nil {
+		if w.fallbackBlockNamesByID == nil {
+			w.fallbackBlockNamesByID = make(map[int16]string, len(blocks))
+		}
+		for id, name := range blocks {
+			n := strings.ToLower(strings.TrimSpace(name))
+			if n == "" {
+				continue
+			}
+			w.fallbackBlockNamesByID[id] = n
+			if w.blockNamesByID == nil {
+				w.blockNamesByID = make(map[int16]string, len(blocks))
+			}
+			if strings.TrimSpace(w.blockNamesByID[id]) == "" {
+				w.blockNamesByID[id] = n
+			}
+		}
+	}
+	if units != nil {
+		if w.fallbackUnitNamesByID == nil {
+			w.fallbackUnitNamesByID = make(map[int16]string, len(units))
+		}
+		for id, name := range units {
+			n := strings.ToLower(strings.TrimSpace(name))
+			if n == "" {
+				continue
+			}
+			w.fallbackUnitNamesByID[id] = n
+			if w.unitNamesByID == nil {
+				w.unitNamesByID = make(map[int16]string, len(units))
+			}
+			if strings.TrimSpace(w.unitNamesByID[id]) == "" {
+				w.unitNamesByID[id] = n
+			}
+		}
+	}
+	w.refreshCoreBlockIDsLocked()
 }
 
 func (w *World) stepPendingBuilds(delta time.Duration) {
@@ -895,6 +968,15 @@ func (w *World) UnitNameByTypeID(typeID int16) string {
 		return ""
 	}
 	return w.unitNamesByID[typeID]
+}
+
+func (w *World) BlockNameByID(blockID int16) string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if blockID <= 0 || len(w.blockNamesByID) == 0 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(w.blockNamesByID[blockID]))
 }
 
 func (w *World) LoadVanillaProfiles(path string) error {
@@ -1219,8 +1301,102 @@ func (w *World) TeamItems(team TeamID) map[ItemID]int32 {
 	return out
 }
 
+// EnsureTeamItems initializes team inventory if missing and returns a copy.
+func (w *World) EnsureTeamItems(team TeamID) map[ItemID]int32 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if team == 0 {
+		return map[ItemID]int32{}
+	}
+	w.ensureTeamInventory(team)
+	src := w.teamItems[team]
+	if len(src) == 0 {
+		return map[ItemID]int32{}
+	}
+	out := make(map[ItemID]int32, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+func isCoreBlockName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "core-zone" {
+		return false
+	}
+	return strings.HasPrefix(n, "core-")
+}
+
+func isKnownCoreBlockID(blockID int16) bool {
+	switch blockID {
+	// Official content-id sequence from core/src/mindustry/content/Blocks.java
+	case 316, 317, 318, 319, 320, 321:
+		return true
+	// Runtime/world-content sequence observed in 155.4 map streams.
+	case 339, 340, 341, 342, 343, 344:
+		return true
+	default:
+		return false
+	}
+}
+
+func (w *World) refreshCoreBlockIDsLocked() {
+	if w.coreBlockIDs == nil {
+		w.coreBlockIDs = make(map[int16]struct{})
+	} else {
+		clear(w.coreBlockIDs)
+	}
+	for id, name := range w.blockNamesByID {
+		if isCoreBlockName(name) {
+			w.coreBlockIDs[id] = struct{}{}
+		}
+	}
+	for id, name := range w.fallbackBlockNamesByID {
+		if isCoreBlockName(name) {
+			w.coreBlockIDs[id] = struct{}{}
+		}
+	}
+}
+
+func (w *World) isCoreBlockLocked(blockID int16, name string) bool {
+	if isCoreBlockName(name) {
+		return true
+	}
+	if _, ok := w.coreBlockIDs[blockID]; ok {
+		return true
+	}
+	return isKnownCoreBlockID(blockID)
+}
+
 func unitBuildSpeedByName(name string) float32 {
 	switch normalizeUnitName(name) {
+	case "nova":
+		return 0.3
+	case "pulsar":
+		return 0.5
+	case "quasar":
+		return 1.1
+	case "vela":
+		return 3.0
+	case "poly":
+		return 0.5
+	case "mega":
+		return 2.6
+	case "quad":
+		return 2.5
+	case "oct":
+		return 4.0
+	case "retusa":
+		return 1.5
+	case "oxynoe":
+		return 2.0
+	case "cyerce":
+		return 2.0
+	case "aegires":
+		return 3.0
+	case "navanax":
+		return 3.5
 	case "alpha":
 		return 0.5
 	case "beta":
@@ -1269,15 +1445,45 @@ func (w *World) TeamCorePositions(team TeamID) []int32 {
 	out := make([]int32, 0, 4)
 	for i := range w.model.Tiles {
 		t := &w.model.Tiles[i]
-		if t.Team != team || t.Block <= 0 {
+		if t.Block <= 0 {
+			continue
+		}
+		owner := t.Team
+		if owner == 0 && t.Build != nil && t.Build.Team != 0 {
+			owner = t.Build.Team
+		}
+		if owner != team {
 			continue
 		}
 		name := w.blockNameByID(int16(t.Block))
-		if strings.Contains(name, "core-") {
+		if w.isCoreBlockLocked(int16(t.Block), name) {
 			out = append(out, packTilePos(t.X, t.Y))
 		}
 	}
 	return out
+}
+
+// TileInfoByPackedPos returns block/team/core info for a packed point2 tile position.
+func (w *World) TileInfoByPackedPos(pos int32) (blockID int16, team TeamID, isCore bool, ok bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.model == nil || len(w.model.Tiles) == 0 {
+		return 0, 0, false, false
+	}
+	x, y := unpackTilePos(pos)
+	if !w.model.InBounds(x, y) {
+		return 0, 0, false, false
+	}
+	t := &w.model.Tiles[y*w.model.Width+x]
+	if t == nil || t.Block <= 0 {
+		return 0, 0, false, false
+	}
+	owner := t.Team
+	if owner == 0 && t.Build != nil && t.Build.Team != 0 {
+		owner = t.Build.Team
+	}
+	name := w.blockNameByID(int16(t.Block))
+	return int16(t.Block), owner, w.isCoreBlockLocked(int16(t.Block), name), true
 }
 
 func (w *World) BuildSyncSnapshot() []BuildSyncState {
@@ -1338,8 +1544,9 @@ func (w *World) ApplyBuildPlans(team TeamID, ops []BuildPlanOp) []int32 {
 	return changed
 }
 
-// ApplyBuildPlanSnapshot reconciles one team's queue with authoritative snapshot plans.
-// This matches vanilla queue semantics: absent plans are removed, present plans are ordered.
+// ApplyBuildPlanSnapshot applies client snapshot plans as queue updates.
+// Vanilla does not remove absent plans here; queue removals come from explicit
+// removeQueueBlock/deletePlans packets.
 func (w *World) ApplyBuildPlanSnapshot(team TeamID, ops []BuildPlanOp) []int32 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -1385,9 +1592,6 @@ func (w *World) ApplyBuildPlanSnapshot(team TeamID, ops []BuildPlanOp) []int32 {
 		wantBuild[pos] = struct{}{}
 		ordered = append(ordered, op)
 	}
-
-	_ = wantBuild
-	_ = wantBreak
 
 	for i, op := range ordered {
 		w.applyBuildPlanOpLocked(team, op, uint64(i+1), addChanged)
@@ -1463,7 +1667,28 @@ func (w *World) applyBuildPlanOpLocked(team TeamID, op BuildPlanOp, queueOrder u
 		delete(w.pendingBuilds, pos)
 		return
 	}
+	if itemID, missingAmount, missing := w.firstMissingBuildCost(team, op.BlockID); missing {
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:        EntityEventBuildRejected,
+			BuildPos:    packTilePos(tile.X, tile.Y),
+			BuildTeam:   team,
+			BuildBlock:  op.BlockID,
+			BuildReason: "insufficient_items",
+			ItemID:      itemID,
+			ItemAmount:  missingAmount,
+		})
+		fmt.Printf("[buildtrace] reject plan xy=(%d,%d) block=%d team=%d reason=insufficient_items item=%d missing=%d\n",
+			tile.X, tile.Y, op.BlockID, team, itemID, missingAmount)
+		return
+	}
 	if !w.consumeBuildCost(team, op.BlockID) {
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:        EntityEventBuildRejected,
+			BuildPos:    packTilePos(tile.X, tile.Y),
+			BuildTeam:   team,
+			BuildBlock:  op.BlockID,
+			BuildReason: "insufficient_items",
+		})
 		fmt.Printf("[buildtrace] reject plan xy=(%d,%d) block=%d team=%d reason=insufficient_items\n", tile.X, tile.Y, op.BlockID, team)
 		return
 	}

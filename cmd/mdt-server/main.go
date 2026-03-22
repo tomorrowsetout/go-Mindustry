@@ -491,14 +491,26 @@ func main() {
 	state := &worldState{current: initialWorld}
 	fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 
+	if p, note := resolveVanillaProfilesPath(cfg.Runtime.VanillaProfiles); p != "" {
+		cfg.Runtime.VanillaProfiles = p
+		if note != "" {
+			startup.warn("原版 profiles", note)
+		}
+	}
+
 	srv := netserver.NewServer(*addr, *buildVersion)
 	// Ignore config here: keep terminal clean; detailed packet logs go to logs/*.log only.
 	srv.SetVerboseNetLog(false)
 	srv.SetTranslatedConnLog(cfg.Control.TranslatedConnLogEnabled)
-	contentIDsPath := filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json")
+	contentIDsPath, contentNote := resolveContentIDsPath(cfg.Runtime.VanillaProfiles)
+	var loadedContentIDs *vanilla.ContentIDsFile
+	if contentNote != "" {
+		startup.warn("原版 content IDs", contentNote)
+	}
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
 	} else {
+		loadedContentIDs = ids
 		count := vanilla.ApplyContentIDs(srv.Content, ids)
 		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
 	}
@@ -510,6 +522,7 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	applyWorldFallbackContentNames(wld, loadedContentIDs)
 	// clientSnapshot writes client motion/position back into the authoritative world model.
 	// This mirrors vanilla NetServer.clientSnapshot behavior; without it, entitySnapshot will
 	// keep snapping units back to stale positions.
@@ -518,7 +531,10 @@ func main() {
 		return ok
 	}
 	srv.SetUnitPositionFn = func(unitID int32, x, y, rotation float32) bool {
-		_, ok := wld.SetEntityPosition(unitID, x, y, rotation)
+		ent, ok := wld.SetEntityPosition(unitID, x, y, rotation)
+		if ok && ent.Team > 0 && ent.TypeID > 0 {
+			wld.SetTeamBuilderSpeed(ent.Team, wld.BuilderSpeedForUnitType(ent.TypeID))
+		}
 		return ok
 	}
 	buildService := buildsvc.New(wld, buildsvc.Options{
@@ -526,6 +542,46 @@ func main() {
 		MaxPlansPerBatch: 20,
 		MaxOpsPerTick:    64,
 	})
+	var (
+		tileConfigMu    sync.RWMutex
+		tileConfigByPos = make(map[int32]any)
+	)
+	clearTileConfig := func(pos int32) {
+		if pos < 0 {
+			return
+		}
+		tileConfigMu.Lock()
+		delete(tileConfigByPos, pos)
+		tileConfigMu.Unlock()
+	}
+	snapshotTileConfigs := func() []tileConfigSyncEntry {
+		tileConfigMu.RLock()
+		defer tileConfigMu.RUnlock()
+		if len(tileConfigByPos) == 0 {
+			return nil
+		}
+		out := make([]tileConfigSyncEntry, 0, len(tileConfigByPos))
+		for pos, val := range tileConfigByPos {
+			out = append(out, tileConfigSyncEntry{
+				Pos:   pos,
+				Value: cloneTileConfigValue(val),
+			})
+		}
+		return out
+	}
+	resolveCoreTargetTeam := func(c *netserver.Conn, buildPos int32) (world.TeamID, bool) {
+		_, team, isCore, ok := wld.TileInfoByPackedPos(buildPos)
+		if !ok || !isCore {
+			return 0, false
+		}
+		if team == 0 {
+			team = resolveConnTeam(c, wld)
+		}
+		if team == 0 {
+			return 0, false
+		}
+		return team, true
+	}
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
 			return 0, 0, false
@@ -536,7 +592,10 @@ func main() {
 				team, strings.ToLower(strings.TrimSpace(coreName)), corePos.X, corePos.Y, tile.X, tile.Y)
 		} else if model := wld.Model(); model != nil && model.InBounds(int(tile.X), int(tile.Y)) {
 			if t, err := model.TileAt(int(tile.X), int(tile.Y)); err == nil && t != nil {
-				blockName := strings.ToLower(strings.TrimSpace(model.BlockNames[int16(t.Block)]))
+				blockName := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
+				if blockName == "" {
+					blockName = strings.ToLower(strings.TrimSpace(model.BlockNames[int16(t.Block)]))
+				}
 				fmt.Printf("[buildtrace] respawn core pick team=%d core=none fallback_tile=(%d,%d) fallback_block=%s\n",
 					team, tile.X, tile.Y, blockName)
 			}
@@ -598,6 +657,9 @@ func main() {
 	}
 	loadWorldModel := func(path string) {
 		buildService.Reset()
+		tileConfigMu.Lock()
+		clear(tileConfigByPos)
+		tileConfigMu.Unlock()
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
 			wld.SetModel(nil)
@@ -719,6 +781,8 @@ func main() {
 		// Wait until client applies world stream, then patch runtime build states.
 		time.Sleep(350 * time.Millisecond)
 		syncCurrentWorldToConn(conn, wld)
+		syncTeamItemsToConn(conn, wld)
+		syncTileConfigsToConn(conn, snapshotTileConfigs())
 	}
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {
 		if pos, ok := resolveTeamCoreTile(wld, world.TeamID(1), protocol.Point2{}); ok {
@@ -729,7 +793,7 @@ func main() {
 			return pos, true
 		}
 		// Fallback for maps where core tile cannot be parsed from msav metadata.
-		return fallbackSpawnPosFromModel(wld.Model())
+		return fallbackSpawnPosFromModel(wld.Model(), wld.BlockNameByID)
 	}
 	srv.OnBuildPlans = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
 		if c == nil || len(plans) == 0 {
@@ -845,6 +909,43 @@ func main() {
 		}
 		wld.CancelBuildAt(x, y, breaking)
 	}
+	srv.OnTileConfig = func(c *netserver.Conn, buildPos int32, value any) {
+		if buildPos < 0 {
+			return
+		}
+		copied := cloneTileConfigValue(value)
+		tileConfigMu.Lock()
+		if copied == nil {
+			delete(tileConfigByPos, buildPos)
+		} else {
+			tileConfigByPos[buildPos] = copied
+		}
+		tileConfigMu.Unlock()
+		srv.Broadcast(&protocol.Remote_InputHandler_tileConfig_86{
+			Build: protocol.BuildingBox{PosValue: buildPos},
+			Value: copied,
+		})
+	}
+	srv.OnTransferItemTo = func(c *netserver.Conn, itemID int16, amount int32, buildPos int32) {
+		if amount <= 0 || itemID < 0 {
+			return
+		}
+		team, ok := resolveCoreTargetTeam(c, buildPos)
+		if !ok {
+			return
+		}
+		_ = wld.AdjustTeamItem(team, world.ItemID(itemID), amount)
+	}
+	srv.OnRequestItem = func(c *netserver.Conn, itemID int16, amount int32, buildPos int32) {
+		if amount <= 0 || itemID < 0 {
+			return
+		}
+		team, ok := resolveCoreTargetTeam(c, buildPos)
+		if !ok {
+			return
+		}
+		_ = wld.AdjustTeamItem(team, world.ItemID(itemID), -amount)
+	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
 	}
@@ -887,6 +988,7 @@ func main() {
 					broadcastUnitDestroy(srv, ev.Entity.ID)
 					srv.MarkUnitDead(ev.Entity.ID, "world-removed")
 				case world.EntityEventBuildPlaced:
+					clearTileConfig(ev.BuildPos)
 					x, y := unpackTilePos(ev.BuildPos)
 					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=placed x=%d y=%d block_id=%d block=%s team=%d rot=%d",
 						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot))
@@ -942,6 +1044,7 @@ func main() {
 					}
 					broadcastBuildDeconstructBegin(srv, ev.BuildPos, byte(ev.BuildTeam))
 				case world.EntityEventBuildDestroyed:
+					clearTileConfig(ev.BuildPos)
 					x, y := unpackTilePos(ev.BuildPos)
 					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=destroyed x=%d y=%d block_id=%d block=%s team=%d",
 						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
@@ -960,6 +1063,30 @@ func main() {
 					}
 					broadcastSetTile(srv, ev.BuildPos, 0, 0, 0)
 					broadcastBuildDestroyed(srv, ev.BuildPos, ev.BuildBlock)
+				case world.EntityEventBuildRejected:
+					x, y := unpackTilePos(ev.BuildPos)
+					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=rejected x=%d y=%d block_id=%d block=%s team=%d reason=%s item_id=%d missing=%d",
+						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildReason, ev.ItemID, ev.ItemAmount))
+					if cfg.Building.Enabled {
+						if cfg.Building.Translated {
+							teamActorMu.Lock()
+							actor := teamActorBy[ev.BuildTeam]
+							teamActorMu.Unlock()
+							if strings.TrimSpace(actor) == "" {
+								actor = fmt.Sprintf("team-%d", ev.BuildTeam)
+							}
+							if ev.ItemAmount > 0 {
+								fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 建造失败 block=%d(%s) team=%d 原因=资源不足 item=%d 缺少=%d\n",
+									actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.ItemID, ev.ItemAmount)
+							} else {
+								fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 建造失败 block=%d(%s) team=%d 原因=%s\n",
+									actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildReason)
+							}
+						} else {
+							fmt.Printf("[buildtrace] rejected xy=(%d,%d) block=%d team=%d reason=%s item=%d missing=%d\n",
+								x, y, ev.BuildBlock, ev.BuildTeam, ev.BuildReason, ev.ItemID, ev.ItemAmount)
+						}
+					}
 				case world.EntityEventBuildHealth:
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
 				case world.EntityEventTeamItems:
@@ -1678,6 +1805,7 @@ func main() {
 			return err
 		}
 		_ = vanilla.ApplyContentIDs(srv.Content, ids)
+		applyWorldFallbackContentNames(wld, ids)
 		return nil
 	}
 	startup.ok("服务端启动", "初始化完成")
@@ -3091,19 +3219,103 @@ func displayPlayerName(c *netserver.Conn) string {
 	return name
 }
 
+func resolveVanillaProfilesPath(preferred string) (string, string) {
+	candidates := []string{
+		strings.TrimSpace(preferred),
+		filepath.Join("data", "vanilla", "profiles.json"),
+		filepath.Join("..", "data", "vanilla", "profiles.json"),
+		filepath.Join("go-server", "data", "vanilla", "profiles.json"),
+		filepath.Join("..", "go-server", "data", "vanilla", "profiles.json"),
+	}
+	seen := map[string]struct{}{}
+	for _, path := range candidates {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		p, err := vanilla.LoadProfiles(path)
+		if err != nil {
+			continue
+		}
+		if len(p.Blocks) > 0 {
+			if path != strings.TrimSpace(preferred) {
+				return path, fmt.Sprintf("检测到配置路径为空模板，已回退: %s", path)
+			}
+			return path, ""
+		}
+	}
+	return strings.TrimSpace(preferred), "未找到有效 profiles.json（blocks 为空），建造速度将退化为默认值"
+}
+
+func resolveContentIDsPath(profilesPath string) (string, string) {
+	preferred := filepath.Join(filepath.Dir(strings.TrimSpace(profilesPath)), "content_ids.json")
+	candidates := []string{
+		preferred,
+		filepath.Join("data", "vanilla", "content_ids.json"),
+		filepath.Join("..", "data", "vanilla", "content_ids.json"),
+		filepath.Join("go-server", "data", "vanilla", "content_ids.json"),
+		filepath.Join("..", "go-server", "data", "vanilla", "content_ids.json"),
+	}
+	seen := map[string]struct{}{}
+	for _, path := range candidates {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		ids, err := vanilla.LoadContentIDs(path)
+		if err != nil {
+			continue
+		}
+		if len(ids.Blocks) > 0 && len(ids.Units) > 0 {
+			if path != preferred {
+				return path, fmt.Sprintf("检测到 content_ids 缺失或无效，已回退: %s", path)
+			}
+			return path, ""
+		}
+	}
+	return preferred, "未找到有效 content_ids.json（blocks/units 为空），方块名称将退化为 block-<id>"
+}
+
 func blockDisplayName(wld *world.World, blockID int16) string {
 	if blockID <= 0 || wld == nil {
 		return "空"
 	}
-	model := wld.Model()
-	if model == nil {
-		return fmt.Sprintf("block-%d", blockID)
-	}
-	name := strings.TrimSpace(model.BlockNames[blockID])
+	name := strings.TrimSpace(wld.BlockNameByID(blockID))
 	if name == "" {
 		return fmt.Sprintf("block-%d", blockID)
 	}
 	return translateBlockNameCN(name)
+}
+
+func applyWorldFallbackContentNames(wld *world.World, ids *vanilla.ContentIDsFile) {
+	if wld == nil || ids == nil {
+		return
+	}
+	blocks := make(map[int16]string, len(ids.Blocks))
+	for _, e := range ids.Blocks {
+		n := strings.ToLower(strings.TrimSpace(e.Name))
+		if n == "" {
+			continue
+		}
+		blocks[e.ID] = n
+	}
+	units := make(map[int16]string, len(ids.Units))
+	for _, e := range ids.Units {
+		n := strings.ToLower(strings.TrimSpace(e.Name))
+		if n == "" {
+			continue
+		}
+		units[e.ID] = n
+	}
+	wld.SetFallbackContentNames(blocks, units)
 }
 
 func translateBlockNameCN(name string) string {
@@ -3290,6 +3502,77 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
 			Buildings: protocol.IntSeq{Items: health},
 		})
+	}
+}
+
+func syncTeamItemsToConn(conn *netserver.Conn, wld *world.World) {
+	if conn == nil || wld == nil {
+		return
+	}
+	for team := world.TeamID(1); team < 16; team++ {
+		positions := wld.TeamCorePositions(team)
+		if len(positions) == 0 {
+			continue
+		}
+		items := wld.EnsureTeamItems(team)
+		if len(items) == 0 {
+			continue
+		}
+		for itemID, amount := range items {
+			_ = conn.SendAsync(&protocol.Remote_InputHandler_setTileItems_62{
+				Item:      protocol.ItemRef{ItmID: int16(itemID), ItmName: ""},
+				Amount:    amount,
+				Positions: positions,
+			})
+		}
+	}
+}
+
+type tileConfigSyncEntry struct {
+	Pos   int32
+	Value any
+}
+
+func syncTileConfigsToConn(conn *netserver.Conn, entries []tileConfigSyncEntry) {
+	if conn == nil || len(entries) == 0 {
+		return
+	}
+	for i := range entries {
+		e := entries[i]
+		if e.Pos < 0 {
+			continue
+		}
+		_ = conn.SendAsync(&protocol.Remote_InputHandler_tileConfig_86{
+			Build: protocol.BuildingBox{PosValue: e.Pos},
+			Value: cloneTileConfigValue(e.Value),
+		})
+	}
+}
+
+func cloneTileConfigValue(v any) any {
+	switch t := v.(type) {
+	case nil:
+		return nil
+	case []byte:
+		out := make([]byte, len(t))
+		copy(out, t)
+		return out
+	case []bool:
+		out := make([]bool, len(t))
+		copy(out, t)
+		return out
+	case []int32:
+		out := make([]int32, len(t))
+		copy(out, t)
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i := range t {
+			out[i] = cloneTileConfigValue(t[i])
+		}
+		return out
+	default:
+		return t
 	}
 }
 
@@ -3921,28 +4204,81 @@ func resolveUnitTypeArg(arg string, wld *world.World) (int16, string, bool) {
 	return 0, "", false
 }
 
-func fallbackSpawnPosFromModel(model *world.WorldModel) (protocol.Point2, bool) {
+func fallbackSpawnPosFromModel(model *world.WorldModel, blockNameByID func(int16) string) (protocol.Point2, bool) {
 	if model == nil || model.Width <= 0 || model.Height <= 0 || len(model.Tiles) == 0 {
 		return protocol.Point2{}, false
 	}
-	var firstTeamBuild protocol.Point2
-	firstTeamBuildOK := false
+	resolveName := func(blockID int16) string {
+		if blockID <= 0 {
+			return ""
+		}
+		if blockNameByID != nil {
+			if name := strings.ToLower(strings.TrimSpace(blockNameByID(blockID))); name != "" {
+				return name
+			}
+		}
+		return strings.ToLower(strings.TrimSpace(model.BlockNames[blockID]))
+	}
+	isCoreName := func(name string) bool {
+		name = strings.ToLower(strings.TrimSpace(name))
+		return strings.Contains(name, "core-") || strings.Contains(name, "core")
+	}
+	centerX := model.Width / 2
+	centerY := model.Height / 2
+	bestAnyCoreDist2 := int(^uint(0) >> 1)
+	bestAnyCore := protocol.Point2{}
+	bestAnyCoreName := ""
+	hasAnyCore := false
+	bestEmptyDist2 := int(^uint(0) >> 1)
+	bestEmpty := protocol.Point2{}
+	hasEmpty := false
 	for i := range model.Tiles {
 		tile := &model.Tiles[i]
-		if tile == nil || tile.Build == nil || tile.Build.Health <= 0 || tile.Build.Team != 1 {
+		if tile == nil {
 			continue
 		}
-		if !firstTeamBuildOK {
-			firstTeamBuild = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
-			firstTeamBuildOK = true
+		blockID := int16(tile.Block)
+		if blockID <= 0 && tile.Build != nil {
+			blockID = int16(tile.Build.Block)
 		}
-		name := strings.ToLower(strings.TrimSpace(model.BlockNames[int16(tile.Build.Block)]))
-		if strings.Contains(name, "core") || strings.Contains(name, "foundation") || strings.Contains(name, "nucleus") {
+		owner := tile.Team
+		if owner == 0 && tile.Build != nil && tile.Build.Team != 0 {
+			owner = tile.Build.Team
+		}
+		name := resolveName(blockID)
+		if owner == 1 && isCoreName(name) {
 			return protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}, true
 		}
+		if isCoreName(name) {
+			dx := tile.X - centerX
+			dy := tile.Y - centerY
+			dist2 := dx*dx + dy*dy
+			if !hasAnyCore || dist2 < bestAnyCoreDist2 {
+				bestAnyCoreDist2 = dist2
+				bestAnyCore = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
+				bestAnyCoreName = name
+				hasAnyCore = true
+			}
+		}
+		if tile.Block <= 0 && (tile.Build == nil || tile.Build.Health <= 0) {
+			dx := tile.X - centerX
+			dy := tile.Y - centerY
+			dist2 := dx*dx + dy*dy
+			if !hasEmpty || dist2 < bestEmptyDist2 {
+				bestEmptyDist2 = dist2
+				bestEmpty = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
+				hasEmpty = true
+			}
+		}
 	}
-	if firstTeamBuildOK {
-		return firstTeamBuild, true
+	if hasAnyCore {
+		fmt.Printf("[buildtrace] fallback spawn: use nearest core (team-agnostic) tile=(%d,%d) block=%s\n",
+			bestAnyCore.X, bestAnyCore.Y, bestAnyCoreName)
+		return bestAnyCore, true
+	}
+	if hasEmpty {
+		fmt.Printf("[buildtrace] fallback spawn: use nearest empty tile tile=(%d,%d)\n", bestEmpty.X, bestEmpty.Y)
+		return bestEmpty, true
 	}
 	return protocol.Point2{X: int32(model.Width / 2), Y: int32(model.Height / 2)}, true
 }
@@ -3963,7 +4299,11 @@ func resolveRespawnUnitTypeByCoreTile(wld *world.World, tile protocol.Point2, te
 		return fallback
 	}
 	if t, err := model.TileAt(int(tile.X), int(tile.Y)); err == nil && t != nil && t.Block > 0 {
-		if unitName, _, ok := coreUnitNameAndRankByBlockName(model.BlockNames[int16(t.Block)]); ok {
+		blockName := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
+		if blockName == "" {
+			blockName = model.BlockNames[int16(t.Block)]
+		}
+		if unitName, _, ok := coreUnitNameAndRankByBlockName(blockName); ok {
 			if unitTypeID, ok := wld.ResolveUnitTypeID(unitName); ok {
 				return unitTypeID
 			}
@@ -4015,10 +4355,31 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 	bestDist2 := int(^uint(0) >> 1)
 	bestPos := protocol.Point2{}
 	bestName := ""
+	bestAnyRank := -1
+	bestAnyDist2 := int(^uint(0) >> 1)
+	bestAnyPos := protocol.Point2{}
+	bestAnyName := ""
 	for i := range model.Tiles {
 		t := &model.Tiles[i]
 		if t == nil || t.Block <= 0 {
 			continue
+		}
+		blockName := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
+		if blockName == "" {
+			blockName = model.BlockNames[int16(t.Block)]
+		}
+		_, rank, ok := coreUnitNameAndRankByBlockName(blockName)
+		if !ok {
+			continue
+		}
+		dx := t.X - refX
+		dy := t.Y - refY
+		dist2 := dx*dx + dy*dy
+		if rank > bestAnyRank || (rank == bestAnyRank && dist2 < bestAnyDist2) {
+			bestAnyRank = rank
+			bestAnyDist2 = dist2
+			bestAnyPos = protocol.Point2{X: int32(t.X), Y: int32(t.Y)}
+			bestAnyName = blockName
 		}
 		owner := t.Team
 		if owner == 0 && t.Build != nil && t.Build.Team != 0 {
@@ -4027,14 +4388,6 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 		if owner != team {
 			continue
 		}
-		blockName := model.BlockNames[int16(t.Block)]
-		_, rank, ok := coreUnitNameAndRankByBlockName(blockName)
-		if !ok {
-			continue
-		}
-		dx := t.X - refX
-		dy := t.Y - refY
-		dist2 := dx*dx + dy*dy
 		if rank > bestRank || (rank == bestRank && dist2 < bestDist2) {
 			bestRank = rank
 			bestDist2 = dist2
@@ -4042,10 +4395,27 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 			bestName = blockName
 		}
 	}
-	if bestRank < 0 {
-		return protocol.Point2{}, "", false
+	if bestRank >= 0 {
+		return bestPos, bestName, true
 	}
-	return bestPos, bestName, true
+	// Some world streams miss team fields on core tiles; fall back to nearest detected core.
+	if bestAnyRank >= 0 {
+		return bestAnyPos, bestAnyName, true
+	}
+	// Last fallback: use world-derived core tile positions (team-tag based).
+	for _, packed := range wld.TeamCorePositions(team) {
+		x, y := unpackTilePos(packed)
+		if model.InBounds(int(x), int(y)) {
+			if t, err := model.TileAt(int(x), int(y)); err == nil && t != nil {
+				name := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
+				if name == "" {
+					name = model.BlockNames[int16(t.Block)]
+				}
+				return protocol.Point2{X: x, Y: y}, name, true
+			}
+		}
+	}
+	return protocol.Point2{}, "", false
 }
 
 func resolveConnTeam(c *netserver.Conn, wld *world.World) world.TeamID {
@@ -4055,11 +4425,6 @@ func resolveConnTeam(c *netserver.Conn, wld *world.World) world.TeamID {
 	}
 	if unitID := c.UnitID(); unitID != 0 {
 		if ent, ok := wld.GetEntity(unitID); ok && ent.Team != 0 {
-			return ent.Team
-		}
-	}
-	if playerID := c.PlayerID(); playerID != 0 {
-		if ent, ok := wld.GetEntity(playerID); ok && ent.Team != 0 {
 			return ent.Team
 		}
 	}
@@ -4073,7 +4438,7 @@ func getSpawnPos(model *world.WorldModel, cache *worldCache, path string) (proto
 		return pos, true
 	}
 	// 2. 回退到模型中的重生点
-	return fallbackSpawnPosFromModel(model)
+	return fallbackSpawnPosFromModel(model, nil)
 }
 
 // spawnPosFromCache 从缓存获取重生点

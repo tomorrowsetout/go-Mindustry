@@ -163,10 +163,6 @@ func (s *Service) SyncPlans(team world.TeamID, plans []*protocol.BuildPlan) {
 	}
 
 	s.mu.Lock()
-	if prev := s.lastByTeam[team]; sameOps(prev, ops) {
-		s.mu.Unlock()
-		return
-	}
 	s.lastByTeam[team] = append(s.lastByTeam[team][:0], ops...)
 	s.lastAtByTeam[team] = time.Now()
 	s.mu.Unlock()

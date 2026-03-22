@@ -79,6 +79,10 @@ type Server struct {
 	// Optional hooks: cancel queued build plans from client side.
 	OnDeletePlans      func(*Conn, []int32)
 	OnRemoveQueueBlock func(*Conn, int32, int32, bool)
+	// Optional hooks: tile config sync and core item in/out sync.
+	OnTileConfig     func(*Conn, int32, any)
+	OnTransferItemTo func(*Conn, int16, int32, int32)
+	OnRequestItem    func(*Conn, int16, int32, int32)
 	// Respawn delay in "frames" (Mindustry Time.delta units). Defaults to 60 if zero.
 	RespawnDelayFrames float32
 	// Optional hook: spawn player unit in world/state. Uses provided unitID, returns world coords.
@@ -738,10 +742,10 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			u.X = c.snapX
 			u.Y = c.snapY
 		}
-		if plans := extractBuildPlans(v.Plans); len(plans) > 0 {
+		if plans := extractBuildPlans(v.Plans); plans != nil {
 			if s.OnBuildPlanSnapshot != nil {
 				s.OnBuildPlanSnapshot(c, plans)
-			} else if s.OnBuildPlans != nil {
+			} else if len(plans) > 0 && s.OnBuildPlans != nil {
 				s.OnBuildPlans(c, plans)
 			}
 		}
@@ -903,6 +907,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 68, "Remote_InputHandler_transferItemTo_68", "transfer_item_to")
 		}
+		if s.OnTransferItemTo != nil && v.Item != nil && v.Build != nil {
+			s.OnTransferItemTo(c, v.Item.ID(), v.Amount, v.Build.Pos())
+		}
 	case *protocol.Remote_InputHandler_deletePlans_69:
 		// 删除建造计划
 		if s.DevLogger != nil {
@@ -935,6 +942,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// 请求物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 74, "Remote_InputHandler_requestItem_74", "request_item")
+		}
+		if s.OnRequestItem != nil && v.Item != nil && v.Build != nil {
+			s.OnRequestItem(c, v.Item.ID(), v.Amount, v.Build.Pos())
 		}
 	case *protocol.Remote_InputHandler_transferInventory_75:
 		// 转移库存
@@ -988,6 +998,13 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		// 投放物品
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 84, "Remote_InputHandler_dropItem_84", "drop_item")
+		}
+	case *protocol.Remote_InputHandler_tileConfig_86:
+		if s.DevLogger != nil {
+			s.DevLogger.LogPacketReceived(c.id, c.playerID, 86, "Remote_InputHandler_tileConfig_86", "tile_config")
+		}
+		if s.OnTileConfig != nil && v.Build != nil {
+			s.OnTileConfig(c, v.Build.Pos(), v.Value)
 		}
 	case *protocol.Remote_NetServer_requestDebugStatus_36:
 		resp := &protocol.Remote_NetServer_debugStatusClient_37{
@@ -1720,6 +1737,7 @@ type Conn struct {
 	deathTimer          float32
 	lastRespawnCheck    time.Time
 	lastSpawnAt         time.Time
+	unitMissingSince    time.Time
 	unitID              int32
 	lastRespawnReq      time.Time
 	building            bool
@@ -2562,6 +2580,7 @@ func (s *Server) forceRespawn(c *Conn, source string) {
 	if s.sendPlayerSpawnAt(c, pos) {
 		c.dead = false
 		c.deathTimer = 0
+		c.unitMissingSince = time.Time{}
 		c.lastRespawnCheck = time.Time{}
 		c.lastRespawnReq = time.Now()
 		fmt.Printf("[net] respawn sent conn=%d source=%s\n", c.id, source)
@@ -2605,6 +2624,7 @@ func (s *Server) markDead(c *Conn, source string) {
 	if !c.dead {
 		c.dead = true
 		c.deathTimer = 0
+		c.unitMissingSince = time.Time{}
 		c.lastRespawnCheck = time.Now()
 		c.lastSpawnAt = time.Time{}
 	}
@@ -2618,6 +2638,7 @@ func (s *Server) maybeRespawn(c *Conn) {
 	if c == nil || c.playerID == 0 {
 		return
 	}
+	now := time.Now()
 	if !c.dead {
 		if c.unitID == 0 {
 			s.markDead(c, "unit-missing")
@@ -2625,18 +2646,32 @@ func (s *Server) maybeRespawn(c *Conn) {
 		}
 		// Avoid immediate false-death right after spawn.
 		if !c.lastSpawnAt.IsZero() && time.Since(c.lastSpawnAt) < 1500*time.Millisecond {
+			c.unitMissingSince = time.Time{}
 			return
+		}
+		confirmMissing := func() bool {
+			if c.unitMissingSince.IsZero() {
+				c.unitMissingSince = now
+				return false
+			}
+			return now.Sub(c.unitMissingSince) >= 2*time.Second
 		}
 		s.entityMu.Lock()
 		ent, ok := s.entities[c.unitID]
 		s.entityMu.Unlock()
 		if !ok {
+			if !confirmMissing() {
+				return
+			}
 			s.markDead(c, "unit-entity-missing")
 			return
 		}
 		if s.UnitInfoFn != nil {
 			info, ok := s.UnitInfoFn(c.unitID)
 			if !ok {
+				if !confirmMissing() {
+					return
+				}
 				s.markDead(c, "unit-state-missing")
 				return
 			}
@@ -2651,19 +2686,19 @@ func (s *Server) maybeRespawn(c *Conn) {
 				return
 			}
 		}
+		c.unitMissingSince = time.Time{}
 		c.deathTimer = 0
-		c.lastRespawnCheck = time.Now()
+		c.lastRespawnCheck = now
 		return
 	}
 	if s.SpawnTileFn == nil {
-		c.lastRespawnCheck = time.Now()
+		c.lastRespawnCheck = now
 		return
 	}
 	if _, ok := s.SpawnTileFn(); !ok {
-		c.lastRespawnCheck = time.Now()
+		c.lastRespawnCheck = now
 		return
 	}
-	now := time.Now()
 	if c.lastRespawnCheck.IsZero() {
 		c.lastRespawnCheck = now
 		return
