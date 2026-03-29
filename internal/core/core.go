@@ -163,6 +163,7 @@ func (c1 *Core1) Run(interval time.Duration) {
 func (c1 *Core1) runGameLoop(interval time.Duration) {
 	tickCount := uint64(0)
 	next := time.Now().Add(interval)
+	const maxCatchUp = 4
 
 	for {
 		now := time.Now()
@@ -171,14 +172,19 @@ func (c1 *Core1) runGameLoop(interval time.Duration) {
 			time.Sleep(next.Sub(now))
 			continue
 		}
-
-		// 执行 tick
-		if c1.tickFn != nil {
-			c1.tickFn(tickCount, interval)
+		steps := 0
+		for !now.Before(next) && steps < maxCatchUp {
+			if c1.tickFn != nil {
+				c1.tickFn(tickCount, interval)
+			}
+			tickCount++
+			steps++
+			next = next.Add(interval)
+			now = time.Now()
 		}
-
-		tickCount++
-		next = next.Add(interval)
+		if steps == maxCatchUp && !now.Before(next) {
+			next = now.Add(interval)
+		}
 	}
 }
 
@@ -495,14 +501,14 @@ func (c2 *Core2) handlePacketIncoming(m *PacketMessage) {
 	if m == nil || m.Packet == nil {
 		return
 	}
-	c2.recordEvent(storage.Event{
-		Timestamp: time.Now().UTC(),
-		Kind:      "packet_incoming",
-		Packet:    fmt.Sprintf("%T", m.Packet),
-		Detail:    fmt.Sprintf("idle=%s bytes=%d", m.IdleTime.String(), len(m.Data)),
-		ConnID:    m.ConnID,
-	})
 	if c2.verboseNetLog.Load() {
+		c2.recordEvent(storage.Event{
+			Timestamp: time.Now().UTC(),
+			Kind:      "packet_incoming",
+			Packet:    fmt.Sprintf("%T", m.Packet),
+			Detail:    fmt.Sprintf("idle=%s bytes=%d", m.IdleTime.String(), len(m.Data)),
+			ConnID:    m.ConnID,
+		})
 		fmt.Printf("[Core2 %s] Incoming packet: connID=%d, packet=%T\n",
 			c2.name, m.ConnID, m.Packet)
 	}
@@ -516,14 +522,14 @@ func (c2 *Core2) handlePacketOutgoing(m *PacketMessage) {
 	if m == nil || m.Packet == nil {
 		return
 	}
-	c2.recordEvent(storage.Event{
-		Timestamp: time.Now().UTC(),
-		Kind:      "packet_outgoing",
-		Packet:    fmt.Sprintf("%T", m.Packet),
-		Detail:    fmt.Sprintf("bytes=%d", len(m.Data)),
-		ConnID:    m.ConnID,
-	})
 	if c2.verboseNetLog.Load() {
+		c2.recordEvent(storage.Event{
+			Timestamp: time.Now().UTC(),
+			Kind:      "packet_outgoing",
+			Packet:    fmt.Sprintf("%T", m.Packet),
+			Detail:    fmt.Sprintf("bytes=%d", len(m.Data)),
+			ConnID:    m.ConnID,
+		})
 		fmt.Printf("[Core2 %s] Outgoing packet: connID=%d, packet=%T\n",
 			c2.name, m.ConnID, m.Packet)
 	}

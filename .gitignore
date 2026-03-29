@@ -8,14 +8,6 @@
 *.so
 *.dylib
 
-# Data files
-bin/
-data/
-configs/
-tmp/
-*.msav
-*.jsonl
-
 # Test binary, built with `go test -c`
 *.test
 

@@ -34,7 +34,7 @@ func SaveMSAVSnapshot(cfg config.PersistConfig, mapPath string, snap world.Snaps
 	outPath := filepath.Join(dir, name)
 	tags := map[string]string{
 		"wave":     strconv.Itoa(int(snap.Wave)),
-		"wavetime": fmt.Sprintf("%.2f", snap.WaveTime),
+		"wavetime": fmt.Sprintf("%.2f", snap.WaveTime*60),
 		"tick":     fmt.Sprintf("%.0f", float64(snap.Tick)),
 	}
 	return worldstream.WriteMSAVSnapshot(mapPath, outPath, tags)
@@ -59,7 +59,7 @@ func SaveMSAVSnapshotFromModel(cfg config.PersistConfig, snap world.Snapshot, mo
 	outPath := filepath.Join(dir, name)
 	tags := map[string]string{
 		"wave":     strconv.Itoa(int(snap.Wave)),
-		"wavetime": fmt.Sprintf("%.2f", snap.WaveTime),
+		"wavetime": fmt.Sprintf("%.2f", snap.WaveTime*60),
 		"tick":     fmt.Sprintf("%.0f", float64(snap.Tick)),
 	}
 	if model != nil {

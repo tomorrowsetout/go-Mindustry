@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -309,11 +311,6 @@ func FindCoreTilesFromMSAV(path string) ([]protocol.Point2, error) {
 				count++
 			}
 		}
-		// Fallback by known core IDs when content names are unavailable.
-		for _, id := range knownCoreBlockIDs() {
-			coreIDs[id] = struct{}{}
-		}
-		fmt.Printf("[worldstream] fallback core IDs enabled: %v\n", knownCoreBlockIDs())
 	}
 	if len(coreIDs) == 0 {
 		return []protocol.Point2{}, nil
@@ -436,52 +433,72 @@ func readContentUnitNames(chunk []byte, registry *protocol.ContentRegistry) (map
 }
 
 func readContentNamesOfType(chunk []byte, typeID byte, registry *protocol.ContentRegistry) (map[int16]string, error) {
-	// 优先使用 content registry 中的映射，忽略 MSAV 文件中的 content chunk
-	// 因为 MSAV 文件的 content chunk 可能使用旧版 Mindustry 的 content 顺序
-	if registry != nil {
-		out := map[int16]string{}
-		switch typeID {
-		case 1: // ContentType.block
-			registry.IterateBlocks(func(b protocol.Block) bool {
-				out[b.ID()] = strings.ToLower(strings.TrimSpace(b.Name()))
-				return true
-			})
-		case 6: // ContentType.unit
-			registry.IterateUnitTypes(func(u protocol.UnitType) bool {
-				out[u.ID()] = strings.ToLower(strings.TrimSpace(u.Name()))
-				return true
-			})
-		}
-		return out, nil
-	}
-
-	// 如果没有 registry，使用 MSAV 文件中的 content chunk（向后兼容）
+	// Prefer the map's own content-id mapping first.
+	// This avoids runtime registry order drift from breaking block/unit name resolution.
 	r := newJavaReader(chunk)
 	mapped, err := r.ReadByte()
 	if err != nil {
+		if registry != nil {
+			return readContentNamesFromRegistry(typeID, registry), nil
+		}
 		return nil, err
 	}
 	out := map[int16]string{}
 	for i := 0; i < int(mapped); i++ {
 		ct, err := r.ReadByte()
 		if err != nil {
+			if registry != nil {
+				return readContentNamesFromRegistry(typeID, registry), nil
+			}
 			return nil, err
 		}
 		total, err := r.ReadInt16()
 		if err != nil {
+			if registry != nil {
+				return readContentNamesFromRegistry(typeID, registry), nil
+			}
 			return nil, err
 		}
 		for id := int16(0); id < total; id++ {
 			name, err := r.ReadUTF()
 			if err != nil {
+				if registry != nil {
+					return readContentNamesFromRegistry(typeID, registry), nil
+				}
 				return nil, err
 			}
 			if ct == typeID {
-				out[id] = name
+				out[id] = strings.ToLower(strings.TrimSpace(name))
 			}
 		}
 	}
+	if len(out) > 0 {
+		return out, nil
+	}
+	if registry != nil {
+		return readContentNamesFromRegistry(typeID, registry), nil
+	}
 	return out, nil
+}
+
+func readContentNamesFromRegistry(typeID byte, registry *protocol.ContentRegistry) map[int16]string {
+	out := map[int16]string{}
+	if registry == nil {
+		return out
+	}
+	switch typeID {
+	case 1: // ContentType.block
+		registry.IterateBlocks(func(b protocol.Block) bool {
+			out[b.ID()] = strings.ToLower(strings.TrimSpace(b.Name()))
+			return true
+		})
+	case 6: // ContentType.unit
+		registry.IterateUnitTypes(func(u protocol.UnitType) bool {
+			out[u.ID()] = strings.ToLower(strings.TrimSpace(u.Name()))
+			return true
+		})
+	}
+	return out
 }
 
 func isCoreBlockName(name string) bool {
@@ -491,15 +508,6 @@ func isCoreBlockName(name string) bool {
 		return false
 	}
 	return strings.HasPrefix(name, "core-")
-}
-
-func knownCoreBlockIDs() []int16 {
-	// Official content IDs from Blocks.java generation and
-	// runtime/world-content IDs observed in 155.4 map streams.
-	return []int16{
-		316, 317, 318, 319, 320, 321,
-		339, 340, 341, 342, 343, 344,
-	}
 }
 
 func findCoresInMapChunk(chunk []byte, coreIDs map[int16]struct{}) ([]protocol.Point2, error) {
@@ -515,7 +523,9 @@ func findCoresInMapChunk(chunk []byte, coreIDs map[int16]struct{}) ([]protocol.P
 	if width <= 0 || height <= 0 {
 		return nil, ErrInvalidMSAV
 	}
-	total := int(width) * int(height)
+	w := int(width)
+	h := int(height)
+	total := w * h
 
 	// floors + overlays
 	for i := 0; i < total; i++ {
@@ -529,7 +539,7 @@ func findCoresInMapChunk(chunk []byte, coreIDs map[int16]struct{}) ([]protocol.P
 		i += int(con)
 	}
 
-	var cores []protocol.Point2
+	coreMask := make([]bool, total)
 
 	// blocks
 	for i := 0; i < total; i++ {
@@ -541,14 +551,15 @@ func findCoresInMapChunk(chunk []byte, coreIDs map[int16]struct{}) ([]protocol.P
 		if err != nil {
 			return nil, err
 		}
+		isCore := false
 		if _, ok := coreIDs[blockID]; ok {
-			x := int32(i % int(width))
-			y := int32(i / int(width))
-			cores = append(cores, protocol.Point2{X: x, Y: y})
+			isCore = true
+			coreMask[i] = true
 		}
 		hadEntity := (packed & 1) != 0
-		hadData := (packed & 4) != 0
-		if hadData {
+		hadDataOld := (packed & 2) != 0
+		hadDataNew := (packed & 4) != 0
+		if hadDataNew {
 			if err := r.Skip(1 + 1 + 1 + 4); err != nil {
 				return nil, err
 			}
@@ -570,14 +581,90 @@ func findCoresInMapChunk(chunk []byte, coreIDs map[int16]struct{}) ([]protocol.P
 					return nil, err
 				}
 			}
-		} else if !hadData {
+		} else if hadDataOld || hadDataNew {
+			if hadDataOld {
+				if err := r.Skip(1); err != nil {
+					return nil, err
+				}
+			}
+		} else {
 			con, err := r.ReadByte()
 			if err != nil {
 				return nil, err
 			}
-			i += int(con)
+			run := int(con)
+			if isCore {
+				for j := 1; j <= run; j++ {
+					idx := i + j
+					if idx >= total {
+						return nil, fmt.Errorf("map core run out of range: %d/%d", idx, total)
+					}
+					coreMask[idx] = true
+				}
+			}
+			i += run
 		}
 	}
+
+	visited := make([]bool, total)
+	cores := make([]protocol.Point2, 0)
+	queue := make([]int, 0, 16)
+	push := func(idx int) {
+		if idx < 0 || idx >= total || visited[idx] || !coreMask[idx] {
+			return
+		}
+		visited[idx] = true
+		queue = append(queue, idx)
+	}
+
+	for start := 0; start < total; start++ {
+		if visited[start] || !coreMask[start] {
+			continue
+		}
+		queue = queue[:0]
+		push(start)
+		minX, maxX := start%w, start%w
+		minY, maxY := start/w, start/w
+		for head := 0; head < len(queue); head++ {
+			idx := queue[head]
+			x, y := idx%w, idx/w
+			if x < minX {
+				minX = x
+			}
+			if x > maxX {
+				maxX = x
+			}
+			if y < minY {
+				minY = y
+			}
+			if y > maxY {
+				maxY = y
+			}
+			if x > 0 {
+				push(idx - 1)
+			}
+			if x+1 < w {
+				push(idx + 1)
+			}
+			if y > 0 {
+				push(idx - w)
+			}
+			if y+1 < h {
+				push(idx + w)
+			}
+		}
+		cores = append(cores, protocol.Point2{
+			X: int32((minX + maxX) / 2),
+			Y: int32((minY + maxY) / 2),
+		})
+	}
+
+	sort.Slice(cores, func(i, j int) bool {
+		if cores[i].Y != cores[j].Y {
+			return cores[i].Y < cores[j].Y
+		}
+		return cores[i].X < cores[j].X
+	})
 	return cores, nil
 }
 
@@ -1134,6 +1221,85 @@ func RewritePlayerIDInWorldStream(payload []byte, playerID int32) ([]byte, error
 		return nil, io.ErrUnexpectedEOF
 	}
 	binary.BigEndian.PutUint32(raw[idPos:idPos+4], uint32(playerID))
+
+	var out bytes.Buffer
+	zw := zlib.NewWriter(&out)
+	if _, err := zw.Write(raw); err != nil {
+		_ = zw.Close()
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// RewriteRuntimeStateInWorldStream rewrites wave/wavetime/tick/playerID fields in a
+// zlib-compressed NetworkIO.writeWorld payload while preserving the rest of the payload.
+func RewriteRuntimeStateInWorldStream(payload []byte, wave int32, wavetimeTicks float32, tick float64, playerID int32) ([]byte, error) {
+	zr, err := zlib.NewReader(bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(zr)
+	_ = zr.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	r := newJavaReader(raw)
+	if _, err := r.ReadUTF(); err != nil {
+		return nil, err
+	}
+	if _, err := r.ReadUTF(); err != nil {
+		return nil, err
+	}
+	entries, err := r.ReadInt16()
+	if err != nil {
+		return nil, err
+	}
+	if entries < 0 {
+		return nil, ErrInvalidMSAV
+	}
+	for i := 0; i < int(entries); i++ {
+		if err := r.SkipUTF(); err != nil {
+			return nil, err
+		}
+		if err := r.SkipUTF(); err != nil {
+			return nil, err
+		}
+	}
+
+	wavePos := r.Offset()
+	if _, err := r.ReadInt32(); err != nil {
+		return nil, err
+	}
+	wavetimePos := r.Offset()
+	if _, err := r.ReadFloat32(); err != nil {
+		return nil, err
+	}
+	tickPos := r.Offset()
+	if _, err := r.ReadFloat64(); err != nil {
+		return nil, err
+	}
+	if _, err := r.ReadInt64(); err != nil {
+		return nil, err
+	}
+	if _, err := r.ReadInt64(); err != nil {
+		return nil, err
+	}
+	playerIDPos := r.Offset()
+	if _, err := r.ReadInt32(); err != nil {
+		return nil, err
+	}
+
+	if wavePos+4 > len(raw) || wavetimePos+4 > len(raw) || tickPos+8 > len(raw) || playerIDPos+4 > len(raw) {
+		return nil, io.ErrUnexpectedEOF
+	}
+	binary.BigEndian.PutUint32(raw[wavePos:wavePos+4], uint32(wave))
+	binary.BigEndian.PutUint32(raw[wavetimePos:wavetimePos+4], math.Float32bits(wavetimeTicks))
+	binary.BigEndian.PutUint64(raw[tickPos:tickPos+8], math.Float64bits(tick))
+	binary.BigEndian.PutUint32(raw[playerIDPos:playerIDPos+4], uint32(playerID))
 
 	var out bytes.Buffer
 	zw := zlib.NewWriter(&out)

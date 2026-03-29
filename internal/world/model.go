@@ -97,6 +97,49 @@ func (b *Building) RemoveItem(item ItemID, amount int32) bool {
 	return false
 }
 
+func (b *Building) ItemAmount(item ItemID) int32 {
+	for _, stack := range b.Items {
+		if stack.Item == item {
+			return stack.Amount
+		}
+	}
+	return 0
+}
+
+func (b *Building) AddLiquid(liquid LiquidID, amount float32) {
+	for i, stack := range b.Liquids {
+		if stack.Liquid == liquid {
+			b.Liquids[i].Amount += amount
+			return
+		}
+	}
+	b.Liquids = append(b.Liquids, LiquidStack{Liquid: liquid, Amount: amount})
+}
+
+func (b *Building) RemoveLiquid(liquid LiquidID, amount float32) bool {
+	for i, stack := range b.Liquids {
+		if stack.Liquid == liquid {
+			if stack.Amount >= amount {
+				b.Liquids[i].Amount -= amount
+				if b.Liquids[i].Amount <= 0 {
+					b.Liquids = append(b.Liquids[:i], b.Liquids[i+1:]...)
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (b *Building) LiquidAmount(liquid LiquidID) float32 {
+	for _, stack := range b.Liquids {
+		if stack.Liquid == liquid {
+			return stack.Amount
+		}
+	}
+	return 0
+}
+
 // DistanceTo 距离到
 func (b *Building) DistanceTo(other *Building) float32 {
 	dx := float32(b.X - other.X)

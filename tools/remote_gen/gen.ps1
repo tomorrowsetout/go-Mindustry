@@ -1,4 +1,5 @@
-$csvPath = "C:\Users\43551\Desktop\mdt-server\Mindustry-master\go-server\docs\remote-methods.csv"
+$defaultCsv = "C:\Users\43551\Desktop\mdt-server\Mindustry-master\go-server\docs\remote-methods.csv"
+$csvPath = if ($env:CSVPATH -and $env:CSVPATH.Trim().Length -gt 0) { $env:CSVPATH } else { $defaultCsv }
 $defaultOut = "C:\Users\43551\Desktop\mdt-server\Mindustry-master\go-server\internal\protocol\remote_packets.go"
 $outPath = if ($env:OUTPATH -and $env:OUTPATH.Trim().Length -gt 0) { $env:OUTPATH } else { $defaultOut }
 

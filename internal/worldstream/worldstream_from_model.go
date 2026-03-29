@@ -3,6 +3,7 @@ package worldstream
 import (
 	"bytes"
 	"compress/zlib"
+	"fmt"
 	"strconv"
 
 	"mdt-server/internal/world"
@@ -19,10 +20,26 @@ func BuildWorldStreamFromModel(model *world.WorldModel, playerID int32) ([]byte,
 	for k, v := range model.Tags {
 		tags[k] = v
 	}
+	return buildWorldStreamFromModelTags(model, tags, playerID)
+}
 
+func BuildWorldStreamFromModelSnapshot(model *world.WorldModel, playerID int32, snap world.Snapshot) ([]byte, error) {
+	if model == nil {
+		return nil, ErrInvalidMSAV
+	}
+	tags := make(map[string]string, len(model.Tags)+3)
+	for k, v := range model.Tags {
+		tags[k] = v
+	}
+	tags["wave"] = strconv.Itoa(int(snap.Wave))
+	tags["wavetime"] = fmt.Sprintf("%.2f", snap.WaveTime*60)
+	tags["tick"] = fmt.Sprintf("%.0f", float64(snap.Tick))
+	return buildWorldStreamFromModelTags(model, tags, playerID)
+}
+
+func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]string, playerID int32) ([]byte, error) {
 	var out bytes.Buffer
 	w := &javaWriter{buf: &out}
-
 	rules := tags["rules"]
 	if rules == "" {
 		rules = "{}"

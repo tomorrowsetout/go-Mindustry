@@ -20,7 +20,7 @@ var (
 	ErrCompressedUnsupported = errors.New("lz4_compression_not_supported")
 )
 
-// Serializer mirrors ArcNetProvider.PacketSerializer framing.
+// Serializer implements the packet framing expected by the official protocol.
 type Serializer struct {
 	Registry *protocol.PacketRegistry
 	Ctx      *protocol.TypeIOContext
@@ -85,46 +85,6 @@ var reRemoteSuffixID = regexp.MustCompile(`_(\d+)$`)
 // Wire IDs include 4 base packets registered before Call.registerPackets:
 // StreamBegin, StreamChunk, WorldStream, ConnectPacket.
 func officialPacketID(p protocol.Packet) (byte, bool) {
-	switch p.(type) {
-	case *protocol.Remote_NetClient_entitySnapshot_32:
-		return 43, true
-	case *protocol.Remote_NetClient_hiddenSnapshot_33:
-		return 46, true
-	case *protocol.Remote_NetClient_stateSnapshot_35:
-		return 117, true
-	case *protocol.Remote_NetClient_pingResponse_19:
-		return 66, true
-	case *protocol.Remote_NetClient_kick_22:
-		return 53, true
-	case *protocol.Remote_NetClient_kick_21:
-		return 54, true
-	case *protocol.Remote_NetClient_sendMessage_14:
-		return 83, true
-	case *protocol.Remote_NetClient_sendMessage_15:
-		return 82, true
-	case *protocol.Remote_NetClient_playerDisconnect_31:
-		return 67, true
-	case *protocol.Remote_InputHandler_unitClear_91:
-		return 133, true
-	case *protocol.Remote_CoreBlock_playerSpawn_140:
-		return 68, true
-	case *protocol.Remote_ConstructBlock_deconstructFinish_136:
-		return 36, true
-	case *protocol.Remote_ConstructBlock_constructFinish_137:
-		return 30, true
-	case *protocol.Remote_Tile_removeTile_130:
-		return 71, true
-	case *protocol.Remote_Tile_setTile_131:
-		return 106, true
-	case *protocol.Remote_Tile_buildHealthUpdate_135:
-		return 13, true
-	case *protocol.Remote_Units_unitDestroy_52:
-		return 137, true
-	case *protocol.Remote_Build_beginBreak_123:
-		return 9, true
-	case *protocol.Remote_Build_beginPlace_124:
-		return 10, true
-	}
 	if p == nil {
 		return 0, false
 	}
@@ -203,7 +163,7 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 				t := int64(binary.BigEndian.Uint64(payload[:8]))
 				return &protocol.Remote_NetClient_ping_18{Time: t}, nil
 			}
-		case 81: // SendChatMessageCallPacket(message)
+		case 81, 89: // SendChatMessageCallPacket(message), some clients use id=89 with string-only payload.
 			if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
 				return msg, nil
 			}
@@ -224,10 +184,9 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 	}
 
 	if !compat {
-		// Some official/modified 155 clients still send legacy chat call-id 81
-		// with payload = string(message). If we decode by registry first,
-		// id=81 may be misinterpreted as requestUnitPayload and chat is lost.
-		if id == 81 {
+		// Some official/modified clients send chat payload as plain string
+		// (without leading player entity). Try chat fallback before registry decode.
+		if id == 81 || id == 89 {
 			if msg, ferr := readSendChatMessageCompat(payload, s.Ctx); ferr == nil {
 				if strings.TrimSpace(msg.Message) != "" {
 					return msg, nil
@@ -411,12 +370,22 @@ func (s *Serializer) writeObject(buf *bytes.Buffer, obj any, compat bool) error 
 }
 
 func readSendChatMessageCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_NetClient_sendChatMessage_16, error) {
+	// First attempt official shape: (entity, string).
 	r := protocol.NewReaderWithContext(payload, ctx)
-	msg, err := protocol.ReadString(r)
+	out := &protocol.Remote_NetClient_sendChatMessage_16{}
+	if player, err := protocol.ReadEntity(r, ctx); err == nil {
+		if msg, err2 := protocol.ReadString(r); err2 == nil && msg != nil {
+			out.Player = player
+			out.Message = *msg
+			return out, nil
+		}
+	}
+	// Fallback for string-only payload used by some clients.
+	r2 := protocol.NewReaderWithContext(payload, ctx)
+	msg, err := protocol.ReadString(r2)
 	if err != nil {
 		return nil, err
 	}
-	out := &protocol.Remote_NetClient_sendChatMessage_16{}
 	if msg != nil {
 		out.Message = *msg
 	}

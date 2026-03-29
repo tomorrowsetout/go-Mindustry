@@ -1,0 +1,38 @@
+2026-03-29T15:28:29.4909448Z [NET] kind=tcp_accept packet= conn_id=401407765 uuid= ip=10.147.17.101 name="" detail=
+2026-03-29T15:28:29.5056357Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=401407765 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T15:28:29.5381619Z [NET] kind=world_handshake_sent packet= conn_id=401407765 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T15:28:29.837989Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=401407765 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T23:28:29.8483794+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T23:28:29.8510386+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T23:28:32.39021+08:00 [BUILD] action=placed x=107 y=301 block_id=413 block=物品黑洞 team=1 rot=0
+2026-03-29T23:28:33.057138+08:00 [BUILD] action=constructed x=107 y=301 block_id=413 block=物品黑洞 team=1 rot=0
+2026-03-29T23:28:35.6065372+08:00 [BUILD] action=placed x=122 y=294 block_id=302 block=电力节点 team=1 rot=0
+2026-03-29T23:28:36.2731772+08:00 [BUILD] action=constructed x=122 y=294 block_id=302 block=电力节点 team=1 rot=0
+2026-03-29T23:28:36.8900509+08:00 [BUILD] action=placed x=131 y=290 block_id=306 block=battery team=1 rot=0
+2026-03-29T23:28:37.5577402+08:00 [BUILD] action=constructed x=131 y=290 block_id=306 block=battery team=1 rot=0
+2026-03-29T23:28:38.9396994+08:00 [BUILD] action=placed x=125 y=280 block_id=312 block=RTG发电机 team=1 rot=0
+2026-03-29T23:28:39.6064486+08:00 [BUILD] action=constructed x=125 y=280 block_id=312 block=RTG发电机 team=1 rot=0
+2026-03-29T23:28:40.1576392+08:00 [BUILD] action=placed x=128 y=272 block_id=316 block=冲击反应堆 team=1 rot=0
+2026-03-29T23:28:40.8400143+08:00 [BUILD] action=constructed x=128 y=272 block_id=316 block=冲击反应堆 team=1 rot=0
+2026-03-29T23:28:42.3064269+08:00 [BUILD] action=placed x=118 y=267 block_id=181 block=graphite-press team=1 rot=0
+2026-03-29T23:28:42.9732187+08:00 [BUILD] action=constructed x=118 y=267 block_id=181 block=graphite-press team=1 rot=0
+2026-03-29T23:28:43.4896629+08:00 [BUILD] action=placed x=110 y=279 block_id=185 block=kiln team=1 rot=0
+2026-03-29T23:28:44.1563439+08:00 [BUILD] action=constructed x=110 y=279 block_id=185 block=kiln team=1 rot=0
+2026-03-29T23:28:49.9400996+08:00 [BUILD] action=placed x=260 y=242 block_id=265 block=反向分类器 team=1 rot=0
+2026-03-29T23:28:50.6066539+08:00 [BUILD] action=constructed x=260 y=242 block_id=265 block=反向分类器 team=1 rot=0
+2026-03-29T23:28:53.7565048+08:00 [BUILD] action=placed x=260 y=242 block_id=258 block=钛传送带 team=1 rot=0
+2026-03-29T23:28:54.4234347+08:00 [BUILD] action=constructed x=260 y=242 block_id=258 block=钛传送带 team=1 rot=0
+2026-03-29T23:28:56.5563897+08:00 [BUILD] action=placed x=260 y=241 block_id=260 block=装甲传送带 team=1 rot=0
+2026-03-29T23:28:57.2233999+08:00 [BUILD] action=constructed x=260 y=241 block_id=260 block=装甲传送带 team=1 rot=0
+2026-03-29T23:28:59.2231743+08:00 [BUILD] action=placed x=259 y=237 block_id=259 block=plastanium-conveyor team=1 rot=0
+2026-03-29T23:28:59.8896635+08:00 [BUILD] action=constructed x=259 y=237 block_id=259 block=plastanium-conveyor team=1 rot=0
+2026-03-29T23:28:59.9065351+08:00 [BUILD] action=placed x=260 y=237 block_id=259 block=plastanium-conveyor team=1 rot=0
+2026-03-29T23:29:00.5731669+08:00 [BUILD] action=constructed x=260 y=237 block_id=259 block=plastanium-conveyor team=1 rot=0
+2026-03-29T23:29:00.5897173+08:00 [BUILD] action=placed x=261 y=237 block_id=259 block=plastanium-conveyor team=1 rot=0
+2026-03-29T23:29:01.2567152+08:00 [BUILD] action=constructed x=261 y=237 block_id=259 block=plastanium-conveyor team=1 rot=0
+2026-03-29T23:29:01.2730486+08:00 [BUILD] action=placed x=260 y=238 block_id=257 block=传送带 team=1 rot=0
+2026-03-29T23:29:01.9398966+08:00 [BUILD] action=constructed x=260 y=238 block_id=257 block=传送带 team=1 rot=0
+2026-03-29T23:29:01.9564846+08:00 [BUILD] action=placed x=260 y=239 block_id=257 block=传送带 team=1 rot=0
+2026-03-29T23:29:02.6231156+08:00 [BUILD] action=constructed x=260 y=239 block_id=257 block=传送带 team=1 rot=0
+2026-03-29T23:29:05.0397958+08:00 [BUILD] action=deconstructing x=260 y=239 block_id=257 block=传送带 team=1
+2026-03-29T23:29:05.7069816+08:00 [BUILD] action=destroyed x=260 y=239 block_id=257 block=传送带 team=1

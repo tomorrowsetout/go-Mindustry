@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-mdt-server 是一个用 Go 语言重写的 Mindustry 服务器实现，支持 Mindustry build 155。
+mdt-server 是一个用 Go 语言重写的 Mindustry 服务器实现，支持 Mindustry build 156。
 
 ### 特性
 
@@ -62,7 +62,7 @@ make run
 ```bash
 -c, --config <path>     配置文件路径（默认：config.json）
 -a, --addr <address>    监听地址（默认：0.0.0.0:6567）
--b, --build <version>   Mindustry 客户端版本（必须匹配，例如：155）
+-b, --build <version>   Mindustry 客户端版本（必须匹配，例如：156）
 -w, --world <source>    世界源：random | <map-name> | <.msav 文件路径>
     --version           显示版本信息
 ```
@@ -74,10 +74,10 @@ make run
 ./bin/mdt-server.exe
 
 # 使用指定地图运行
-./bin/mdt-server.exe -w assets/worlds/23315.msav -b 155
+./bin/mdt-server.exe -w assets/worlds/23315.msav -b 156
 
 # 使用随机地图运行
-./bin/mdt-server.exe -w random -b 155
+./bin/mdt-server.exe -w random -b 156
 ```
 
 ## 配置文件

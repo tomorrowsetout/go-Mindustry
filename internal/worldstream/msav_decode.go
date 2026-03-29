@@ -96,22 +96,13 @@ func decodeMapChunk(chunk []byte) (*world.WorldModel, error) {
 		t.Block = world.BlockID(blockID)
 
 		hadEntity := (packed & 1) != 0
-		hadData := (packed & 4) != 0
-		if hadData {
-			rot, err := r.ReadByte()
-			if err != nil {
+		hadDataOld := (packed & 2) != 0
+		hadDataNew := (packed & 4) != 0
+		if hadDataNew {
+			// New data format: data + floorData + overlayData + extraData(int32).
+			if err := r.Skip(1 + 1 + 1 + 4); err != nil {
 				return nil, err
 			}
-			team, err := r.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			// skip config + extra byte
-			if err := r.Skip(1 + 4); err != nil {
-				return nil, err
-			}
-			t.Rotation = int8(rot)
-			t.Team = world.TeamID(team)
 		}
 		if hadEntity {
 			isCenter, err := r.ReadByte()
@@ -130,7 +121,15 @@ func decodeMapChunk(chunk []byte) (*world.WorldModel, error) {
 					return nil, err
 				}
 			}
-		} else if !hadData {
+		} else if hadDataOld || hadDataNew {
+			// Old data format (bit 2): one data byte when there is no entity.
+			// New data format (bit 3): already consumed above.
+			if hadDataOld {
+				if _, err := r.ReadByte(); err != nil {
+					return nil, err
+				}
+			}
+		} else {
 			con, err := r.ReadByte()
 			if err != nil {
 				return nil, err

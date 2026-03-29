@@ -1,0 +1,52 @@
+2026-03-29T12:46:29.1355848Z [NET] kind=tcp_accept packet= conn_id=1188336388 uuid= ip=10.147.17.101 name="" detail=
+2026-03-29T12:46:29.1456033Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1188336388 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T12:46:29.1897449Z [NET] kind=world_handshake_sent packet= conn_id=1188336388 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T12:46:29.7257414Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1188336388 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T20:46:29.7343616+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T20:46:29.739944+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T12:46:33.682386Z [NET] kind=tcp_accept packet= conn_id=1276781568 uuid= ip=10.147.17.101 name="" detail=
+2026-03-29T12:46:33.7047616Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1276781568 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T12:46:33.7335418Z [NET] kind=world_handshake_sent packet= conn_id=1276781568 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T12:46:34.2335818Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1276781568 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T20:46:34.2420616+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T20:46:34.2489842+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T20:46:35.8405699+08:00 [BUILD] action=placed x=112 y=313 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:36.5073945+08:00 [BUILD] action=constructed x=112 y=313 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:36.5242958+08:00 [BUILD] action=placed x=112 y=312 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:37.1919871+08:00 [BUILD] action=constructed x=112 y=312 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:37.2073186+08:00 [BUILD] action=placed x=112 y=311 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:37.8739165+08:00 [BUILD] action=constructed x=112 y=311 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:37.8908417+08:00 [BUILD] action=placed x=112 y=310 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:38.5576717+08:00 [BUILD] action=constructed x=112 y=310 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:38.574059+08:00 [BUILD] action=placed x=112 y=309 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:39.2408258+08:00 [BUILD] action=constructed x=112 y=309 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:39.2576369+08:00 [BUILD] action=placed x=112 y=308 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:39.9241571+08:00 [BUILD] action=constructed x=112 y=308 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:39.9409489+08:00 [BUILD] action=placed x=112 y=307 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:40.3241962+08:00 [BUILD] action=placed x=117 y=311 block_id=264 block=分类器 team=1 rot=0
+2026-03-29T20:46:40.6073287+08:00 [BUILD] action=constructed x=112 y=307 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:40.6242654+08:00 [BUILD] action=placed x=112 y=306 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:40.9908294+08:00 [BUILD] action=constructed x=117 y=311 block_id=264 block=分类器 team=1 rot=0
+2026-03-29T20:46:41.2907886+08:00 [BUILD] action=constructed x=112 y=306 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:41.3076451+08:00 [BUILD] action=placed x=112 y=305 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:41.9742693+08:00 [BUILD] action=constructed x=112 y=305 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:41.9910012+08:00 [BUILD] action=placed x=112 y=304 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:42.4574185+08:00 [BUILD] action=placed x=117 y=307 block_id=412 block=item-source team=1 rot=0
+2026-03-29T20:46:42.6574622+08:00 [BUILD] action=constructed x=112 y=304 block_id=257 block=传送带 team=1 rot=3
+2026-03-29T20:46:43.1242062+08:00 [BUILD] action=constructed x=117 y=307 block_id=412 block=item-source team=1 rot=0
+2026-03-29T12:46:45.7056763Z [NET] kind=tcp_accept packet= conn_id=1779138391 uuid= ip=113.200.22.34 name="" detail=
+2026-03-29T12:46:45.7685836Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1779138391 uuid=vBF+jfr4okcAAAAAewlNmg== ip=113.200.22.34 name="567" detail=version=156 type=official mods=0
+2026-03-29T12:46:45.7855875Z [NET] kind=world_handshake_sent packet= conn_id=1779138391 uuid=vBF+jfr4okcAAAAAewlNmg== ip=113.200.22.34 name="567" detail=
+2026-03-29T12:46:46.0253771Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1779138391 uuid=vBF+jfr4okcAAAAAewlNmg== ip=113.200.22.34 name="567" detail=
+2026-03-29T20:46:46.037093+08:00 [RESPAWN] player="567" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T20:46:46.0421507+08:00 [RESPAWN] player="567" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T12:46:47.5816719Z [NET] kind=tcp_closed packet= conn_id=1779138391 uuid=vBF+jfr4okcAAAAAewlNmg== ip=113.200.22.34 name="567" detail=EOF
+2026-03-29T20:46:52.9845672+08:00 [CHAT] from="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" player_id=1 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101:51211 msg="a"
+2026-03-29T20:47:22.8576765+08:00 [BUILD] action=placed x=117 y=299 block_id=315 block=thorium-reactor team=1 rot=0
+2026-03-29T20:47:23.5240476+08:00 [BUILD] action=constructed x=117 y=299 block_id=315 block=thorium-reactor team=1 rot=0
+2026-03-29T20:47:24.6239911+08:00 [BUILD] action=placed x=116 y=301 block_id=412 block=item-source team=1 rot=0
+2026-03-29T20:47:25.2908262+08:00 [BUILD] action=constructed x=116 y=301 block_id=412 block=item-source team=1 rot=0
+2026-03-29T20:47:29.141075+08:00 [BUILD] action=placed x=111 y=322 block_id=412 block=item-source team=1 rot=0
+2026-03-29T20:47:29.8076818+08:00 [BUILD] action=constructed x=111 y=322 block_id=412 block=item-source team=1 rot=0
+2026-03-29T20:47:31.6741985+08:00 [BUILD] action=placed x=140 y=324 block_id=412 block=item-source team=1 rot=0
+2026-03-29T20:47:32.3416133+08:00 [BUILD] action=constructed x=140 y=324 block_id=412 block=item-source team=1 rot=0

@@ -2,11 +2,19 @@ package world
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 	"sync"
 )
 
+type TeamRule struct {
+	BuildSpeedMultiplier     float32 `json:"buildSpeedMultiplier"`
+	UnitBuildSpeedMultiplier float32 `json:"unitBuildSpeedMultiplier"`
+}
+
 // Rules 游戏规则 (完整实现，对应原版 Rules.java)
 type Rules struct {
+	Teams map[string]TeamRule `json:"teams"`
 	// 团队特定规则 (TeamRule 类型 - 对应原版 TeamRule.java)
 	AiCoreSpawn    bool  `json:"aiCoreSpawn"`    // AI核心生成
 	ProtectCores   bool  `json:"protectCores"`   // 保护核心
@@ -219,6 +227,47 @@ type Rules struct {
 	Tags            string  `json:"tags"`            // 标签
 	JSON            string  `json:"json"`            // JSON
 	Raw             string  `json:"raw"`             // 原始数据
+}
+
+func (r *Rules) teamRule(team TeamID) (TeamRule, bool) {
+	if r == nil || len(r.Teams) == 0 || team == 0 {
+		return TeamRule{}, false
+	}
+	if tr, ok := r.Teams[strconv.Itoa(int(team))]; ok {
+		return tr, true
+	}
+	for k, tr := range r.Teams {
+		id, ok := parseTeamKey(k)
+		if ok && id == team {
+			return tr, true
+		}
+	}
+	return TeamRule{}, false
+}
+
+func parseTeamKey(v string) (TeamID, bool) {
+	v = strings.TrimSpace(strings.ToLower(v))
+	if v == "" {
+		return 0, false
+	}
+	if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 255 {
+		return TeamID(n), true
+	}
+	switch v {
+	case "derelict":
+		return TeamID(0), true
+	case "sharded":
+		return TeamID(1), true
+	case "crux":
+		return TeamID(2), true
+	case "malis":
+		return TeamID(3), true
+	case "green":
+		return TeamID(4), true
+	case "blue":
+		return TeamID(5), true
+	}
+	return 0, false
 }
 
 // DefaultRules 默认规则（原版等价）

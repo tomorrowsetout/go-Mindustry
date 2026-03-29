@@ -1,0 +1,12 @@
+2026-03-29T13:18:34.3835028Z [NET] kind=tcp_accept packet= conn_id=1606111986 uuid= ip=192.168.0.101 name="" detail=
+2026-03-29T13:18:34.395864Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1606111986 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T13:18:34.4280184Z [NET] kind=world_handshake_sent packet= conn_id=1606111986 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T13:18:34.7290722Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1606111986 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T21:18:34.7370143+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:18:34.739887+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T13:18:37.5976477Z [NET] kind=tcp_accept packet= conn_id=1408885059 uuid= ip=10.147.17.101 name="" detail=
+2026-03-29T13:18:37.6097548Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1408885059 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T13:18:37.6253491Z [NET] kind=world_handshake_sent packet= conn_id=1408885059 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T13:18:37.8943547Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1408885059 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T21:18:37.9242946+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:18:37.9305428+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321

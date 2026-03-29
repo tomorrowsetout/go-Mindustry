@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -46,6 +47,14 @@ type worldState struct {
 	current string
 }
 
+var runtimePlayerNameColorEnabled atomic.Bool
+var runtimePublicConnUUIDEnabled atomic.Bool
+var runtimeJoinLeaveChatEnabled atomic.Bool
+var runtimePlayerNamePrefix atomic.Value
+var runtimePlayerNameSuffix atomic.Value
+var blockNameTranslationMu sync.RWMutex
+var blockNameTranslations = defaultBlockNameTranslations()
+
 type detailedLogWriter struct {
 	mu       sync.Mutex
 	dir      string
@@ -55,6 +64,181 @@ type detailedLogWriter struct {
 	file     *os.File
 	size     int64
 	seq      int64
+}
+
+func defaultBlockNameTranslations() map[string]string {
+	return map[string]string{
+		"conveyor":               "传送带",
+		"titanium-conveyor":      "钛传送带",
+		"armored-conveyor":       "装甲传送带",
+		"junction":               "交叉器",
+		"router":                 "分配器",
+		"sorter":                 "分类器",
+		"inverted-sorter":        "反向分类器",
+		"overflow-gate":          "溢流门",
+		"underflow-gate":         "反向溢流门",
+		"duo":                    "双管炮",
+		"scatter":                "散射炮",
+		"scorch":                 "火焰炮",
+		"core-shard":             "核心:碎片",
+		"core-foundation":        "核心:基地",
+		"core-nucleus":           "核心:核",
+		"core-bastion":           "核心:堡垒",
+		"core-citadel":           "核心:城塞",
+		"core-acropolis":         "核心:卫城",
+		"copper-wall":            "铜墙",
+		"copper-wall-large":      "大型铜墙",
+		"bridge-conveyor":        "传送带桥",
+		"phase-conveyor":         "相位传送桥",
+		"mass-driver":            "质量驱动器",
+		"unloader":               "卸载器",
+		"item-source":            "物品源",
+		"item-void":              "物品黑洞",
+		"power-node":             "电力节点",
+		"power-node-large":       "大型电力节点",
+		"rtg-generator":          "RTG发电机",
+		"differential-generator": "温差发电机",
+		"thorium-reactor":        "钍反应堆",
+		"impact-reactor":         "冲击反应堆",
+	}
+}
+
+func parseBlockNameTranslationJSON(path string) (map[string]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, err
+	}
+	out := make(map[string]string)
+	for rawKey, value := range data {
+		switch typed := value.(type) {
+		case map[string]any:
+			for rawKey, rawVal := range typed {
+				key := strings.ToLower(strings.TrimSpace(rawKey))
+				val, ok := rawVal.(string)
+				if key == "" || !ok || strings.TrimSpace(val) == "" {
+					continue
+				}
+				out[key] = strings.TrimSpace(val)
+			}
+		case string:
+			key := strings.ToLower(strings.TrimSpace(rawKey))
+			if key != "" && strings.TrimSpace(typed) != "" {
+				out[key] = typed
+			}
+		}
+	}
+	return out, nil
+}
+
+func blockNameTranslationCandidates(configDir string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 8)
+	add := func(base string) {
+		base = strings.TrimSpace(base)
+		if base == "" {
+			return
+		}
+		candidates := []string{
+			filepath.Join(base, "json", "block_names.json"),
+			filepath.Join(base, "configs", "json", "block_names.json"),
+		}
+		for _, candidate := range candidates {
+			candidate = filepath.Clean(candidate)
+			if _, ok := seen[candidate]; ok {
+				continue
+			}
+			seen[candidate] = struct{}{}
+			out = append(out, candidate)
+		}
+	}
+	add(configDir)
+	if abs, err := filepath.Abs(configDir); err == nil {
+		add(abs)
+		add(filepath.Dir(abs))
+	}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		add(exeDir)
+		add(filepath.Dir(exeDir))
+	}
+	if wd, err := os.Getwd(); err == nil {
+		add(wd)
+		add(filepath.Dir(wd))
+	}
+	return out
+}
+
+func applyBlockNameTranslations(configDir string) {
+	merged := defaultBlockNameTranslations()
+	for _, path := range blockNameTranslationCandidates(configDir) {
+		overrides, err := parseBlockNameTranslationJSON(path)
+		if err != nil || len(overrides) == 0 {
+			continue
+		}
+		for k, v := range overrides {
+			merged[k] = v
+		}
+		break
+	}
+	blockNameTranslationMu.Lock()
+	blockNameTranslations = merged
+	blockNameTranslationMu.Unlock()
+}
+
+func resolveConfigSidecarPath(configDir, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if filepath.IsAbs(raw) {
+		return filepath.Clean(raw)
+	}
+	return filepath.Clean(filepath.Join(configDir, raw))
+}
+
+func publicConnIDValue(store *persist.PublicConnUUIDStore, uuid string, connID int32) string {
+	if !runtimePublicConnUUIDEnabled.Load() {
+		return strconv.FormatInt(int64(connID), 10)
+	}
+	uuid = strings.TrimSpace(uuid)
+	if uuid != "" && store != nil {
+		if id, ok := store.Lookup(uuid); ok && strings.TrimSpace(id) != "" {
+			return strings.TrimSpace(id)
+		}
+	}
+	return strconv.FormatInt(int64(connID), 10)
+}
+
+func buildCoreSnapshotData(wld *world.World) []byte {
+	if wld == nil {
+		return []byte{0}
+	}
+	snapshots := wld.TeamCoreItemSnapshots()
+	w := protocol.NewWriter()
+	if err := w.WriteByte(byte(len(snapshots))); err != nil {
+		return []byte{0}
+	}
+	for _, snapshot := range snapshots {
+		if err := w.WriteByte(byte(snapshot.Team)); err != nil {
+			return []byte{0}
+		}
+		if err := w.WriteInt16(int16(len(snapshot.Items))); err != nil {
+			return []byte{0}
+		}
+		for _, stack := range snapshot.Items {
+			if err := w.WriteInt16(int16(stack.Item)); err != nil {
+				return []byte{0}
+			}
+			if err := w.WriteInt32(stack.Amount); err != nil {
+				return []byte{0}
+			}
+		}
+	}
+	return append([]byte(nil), w.Bytes()...)
 }
 
 func newDetailedLogWriter(logsDir string, maxMB, maxFiles int) (*detailedLogWriter, error) {
@@ -364,7 +548,7 @@ func printMapDetails(path string, model *world.WorldModel) {
 func main() {
 	cfgPath := flag.String("config", filepath.FromSlash("configs/config.ini"), "path to config file")
 	addr := flag.String("addr", "0.0.0.0:6567", "listen address for Mindustry protocol (TCP+UDP)")
-	buildVersion := flag.Int("build", 155, "Mindustry build version for strict check; must match client build")
+	buildVersion := flag.Int("build", 156, "Mindustry build version for strict check; must match client build")
 	worldArg := flag.String("world", "random", "world source: random | <map-name> | <.msav file path>")
 	printVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -374,7 +558,7 @@ func main() {
 		return
 	}
 	if *buildVersion <= 0 {
-		fmt.Fprintln(os.Stderr, "build 必须设置为客户端对应的 build 号，例如 155")
+		fmt.Fprintln(os.Stderr, "build 必须设置为客户端对应的 build 号，例如 156")
 		os.Exit(1)
 	}
 
@@ -405,6 +589,7 @@ func main() {
 	runtimeConfigDir = configDir
 	runtimeAssetsDir = cfg.Runtime.AssetsDir
 	runtimeWorldRoots = []string{cfg.Runtime.WorldsDir}
+	applyBlockNameTranslations(configDir)
 
 	startMemoryGuard(cfg.Core)
 
@@ -489,28 +674,34 @@ func main() {
 		os.Exit(1)
 	}
 	state := &worldState{current: initialWorld}
-	fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
-
-	if p, note := resolveVanillaProfilesPath(cfg.Runtime.VanillaProfiles); p != "" {
-		cfg.Runtime.VanillaProfiles = p
-		if note != "" {
-			startup.warn("原版 profiles", note)
-		}
+	runtimePlayerNameColorEnabled.Store(cfg.Personalization.PlayerNameColorEnabled)
+	runtimeJoinLeaveChatEnabled.Store(cfg.Personalization.JoinLeaveChatEnabled)
+	runtimePlayerNamePrefix.Store(cfg.Personalization.PlayerNamePrefix)
+	runtimePlayerNameSuffix.Store(cfg.Personalization.PlayerNameSuffix)
+	if cfg.Personalization.StartupCurrentMapLineEnabled {
+		fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 	}
 
 	srv := netserver.NewServer(*addr, *buildVersion)
-	// Ignore config here: keep terminal clean; detailed packet logs go to logs/*.log only.
 	srv.SetVerboseNetLog(false)
+	srv.SetPacketRecvEventsEnabled(cfg.Development.PacketRecvEventsEnabled)
+	srv.SetPacketSendEventsEnabled(cfg.Development.PacketSendEventsEnabled)
+	srv.SetTerminalPlayerLogsEnabled(cfg.Development.TerminalPlayerLogsEnabled)
+	srv.SetRespawnPacketLogsEnabled(cfg.Development.RespawnPacketLogsEnabled)
+	srv.SetPlayerNameColorEnabled(cfg.Personalization.PlayerNameColorEnabled)
 	srv.SetTranslatedConnLog(cfg.Control.TranslatedConnLogEnabled)
-	contentIDsPath, contentNote := resolveContentIDsPath(cfg.Runtime.VanillaProfiles)
-	var loadedContentIDs *vanilla.ContentIDsFile
-	if contentNote != "" {
-		startup.warn("原版 content IDs", contentNote)
-	}
+	srv.SetJoinLeaveChatEnabled(cfg.Personalization.JoinLeaveChatEnabled)
+	srv.SetPlayerDisplayFormatter(func(c *netserver.Conn) string {
+		if c == nil {
+			return ""
+		}
+		return formatDisplayPlayerNameRaw(c.Name())
+	})
+	srv.RefreshPlayerDisplayNames()
+	contentIDsPath := filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json")
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
 	} else {
-		loadedContentIDs = ids
 		count := vanilla.ApplyContentIDs(srv.Content, ids)
 		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
 	}
@@ -522,7 +713,6 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
-	applyWorldFallbackContentNames(wld, loadedContentIDs)
 	// clientSnapshot writes client motion/position back into the authoritative world model.
 	// This mirrors vanilla NetServer.clientSnapshot behavior; without it, entitySnapshot will
 	// keep snapping units back to stale positions.
@@ -531,10 +721,7 @@ func main() {
 		return ok
 	}
 	srv.SetUnitPositionFn = func(unitID int32, x, y, rotation float32) bool {
-		ent, ok := wld.SetEntityPosition(unitID, x, y, rotation)
-		if ok && ent.Team > 0 && ent.TypeID > 0 {
-			wld.SetTeamBuilderSpeed(ent.Team, wld.BuilderSpeedForUnitType(ent.TypeID))
-		}
+		_, ok := wld.SetEntityPosition(unitID, x, y, rotation)
 		return ok
 	}
 	buildService := buildsvc.New(wld, buildsvc.Options{
@@ -542,63 +729,80 @@ func main() {
 		MaxPlansPerBatch: 20,
 		MaxOpsPerTick:    64,
 	})
-	var (
-		tileConfigMu    sync.RWMutex
-		tileConfigByPos = make(map[int32]any)
-	)
-	clearTileConfig := func(pos int32) {
-		if pos < 0 {
-			return
-		}
-		tileConfigMu.Lock()
-		delete(tileConfigByPos, pos)
-		tileConfigMu.Unlock()
+	shouldLogBuildSnapshots := func() bool {
+		return cfg.Building.Enabled && cfg.Development.BuildSnapshotLogsEnabled
 	}
-	snapshotTileConfigs := func() []tileConfigSyncEntry {
-		tileConfigMu.RLock()
-		defer tileConfigMu.RUnlock()
-		if len(tileConfigByPos) == 0 {
-			return nil
-		}
-		out := make([]tileConfigSyncEntry, 0, len(tileConfigByPos))
-		for pos, val := range tileConfigByPos {
-			out = append(out, tileConfigSyncEntry{
-				Pos:   pos,
-				Value: cloneTileConfigValue(val),
-			})
-		}
-		return out
+	shouldLogBuildPlace := func() bool {
+		return cfg.Building.Enabled && cfg.Development.BuildPlaceLogsEnabled
 	}
-	resolveCoreTargetTeam := func(c *netserver.Conn, buildPos int32) (world.TeamID, bool) {
-		_, team, isCore, ok := wld.TileInfoByPackedPos(buildPos)
-		if !ok || !isCore {
-			return 0, false
-		}
-		if team == 0 {
-			team = resolveConnTeam(c, wld)
-		}
-		if team == 0 {
-			return 0, false
-		}
-		return team, true
+	shouldLogBuildFinish := func() bool {
+		return cfg.Building.Enabled && cfg.Development.BuildFinishLogsEnabled
+	}
+	shouldLogBuildBreakStart := func() bool {
+		return cfg.Building.Enabled && cfg.Development.BuildBreakStartLogsEnabled
+	}
+	shouldLogBuildBreakDone := func() bool {
+		return cfg.Building.Enabled && cfg.Development.BuildBreakDoneLogsEnabled
+	}
+	shouldLogRespawnCore := func() bool {
+		return cfg.Development.RespawnCoreLogsEnabled
+	}
+	shouldLogRespawnUnit := func() bool {
+		return cfg.Development.RespawnUnitLogsEnabled
+	}
+	shouldFileLogNetEvents := func() bool {
+		return cfg.Sundries.NetEventLogsEnabled
+	}
+	shouldFileLogChat := func() bool {
+		return cfg.Sundries.ChatLogsEnabled
+	}
+	shouldFileLogRespawnCore := func() bool {
+		return cfg.Sundries.RespawnCoreLogsEnabled
+	}
+	shouldFileLogRespawnUnit := func() bool {
+		return cfg.Sundries.RespawnUnitLogsEnabled
+	}
+	shouldFileLogBuildPlace := func() bool {
+		return cfg.Sundries.BuildPlaceLogsEnabled
+	}
+	shouldFileLogBuildFinish := func() bool {
+		return cfg.Sundries.BuildFinishLogsEnabled
+	}
+	shouldFileLogBuildBreakStart := func() bool {
+		return cfg.Sundries.BuildBreakStartLogsEnabled
+	}
+	shouldFileLogBuildBreakDone := func() bool {
+		return cfg.Sundries.BuildBreakDoneLogsEnabled
 	}
 	srv.SpawnUnitFn = func(c *netserver.Conn, unitID int32, tile protocol.Point2, unitType int16) (float32, float32, bool) {
 		if c == nil || wld == nil {
 			return 0, 0, false
 		}
 		team := resolveConnTeam(c, wld)
-		if corePos, coreName, ok := resolveTeamCoreTileWithName(wld, team, tile); ok {
-			fmt.Printf("[buildtrace] respawn core pick team=%d core=%s core_tile=(%d,%d) spawn_tile=(%d,%d)\n",
-				team, strings.ToLower(strings.TrimSpace(coreName)), corePos.X, corePos.Y, tile.X, tile.Y)
-		} else if model := wld.Model(); model != nil && model.InBounds(int(tile.X), int(tile.Y)) {
-			if t, err := model.TileAt(int(tile.X), int(tile.Y)); err == nil && t != nil {
-				blockName := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
-				if blockName == "" {
+		if corePos, coreName, ok := resolveTeamCoreTileWithName(wld, team, tile); ok && shouldLogRespawnCore() {
+			fmt.Printf("[重生] 玩家=%s 队伍=%d 核心=%s 核心坐标=(%d,%d) 出生点=(%d,%d)\n",
+				displayPlayerName(c), team, translateBlockNameCN(coreName), corePos.X, corePos.Y, tile.X, tile.Y)
+		} else if shouldLogRespawnCore() {
+			if model := wld.Model(); model != nil && model.InBounds(int(tile.X), int(tile.Y)) {
+				if t, err := model.TileAt(int(tile.X), int(tile.Y)); err == nil && t != nil {
+					blockName := strings.ToLower(strings.TrimSpace(model.BlockNames[int16(t.Block)]))
+					fmt.Printf("[重生] 玩家=%s 队伍=%d 未找到核心，回退出生点=(%d,%d) 地块=%s\n",
+						displayPlayerName(c), team, tile.X, tile.Y, translateBlockNameCN(blockName))
+				}
+			}
+		}
+		if corePos, coreName, ok := resolveTeamCoreTileWithName(wld, team, tile); ok && shouldFileLogRespawnCore() {
+			detailLog.LogLine(fmt.Sprintf("%s [RESPAWN] player=%q team=%d core=%s core_x=%d core_y=%d spawn_x=%d spawn_y=%d",
+				time.Now().Format(time.RFC3339Nano), c.Name(), team, strings.ToLower(strings.TrimSpace(coreName)), corePos.X, corePos.Y, tile.X, tile.Y))
+		} else if shouldFileLogRespawnCore() {
+			blockName := ""
+			if model := wld.Model(); model != nil && model.InBounds(int(tile.X), int(tile.Y)) {
+				if t, err := model.TileAt(int(tile.X), int(tile.Y)); err == nil && t != nil {
 					blockName = strings.ToLower(strings.TrimSpace(model.BlockNames[int16(t.Block)]))
 				}
-				fmt.Printf("[buildtrace] respawn core pick team=%d core=none fallback_tile=(%d,%d) fallback_block=%s\n",
-					team, tile.X, tile.Y, blockName)
 			}
+			detailLog.LogLine(fmt.Sprintf("%s [RESPAWN] player=%q team=%d no_core=1 spawn_x=%d spawn_y=%d tile=%s",
+				time.Now().Format(time.RFC3339Nano), c.Name(), team, tile.X, tile.Y, blockName))
 		}
 		spawnUnitType := unitType
 		if spawnUnitType <= 0 {
@@ -610,7 +814,14 @@ func main() {
 		spawnUnitType = resolveRespawnUnitTypeByCoreTile(wld, tile, team, spawnUnitType)
 		builderSpeed := wld.BuilderSpeedForUnitType(spawnUnitType)
 		wld.SetTeamBuilderSpeed(team, builderSpeed)
-		fmt.Printf("[buildtrace] spawn builder speed team=%d unitType=%d speed=%.2f tile=(%d,%d)\n", team, spawnUnitType, builderSpeed, tile.X, tile.Y)
+		if shouldLogRespawnUnit() {
+			fmt.Printf("[重生] 玩家=%s 队伍=%d 出生单位=%d 建造速度=%.2f 出生点=(%d,%d)\n",
+				displayPlayerName(c), team, spawnUnitType, builderSpeed, tile.X, tile.Y)
+		}
+		if shouldFileLogRespawnUnit() {
+			detailLog.LogLine(fmt.Sprintf("%s [RESPAWN] player=%q team=%d unit=%d build_speed=%.2f spawn_x=%d spawn_y=%d",
+				time.Now().Format(time.RFC3339Nano), c.Name(), team, spawnUnitType, builderSpeed, tile.X, tile.Y))
+		}
 		x := float32(tile.X*8 + 4)
 		y := float32(tile.Y*8 + 4)
 		ent, err := wld.AddEntityWithID(spawnUnitType, unitID, x, y, team)
@@ -657,9 +868,6 @@ func main() {
 	}
 	loadWorldModel := func(path string) {
 		buildService.Reset()
-		tileConfigMu.Lock()
-		clear(tileConfigByPos)
-		tileConfigMu.Unlock()
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
 			wld.SetModel(nil)
@@ -722,7 +930,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "事件存储初始化失败: %v\n", rerr)
 		os.Exit(1)
 	}
+	runtimePublicConnUUIDEnabled.Store(cfg.Control.PublicConnUUIDEnabled)
+	publicConnUUIDPath := resolveConfigSidecarPath(runtimeConfigDir, cfg.Control.PublicConnUUIDFile)
+	publicConnUUIDStore, publicConnUUIDErr := persist.NewPublicConnUUIDStore(publicConnUUIDPath)
+	if publicConnUUIDErr != nil {
+		log.Warn("public conn_uuid store init failed", logging.Field{Key: "error", Value: publicConnUUIDErr.Error()})
+		startup.warn("公开 conn_uuid", publicConnUUIDErr.Error())
+	} else {
+		startup.ok("公开 conn_uuid", publicConnUUIDPath)
+	}
 	srv.OnEvent = func(ev netserver.NetEvent) {
+		if publicConnUUIDStore != nil && ev.Kind == "connect_packet" && runtimePublicConnUUIDEnabled.Load() {
+			_, _ = publicConnUUIDStore.Ensure(ev.UUID, ev.Name, ev.IP)
+		}
 		_ = recorder.Record(storage.Event{
 			Timestamp: ev.Timestamp,
 			Kind:      ev.Kind,
@@ -733,10 +953,25 @@ func main() {
 			IP:        ev.IP,
 			Name:      ev.Name,
 		})
-		line := fmt.Sprintf("%s [NET] kind=%s packet=%s conn_id=%d uuid=%s ip=%s name=%q detail=%s",
-			ev.Timestamp.Format(time.RFC3339Nano), ev.Kind, ev.Packet, ev.ConnID, ev.UUID, ev.IP, ev.Name, ev.Detail)
-		detailLog.LogLine(line)
+		line := fmt.Sprintf("%s [NET] kind=%s packet=%s conn_id=%s uuid=%s ip=%s name=%q detail=%s",
+			ev.Timestamp.Format(time.RFC3339Nano), ev.Kind, ev.Packet, publicConnIDValue(publicConnUUIDStore, ev.UUID, ev.ConnID), ev.UUID, ev.IP, ev.Name, ev.Detail)
+		if shouldFileLogNetEvents() {
+			detailLog.LogLine(line)
+		}
 	}
+	srv.SetPublicConnIDFormatter(func(c *netserver.Conn) string {
+		if c == nil || !runtimePublicConnUUIDEnabled.Load() {
+			return ""
+		}
+		if publicConnUUIDStore == nil {
+			return ""
+		}
+		id, ok := publicConnUUIDStore.Lookup(c.UUID())
+		if !ok {
+			return ""
+		}
+		return id
+	})
 	if ops, ok, err := persist.LoadOps(cfg.Admin); err != nil {
 		log.Warn("ops load failed", logging.Field{Key: "error", Value: err.Error()})
 		startup.warn("OP 列表", err.Error())
@@ -767,6 +1002,14 @@ func main() {
 		if err != nil {
 			return nil, err
 		}
+		snap := wld.Snapshot()
+		playerID := int32(1)
+		if conn != nil && conn.PlayerID() != 0 {
+			playerID = conn.PlayerID()
+		}
+		if patched, perr := worldstream.RewriteRuntimeStateInWorldStream(base, snap.Wave, snap.WaveTime*60, float64(snap.Tick), playerID); perr == nil {
+			return patched, nil
+		}
 		if conn != nil && conn.PlayerID() != 0 {
 			if patched, perr := worldstream.RewritePlayerIDInWorldStream(base, conn.PlayerID()); perr == nil {
 				return patched, nil
@@ -781,8 +1024,6 @@ func main() {
 		// Wait until client applies world stream, then patch runtime build states.
 		time.Sleep(350 * time.Millisecond)
 		syncCurrentWorldToConn(conn, wld)
-		syncTeamItemsToConn(conn, wld)
-		syncTileConfigsToConn(conn, snapshotTileConfigs())
 	}
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {
 		if pos, ok := resolveTeamCoreTile(wld, world.TeamID(1), protocol.Point2{}); ok {
@@ -793,36 +1034,12 @@ func main() {
 			return pos, true
 		}
 		// Fallback for maps where core tile cannot be parsed from msav metadata.
-		return fallbackSpawnPosFromModel(wld.Model(), wld.BlockNameByID)
+		return fallbackSpawnPosFromModel(wld.Model())
 	}
-	srv.OnBuildPlans = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
-		if c == nil || len(plans) == 0 {
-			return
-		}
-		team := resolveConnTeam(c, wld)
-		first := plans[0]
-		if first == nil {
-			return
-		}
-		blockID := int16(0)
-		if !first.Breaking && first.Block != nil {
-			blockID = first.Block.ID()
-		}
-		if cfg.Building.Enabled {
-			if cfg.Building.Translated {
-				action := "建造"
-				if first.Breaking {
-					action = "拆除"
-				}
-				fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 请求%s block=%d(%s) team=%d\n",
-					displayPlayerName(c), first.X, first.Y, action, blockID, blockDisplayName(wld, blockID), team)
-			} else {
-				fmt.Printf("[buildtrace] recv op player=%d remote=%s break=%v xy=(%d,%d) block=%d\n",
-					c.PlayerID(), c.RemoteAddr().String(), first.Breaking, first.X, first.Y, blockID)
-			}
-		}
-		buildService.EnqueuePlans(team, plans)
-	}
+	// Official 156 build authority comes from clientSnapshot/clientPlanSnapshot queues.
+	// Do not feed legacy/compat beginPlace packets into a second custom queue, otherwise
+	// cancelled plans continue building long after the client has removed them.
+	srv.OnBuildPlans = nil
 	type snapshotLogKey struct {
 		count    int
 		breaking bool
@@ -840,6 +1057,7 @@ func main() {
 		if c == nil {
 			return
 		}
+		owner := resolveBuildOwner(c)
 		team := resolveConnTeam(c, wld)
 		teamActorMu.Lock()
 		teamActorBy[team] = displayPlayerName(c)
@@ -853,7 +1071,7 @@ func main() {
 				snapshotLogBy[c.PlayerID()] = key
 			}
 			snapshotLogMu.Unlock()
-			if changed && cfg.Building.Enabled && !cfg.Building.Translated {
+			if changed && shouldLogBuildSnapshots() && !cfg.Building.Translated {
 				fmt.Printf("[buildtrace] recv snapshot player=%d remote=%s count=0\n", c.PlayerID(), c.RemoteAddr().String())
 			}
 		} else {
@@ -877,7 +1095,7 @@ func main() {
 					snapshotLogBy[c.PlayerID()] = key
 				}
 				snapshotLogMu.Unlock()
-				if changed && cfg.Building.Enabled {
+				if changed && shouldLogBuildSnapshots() {
 					if cfg.Building.Translated {
 						action := "建造"
 						if first.Breaking {
@@ -892,59 +1110,34 @@ func main() {
 				}
 			}
 		}
-		buildService.SyncPlans(team, plans)
+		buildService.SyncPlans(owner, team, plans)
 	}
 	srv.OnDeletePlans = func(c *netserver.Conn, positions []int32) {
-		if c != nil && len(positions) > 0 && cfg.Building.Enabled && !cfg.Building.Translated {
+		owner := resolveBuildOwner(c)
+		if c != nil && len(positions) > 0 && shouldLogBuildSnapshots() && !cfg.Building.Translated {
 			fmt.Printf("[buildtrace] recv deletePlans player=%d remote=%s count=%d\n", c.PlayerID(), c.RemoteAddr().String(), len(positions))
 		}
-		wld.CancelBuildPlansPacked(positions)
+		buildService.CancelPositions(owner, positions)
+		wld.CancelBuildPlansPackedForOwner(owner, positions)
 	}
 	srv.OnRemoveQueueBlock = func(c *netserver.Conn, x, y int32, breaking bool) {
 		if c == nil {
 			return
 		}
-		if cfg.Building.Enabled && !cfg.Building.Translated {
+		owner := resolveBuildOwner(c)
+		if shouldLogBuildSnapshots() && !cfg.Building.Translated {
 			fmt.Printf("[buildtrace] recv removeQueue player=%d remote=%s xy=(%d,%d) breaking=%v\n", c.PlayerID(), c.RemoteAddr().String(), x, y, breaking)
 		}
-		wld.CancelBuildAt(x, y, breaking)
+		buildService.CancelPositions(owner, []int32{protocol.PackPoint2(x, y)})
+		wld.CancelBuildAtForOwner(owner, x, y, breaking)
 	}
-	srv.OnTileConfig = func(c *netserver.Conn, buildPos int32, value any) {
-		if buildPos < 0 {
+	srv.OnTileConfig = func(c *netserver.Conn, pos int32, value any) {
+		wld.ConfigureBuildingPacked(pos, value)
+		if normalized, ok := wld.BuildingConfigPacked(pos); ok {
+			srv.BroadcastTileConfig(pos, normalized, c)
 			return
 		}
-		copied := cloneTileConfigValue(value)
-		tileConfigMu.Lock()
-		if copied == nil {
-			delete(tileConfigByPos, buildPos)
-		} else {
-			tileConfigByPos[buildPos] = copied
-		}
-		tileConfigMu.Unlock()
-		srv.Broadcast(&protocol.Remote_InputHandler_tileConfig_86{
-			Build: protocol.BuildingBox{PosValue: buildPos},
-			Value: copied,
-		})
-	}
-	srv.OnTransferItemTo = func(c *netserver.Conn, itemID int16, amount int32, buildPos int32) {
-		if amount <= 0 || itemID < 0 {
-			return
-		}
-		team, ok := resolveCoreTargetTeam(c, buildPos)
-		if !ok {
-			return
-		}
-		_ = wld.AdjustTeamItem(team, world.ItemID(itemID), amount)
-	}
-	srv.OnRequestItem = func(c *netserver.Conn, itemID int16, amount int32, buildPos int32) {
-		if amount <= 0 || itemID < 0 {
-			return
-		}
-		team, ok := resolveCoreTargetTeam(c, buildPos)
-		if !ok {
-			return
-		}
-		_ = wld.AdjustTeamItem(team, world.ItemID(itemID), -amount)
+		srv.BroadcastTileConfig(pos, value, c)
 	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
@@ -962,7 +1155,7 @@ func main() {
 			Tps:      snap.Tps,
 			Rand0:    snap.Rand0,
 			Rand1:    snap.Rand1,
-			CoreData: []byte{0},
+			CoreData: buildCoreSnapshotData(wld),
 		}
 	}
 	srv.ExtraEntitySnapshotFn = func(w *protocol.Writer) (int16, error) {
@@ -972,27 +1165,23 @@ func main() {
 		return 0, nil
 	}
 	go func() {
-		t := time.NewTicker(200 * time.Millisecond)
+		t := time.NewTicker(time.Second / time.Duration(sim.DefaultTPS))
 		defer t.Stop()
 		for range t.C {
 			evs := wld.DrainEntityEvents()
 			buildHealth := make([]int32, 0, len(evs)*2)
-			type itemSync struct {
-				item   world.ItemID
-				amount int32
-			}
-			itemSyncByTeam := make(map[world.TeamID]map[world.ItemID]int32)
 			for _, ev := range evs {
 				switch ev.Kind {
 				case world.EntityEventRemoved:
 					broadcastUnitDestroy(srv, ev.Entity.ID)
 					srv.MarkUnitDead(ev.Entity.ID, "world-removed")
 				case world.EntityEventBuildPlaced:
-					clearTileConfig(ev.BuildPos)
 					x, y := unpackTilePos(ev.BuildPos)
-					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=placed x=%d y=%d block_id=%d block=%s team=%d rot=%d",
-						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot))
-					if cfg.Building.Enabled {
+					if shouldFileLogBuildPlace() {
+						detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=placed x=%d y=%d block_id=%d block=%s team=%d rot=%d",
+							time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot))
+					}
+					if shouldLogBuildPlace() {
 						if cfg.Building.Translated {
 							teamActorMu.Lock()
 							actor := teamActorBy[ev.BuildTeam]
@@ -1005,12 +1194,14 @@ func main() {
 							fmt.Printf("[buildtrace] placed xy=(%d,%d) block=%d team=%d rot=%d\n", x, y, ev.BuildBlock, ev.BuildTeam, ev.BuildRot)
 						}
 					}
-					broadcastBuildBeginPlace(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
+					broadcastBuildBeginPlace(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam), ev.BuildConfig)
 				case world.EntityEventBuildConstructed:
 					x, y := unpackTilePos(ev.BuildPos)
-					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=constructed x=%d y=%d block_id=%d block=%s team=%d rot=%d",
-						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot))
-					if cfg.Building.Enabled {
+					if shouldFileLogBuildFinish() {
+						detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=constructed x=%d y=%d block_id=%d block=%s team=%d rot=%d",
+							time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot))
+					}
+					if shouldLogBuildFinish() {
 						if cfg.Building.Translated {
 							teamActorMu.Lock()
 							actor := teamActorBy[ev.BuildTeam]
@@ -1025,11 +1216,18 @@ func main() {
 					}
 					broadcastSetTile(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
 					broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
+					if cfgValue, ok := wld.BuildingConfigPacked(ev.BuildPos); ok {
+						srv.BroadcastTileConfig(ev.BuildPos, cfgValue, nil)
+					} else if ev.BuildConfig != nil {
+						srv.BroadcastTileConfig(ev.BuildPos, ev.BuildConfig, nil)
+					}
 				case world.EntityEventBuildDeconstructing:
 					x, y := unpackTilePos(ev.BuildPos)
-					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=deconstructing x=%d y=%d block_id=%d block=%s team=%d",
-						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
-					if cfg.Building.Enabled {
+					if shouldFileLogBuildBreakStart() {
+						detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=deconstructing x=%d y=%d block_id=%d block=%s team=%d",
+							time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
+					}
+					if shouldLogBuildBreakStart() {
 						if cfg.Building.Translated {
 							teamActorMu.Lock()
 							actor := teamActorBy[ev.BuildTeam]
@@ -1044,11 +1242,12 @@ func main() {
 					}
 					broadcastBuildDeconstructBegin(srv, ev.BuildPos, byte(ev.BuildTeam))
 				case world.EntityEventBuildDestroyed:
-					clearTileConfig(ev.BuildPos)
 					x, y := unpackTilePos(ev.BuildPos)
-					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=destroyed x=%d y=%d block_id=%d block=%s team=%d",
-						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
-					if cfg.Building.Enabled {
+					if shouldFileLogBuildBreakDone() {
+						detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=destroyed x=%d y=%d block_id=%d block=%s team=%d",
+							time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
+					}
+					if shouldLogBuildBreakDone() {
 						if cfg.Building.Translated {
 							teamActorMu.Lock()
 							actor := teamActorBy[ev.BuildTeam]
@@ -1063,39 +1262,13 @@ func main() {
 					}
 					broadcastSetTile(srv, ev.BuildPos, 0, 0, 0)
 					broadcastBuildDestroyed(srv, ev.BuildPos, ev.BuildBlock)
-				case world.EntityEventBuildRejected:
-					x, y := unpackTilePos(ev.BuildPos)
-					detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=rejected x=%d y=%d block_id=%d block=%s team=%d reason=%s item_id=%d missing=%d",
-						time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildReason, ev.ItemID, ev.ItemAmount))
-					if cfg.Building.Enabled {
-						if cfg.Building.Translated {
-							teamActorMu.Lock()
-							actor := teamActorBy[ev.BuildTeam]
-							teamActorMu.Unlock()
-							if strings.TrimSpace(actor) == "" {
-								actor = fmt.Sprintf("team-%d", ev.BuildTeam)
-							}
-							if ev.ItemAmount > 0 {
-								fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 建造失败 block=%d(%s) team=%d 原因=资源不足 item=%d 缺少=%d\n",
-									actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.ItemID, ev.ItemAmount)
-							} else {
-								fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 建造失败 block=%d(%s) team=%d 原因=%s\n",
-									actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildReason)
-							}
-						} else {
-							fmt.Printf("[buildtrace] rejected xy=(%d,%d) block=%d team=%d reason=%s item=%d missing=%d\n",
-								x, y, ev.BuildBlock, ev.BuildTeam, ev.BuildReason, ev.ItemID, ev.ItemAmount)
-						}
-					}
 				case world.EntityEventBuildHealth:
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
 				case world.EntityEventTeamItems:
-					teamMap, ok := itemSyncByTeam[ev.BuildTeam]
-					if !ok {
-						teamMap = make(map[world.ItemID]int32)
-						itemSyncByTeam[ev.BuildTeam] = teamMap
+					positions := wld.TeamItemSyncPositions(ev.BuildTeam)
+					if len(positions) > 0 {
+						broadcastSetTileItems(srv, int16(ev.ItemID), ev.ItemAmount, positions)
 					}
-					teamMap[ev.ItemID] = ev.ItemAmount
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
 				}
@@ -1112,27 +1285,11 @@ func main() {
 					broadcastBuildHealthUpdate(srv, buildHealth[i:end])
 				}
 			}
-			for team, items := range itemSyncByTeam {
-				if team == 0 || len(items) == 0 {
-					continue
-				}
-				positions := wld.TeamCorePositions(team)
-				if len(positions) == 0 {
-					continue
-				}
-				for itemID, amount := range items {
-					srv.Broadcast(&protocol.Remote_InputHandler_setTileItems_62{
-						Item:      protocol.ItemRef{ItmID: int16(itemID), ItmName: ""},
-						Amount:    amount,
-						Positions: positions,
-					})
-				}
-			}
 		}
 	}()
 	saveState := func() {}
 	srv.OnChat = func(c *netserver.Conn, msg string) bool {
-		if c != nil && strings.TrimSpace(msg) != "" {
+		if c != nil && strings.TrimSpace(msg) != "" && shouldFileLogChat() {
 			detailLog.LogLine(fmt.Sprintf("%s [CHAT] from=%q player_id=%d uuid=%s ip=%s msg=%q",
 				time.Now().Format(time.RFC3339Nano), c.Name(), c.PlayerID(), c.UUID(), c.RemoteAddr().String(), strings.TrimSpace(msg)))
 		}
@@ -1502,10 +1659,11 @@ func main() {
 				Name:          "io-core",
 				MessageBuf:    30000,
 				WorkerCount:   ioWorkers,
-				VerboseNetLog: cfg.Control.NetworkVerboseLogEnabled,
+				VerboseNetLog: false,
 			},
 			cfg.Persist,
 		)
+		serverCore.Core2.SetVerboseNetLog(false)
 		serverCore.Core2.SetRecorder(recorder)
 		serverCore.SetPersistStateProvider(func() persist.State {
 			snap := wld.Snapshot()
@@ -1520,7 +1678,6 @@ func main() {
 			}
 		})
 		serverCore.SetGameTickFn(func(_ uint64, delta time.Duration) {
-			buildService.Tick()
 			wld.Step(delta)
 		})
 
@@ -1530,11 +1687,22 @@ func main() {
 		srv.OnConnOpen = netCore.ConnectionOpen
 		srv.OnConnClose = func(c *netserver.Conn) {
 			if c != nil {
-				team := resolveConnTeam(c, wld)
+				if publicConnUUIDStore != nil && runtimePublicConnUUIDEnabled.Load() {
+					host := ""
+					if c.RemoteAddr() != nil {
+						if h, _, err := net.SplitHostPort(c.RemoteAddr().String()); err == nil {
+							host = h
+						} else {
+							host = c.RemoteAddr().String()
+						}
+					}
+					_ = publicConnUUIDStore.ObserveDisconnect(c.UUID(), c.Name(), host)
+				}
+				buildService.ClearOwner(resolveBuildOwner(c))
 				if unitID := c.UnitID(); unitID != 0 {
 					wld.RemoveEntity(unitID)
 				}
-				wld.CancelBuildPlansByTeam(team)
+				wld.CancelBuildPlansByOwner(resolveBuildOwner(c))
 			}
 			netCore.ConnectionClose(c)
 		}
@@ -1553,19 +1721,43 @@ func main() {
 			if c == nil {
 				return
 			}
-			team := resolveConnTeam(c, wld)
+			if publicConnUUIDStore != nil && runtimePublicConnUUIDEnabled.Load() {
+				host := ""
+				if c.RemoteAddr() != nil {
+					if h, _, err := net.SplitHostPort(c.RemoteAddr().String()); err == nil {
+						host = h
+					} else {
+						host = c.RemoteAddr().String()
+					}
+				}
+				_ = publicConnUUIDStore.ObserveDisconnect(c.UUID(), c.Name(), host)
+			}
+			buildService.ClearOwner(resolveBuildOwner(c))
 			if unitID := c.UnitID(); unitID != 0 {
 				wld.RemoveEntity(unitID)
 			}
-			wld.CancelBuildPlansByTeam(team)
+			wld.CancelBuildPlansByOwner(resolveBuildOwner(c))
 		}
 		go func() {
 			interval := time.Second / time.Duration(sim.DefaultTPS)
-			t := time.NewTicker(interval)
-			defer t.Stop()
-			for range t.C {
-				buildService.Tick()
-				wld.Step(interval)
+			next := time.Now().Add(interval)
+			const maxCatchUp = 4
+			for {
+				now := time.Now()
+				if now.Before(next) {
+					time.Sleep(next.Sub(now))
+					continue
+				}
+				steps := 0
+				for !now.Before(next) && steps < maxCatchUp {
+					wld.Step(interval)
+					steps++
+					next = next.Add(interval)
+					now = time.Now()
+				}
+				if steps == maxCatchUp && !now.Before(next) {
+					next = now.Add(interval)
+				}
 			}
 		}()
 	}
@@ -1741,10 +1933,25 @@ func main() {
 			srv.UdpRetryDelay = time.Duration(loaded.Net.UdpRetryDelayMs) * time.Millisecond
 			srv.UdpFallbackTCP = loaded.Net.UdpFallbackTCP
 			srv.SetSnapshotIntervals(loaded.Net.SyncEntityMs, loaded.Net.SyncStateMs)
-			srv.SetVerboseNetLog(false)
+			runtimePlayerNameColorEnabled.Store(loaded.Personalization.PlayerNameColorEnabled)
+			srv.SetPacketRecvEventsEnabled(loaded.Development.PacketRecvEventsEnabled)
+			srv.SetPacketSendEventsEnabled(loaded.Development.PacketSendEventsEnabled)
+			srv.SetTerminalPlayerLogsEnabled(loaded.Development.TerminalPlayerLogsEnabled)
+			srv.SetRespawnPacketLogsEnabled(loaded.Development.RespawnPacketLogsEnabled)
+			srv.SetPlayerNameColorEnabled(loaded.Personalization.PlayerNameColorEnabled)
 			srv.SetTranslatedConnLog(loaded.Control.TranslatedConnLogEnabled)
+			srv.SetJoinLeaveChatEnabled(loaded.Personalization.JoinLeaveChatEnabled)
+			runtimeJoinLeaveChatEnabled.Store(loaded.Personalization.JoinLeaveChatEnabled)
+			runtimePlayerNamePrefix.Store(loaded.Personalization.PlayerNamePrefix)
+			runtimePlayerNameSuffix.Store(loaded.Personalization.PlayerNameSuffix)
+			srv.RefreshPlayerDisplayNames()
+			runtimePublicConnUUIDEnabled.Store(loaded.Control.PublicConnUUIDEnabled)
+			applyBlockNameTranslations(configDir)
 			if serverCore != nil && serverCore.Core2 != nil {
 				serverCore.Core2.SetVerboseNetLog(false)
+			}
+			if loaded.Control.PublicConnUUIDFile != cfg.Control.PublicConnUUIDFile && cfg.Control.ReloadLogEnabled {
+				fmt.Printf("[config] public_conn_uuid_file changed to %s, restart required to reopen mapping file\n", loaded.Control.PublicConnUUIDFile)
 			}
 
 			if apiSrv != nil {
@@ -1805,15 +2012,18 @@ func main() {
 			return err
 		}
 		_ = vanilla.ApplyContentIDs(srv.Content, ids)
-		applyWorldFallbackContentNames(wld, ids)
 		return nil
 	}
 	startup.ok("服务端启动", "初始化完成")
-	startup.print()
-	if loadedModel != nil {
+	if cfg.Personalization.StartupReportEnabled {
+		startup.print()
+	}
+	if cfg.Personalization.MapLoadDetailsEnabled && loadedModel != nil {
 		printMapDetails(loadedMapPath, loadedModel)
 	}
-	printUnitIDList(unitNamesByID)
+	if cfg.Personalization.UnitIDListEnabled {
+		printUnitIDList(unitNamesByID)
+	}
 	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, reloadVanillaProfiles, reloadVanillaContentIDs, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
 	if serverCore != nil {
 		go func() {
@@ -1925,8 +2135,10 @@ func runConsole(
 ) {
 	sc := bufio.NewScanner(os.Stdin)
 	name, _, _ := srv.ServerMeta()
-	printConsoleIntro(name, state.get(), listenAddr, cfg.API.Bind, cfg.API.Enabled)
-	printHelp(*cfg)
+	printConsoleIntro(name, state.get(), listenAddr, cfg.API.Bind, cfg.API.Enabled, cfg.Personalization)
+	if cfg.Personalization.StartupHelpEnabled {
+		printHelp(*cfg)
+	}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -2711,23 +2923,38 @@ func runConsole(
 	}
 }
 
-func printConsoleIntro(serverName, worldPath, listenAddr, apiBind string, apiEnabled bool) {
+func printConsoleIntro(serverName, worldPath, listenAddr, apiBind string, apiEnabled bool, personalization config.PersonalizationConfig) {
+	if !personalization.ConsoleIntroEnabled {
+		return
+	}
 	fmt.Println("========================================")
 	if strings.TrimSpace(serverName) == "" {
 		serverName = "mdt-server"
 	}
-	fmt.Printf("服务器名称: %s\n", serverName)
-	fmt.Printf("当前地图:   %s\n", worldPath)
-	fmt.Printf("监听地址:   %s\n", listenAddr)
-	if ip := firstLocalIPv4(); ip != "" {
-		fmt.Printf("本机IP:     %s\n", ip)
+	if personalization.ConsoleIntroServerNameEnabled {
+		fmt.Printf("服务器名称: %s\n", serverName)
 	}
-	if apiEnabled {
-		fmt.Printf("API地址:    %s\n", apiBind)
-	} else {
-		fmt.Println("API地址:    已关闭")
+	if personalization.ConsoleIntroCurrentMapEnabled {
+		fmt.Printf("当前地图:   %s\n", worldPath)
 	}
-	fmt.Println("输入 `help all` 查看完整帮助")
+	if personalization.ConsoleIntroListenAddrEnabled {
+		fmt.Printf("监听地址:   %s\n", listenAddr)
+	}
+	if personalization.ConsoleIntroLocalIPEnabled {
+		if ip := firstLocalIPv4(); ip != "" {
+			fmt.Printf("本机IP:     %s\n", ip)
+		}
+	}
+	if personalization.ConsoleIntroAPIEnabled {
+		if apiEnabled {
+			fmt.Printf("API地址:    %s\n", apiBind)
+		} else {
+			fmt.Println("API地址:    已关闭")
+		}
+	}
+	if personalization.ConsoleIntroHelpHintEnabled {
+		fmt.Println("输入 `help all` 查看完整帮助")
+	}
 	fmt.Println("========================================")
 }
 
@@ -3208,141 +3435,68 @@ func randomAlphaNum(n int) (string, error) {
 	return string(buf), nil
 }
 
+func currentPlayerNamePrefix() string {
+	if v := runtimePlayerNamePrefix.Load(); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func currentPlayerNameSuffix() string {
+	if v := runtimePlayerNameSuffix.Load(); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func formatDisplayPlayerNameRaw(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "未知玩家"
+	}
+	return currentPlayerNamePrefix() + name + currentPlayerNameSuffix()
+}
+
 func displayPlayerName(c *netserver.Conn) string {
 	if c == nil {
 		return "未知玩家"
 	}
 	name := strings.TrimSpace(c.Name())
 	if name == "" {
-		return fmt.Sprintf("player-%d", c.PlayerID())
+		name = fmt.Sprintf("player-%d", c.PlayerID())
 	}
-	return name
-}
-
-func resolveVanillaProfilesPath(preferred string) (string, string) {
-	candidates := []string{
-		strings.TrimSpace(preferred),
-		filepath.Join("data", "vanilla", "profiles.json"),
-		filepath.Join("..", "data", "vanilla", "profiles.json"),
-		filepath.Join("go-server", "data", "vanilla", "profiles.json"),
-		filepath.Join("..", "go-server", "data", "vanilla", "profiles.json"),
+	name = formatDisplayPlayerNameRaw(name)
+	if runtimePlayerNameColorEnabled.Load() {
+		return netserver.RenderMindustryTextForTerminal(name)
 	}
-	seen := map[string]struct{}{}
-	for _, path := range candidates {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			continue
-		}
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
-		p, err := vanilla.LoadProfiles(path)
-		if err != nil {
-			continue
-		}
-		if len(p.Blocks) > 0 {
-			if path != strings.TrimSpace(preferred) {
-				return path, fmt.Sprintf("检测到配置路径为空模板，已回退: %s", path)
-			}
-			return path, ""
-		}
-	}
-	return strings.TrimSpace(preferred), "未找到有效 profiles.json（blocks 为空），建造速度将退化为默认值"
-}
-
-func resolveContentIDsPath(profilesPath string) (string, string) {
-	preferred := filepath.Join(filepath.Dir(strings.TrimSpace(profilesPath)), "content_ids.json")
-	candidates := []string{
-		preferred,
-		filepath.Join("data", "vanilla", "content_ids.json"),
-		filepath.Join("..", "data", "vanilla", "content_ids.json"),
-		filepath.Join("go-server", "data", "vanilla", "content_ids.json"),
-		filepath.Join("..", "go-server", "data", "vanilla", "content_ids.json"),
-	}
-	seen := map[string]struct{}{}
-	for _, path := range candidates {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			continue
-		}
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
-		ids, err := vanilla.LoadContentIDs(path)
-		if err != nil {
-			continue
-		}
-		if len(ids.Blocks) > 0 && len(ids.Units) > 0 {
-			if path != preferred {
-				return path, fmt.Sprintf("检测到 content_ids 缺失或无效，已回退: %s", path)
-			}
-			return path, ""
-		}
-	}
-	return preferred, "未找到有效 content_ids.json（blocks/units 为空），方块名称将退化为 block-<id>"
+	return netserver.StripMindustryColorTags(name)
 }
 
 func blockDisplayName(wld *world.World, blockID int16) string {
 	if blockID <= 0 || wld == nil {
 		return "空"
 	}
-	name := strings.TrimSpace(wld.BlockNameByID(blockID))
+	model := wld.Model()
+	if model == nil {
+		return fmt.Sprintf("block-%d", blockID)
+	}
+	name := strings.TrimSpace(model.BlockNames[blockID])
 	if name == "" {
 		return fmt.Sprintf("block-%d", blockID)
 	}
 	return translateBlockNameCN(name)
 }
 
-func applyWorldFallbackContentNames(wld *world.World, ids *vanilla.ContentIDsFile) {
-	if wld == nil || ids == nil {
-		return
-	}
-	blocks := make(map[int16]string, len(ids.Blocks))
-	for _, e := range ids.Blocks {
-		n := strings.ToLower(strings.TrimSpace(e.Name))
-		if n == "" {
-			continue
-		}
-		blocks[e.ID] = n
-	}
-	units := make(map[int16]string, len(ids.Units))
-	for _, e := range ids.Units {
-		n := strings.ToLower(strings.TrimSpace(e.Name))
-		if n == "" {
-			continue
-		}
-		units[e.ID] = n
-	}
-	wld.SetFallbackContentNames(blocks, units)
-}
-
 func translateBlockNameCN(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
-	dict := map[string]string{
-		"conveyor":          "传送带",
-		"titanium-conveyor": "钛传送带",
-		"armored-conveyor":  "装甲传送带",
-		"junction":          "交叉器",
-		"router":            "分配器",
-		"sorter":            "分类器",
-		"inverted-sorter":   "反向分类器",
-		"overflow-gate":     "溢流门",
-		"underflow-gate":    "反向溢流门",
-		"duo":               "双管炮",
-		"scatter":           "散射炮",
-		"scorch":            "火焰炮",
-		"core-shard":        "核心:碎片",
-		"core-foundation":   "核心:基地",
-		"core-nucleus":      "核心:核",
-		"core-bastion":      "核心:堡垒",
-		"core-citadel":      "核心:城塞",
-		"core-acropolis":    "核心:卫城",
-		"copper-wall":       "铜墙",
-		"copper-wall-large": "大型铜墙",
-	}
-	if cn, ok := dict[n]; ok {
+	blockNameTranslationMu.RLock()
+	cn, ok := blockNameTranslations[n]
+	blockNameTranslationMu.RUnlock()
+	if ok {
 		return cn
 	}
 	return n
@@ -3411,7 +3565,7 @@ func broadcastSetTile(srv *netserver.Server, buildPos int32, blockID int16, rot 
 	})
 }
 
-func broadcastBuildBeginPlace(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte) {
+func broadcastBuildBeginPlace(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte, config any) {
 	if srv == nil || buildPos < 0 || blockID <= 0 {
 		return
 	}
@@ -3423,7 +3577,7 @@ func broadcastBuildBeginPlace(srv *netserver.Server, buildPos int32, blockID int
 		X:           x,
 		Y:           y,
 		Rotation:    int32(rot) & 0x3,
-		PlaceConfig: nil,
+		PlaceConfig: config,
 	})
 }
 
@@ -3460,6 +3614,17 @@ func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
 	}
 	srv.Broadcast(&protocol.Remote_Tile_buildHealthUpdate_135{
 		Buildings: protocol.IntSeq{Items: items},
+	})
+}
+
+func broadcastSetTileItems(srv *netserver.Server, itemID int16, amount int32, positions []int32) {
+	if srv == nil || itemID < 0 || len(positions) == 0 {
+		return
+	}
+	srv.Broadcast(&protocol.Remote_InputHandler_setTileItems_62{
+		Item:      protocol.ItemRef{ItmID: itemID},
+		Amount:    amount,
+		Positions: append([]int32(nil), positions...),
 	})
 }
 
@@ -3503,76 +3668,18 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 			Buildings: protocol.IntSeq{Items: health},
 		})
 	}
-}
-
-func syncTeamItemsToConn(conn *netserver.Conn, wld *world.World) {
-	if conn == nil || wld == nil {
-		return
-	}
-	for team := world.TeamID(1); team < 16; team++ {
-		positions := wld.TeamCorePositions(team)
+	for _, snapshot := range wld.TeamCoreItemSnapshots() {
+		positions := wld.TeamItemSyncPositions(snapshot.Team)
 		if len(positions) == 0 {
 			continue
 		}
-		items := wld.EnsureTeamItems(team)
-		if len(items) == 0 {
-			continue
-		}
-		for itemID, amount := range items {
+		for _, stack := range snapshot.Items {
 			_ = conn.SendAsync(&protocol.Remote_InputHandler_setTileItems_62{
-				Item:      protocol.ItemRef{ItmID: int16(itemID), ItmName: ""},
-				Amount:    amount,
-				Positions: positions,
+				Item:      protocol.ItemRef{ItmID: int16(stack.Item)},
+				Amount:    stack.Amount,
+				Positions: append([]int32(nil), positions...),
 			})
 		}
-	}
-}
-
-type tileConfigSyncEntry struct {
-	Pos   int32
-	Value any
-}
-
-func syncTileConfigsToConn(conn *netserver.Conn, entries []tileConfigSyncEntry) {
-	if conn == nil || len(entries) == 0 {
-		return
-	}
-	for i := range entries {
-		e := entries[i]
-		if e.Pos < 0 {
-			continue
-		}
-		_ = conn.SendAsync(&protocol.Remote_InputHandler_tileConfig_86{
-			Build: protocol.BuildingBox{PosValue: e.Pos},
-			Value: cloneTileConfigValue(e.Value),
-		})
-	}
-}
-
-func cloneTileConfigValue(v any) any {
-	switch t := v.(type) {
-	case nil:
-		return nil
-	case []byte:
-		out := make([]byte, len(t))
-		copy(out, t)
-		return out
-	case []bool:
-		out := make([]bool, len(t))
-		copy(out, t)
-		return out
-	case []int32:
-		out := make([]int32, len(t))
-		copy(out, t)
-		return out
-	case []any:
-		out := make([]any, len(t))
-		for i := range t {
-			out[i] = cloneTileConfigValue(t[i])
-		}
-		return out
-	default:
-		return t
 	}
 }
 
@@ -4204,81 +4311,28 @@ func resolveUnitTypeArg(arg string, wld *world.World) (int16, string, bool) {
 	return 0, "", false
 }
 
-func fallbackSpawnPosFromModel(model *world.WorldModel, blockNameByID func(int16) string) (protocol.Point2, bool) {
+func fallbackSpawnPosFromModel(model *world.WorldModel) (protocol.Point2, bool) {
 	if model == nil || model.Width <= 0 || model.Height <= 0 || len(model.Tiles) == 0 {
 		return protocol.Point2{}, false
 	}
-	resolveName := func(blockID int16) string {
-		if blockID <= 0 {
-			return ""
-		}
-		if blockNameByID != nil {
-			if name := strings.ToLower(strings.TrimSpace(blockNameByID(blockID))); name != "" {
-				return name
-			}
-		}
-		return strings.ToLower(strings.TrimSpace(model.BlockNames[blockID]))
-	}
-	isCoreName := func(name string) bool {
-		name = strings.ToLower(strings.TrimSpace(name))
-		return strings.Contains(name, "core-") || strings.Contains(name, "core")
-	}
-	centerX := model.Width / 2
-	centerY := model.Height / 2
-	bestAnyCoreDist2 := int(^uint(0) >> 1)
-	bestAnyCore := protocol.Point2{}
-	bestAnyCoreName := ""
-	hasAnyCore := false
-	bestEmptyDist2 := int(^uint(0) >> 1)
-	bestEmpty := protocol.Point2{}
-	hasEmpty := false
+	var firstTeamBuild protocol.Point2
+	firstTeamBuildOK := false
 	for i := range model.Tiles {
 		tile := &model.Tiles[i]
-		if tile == nil {
+		if tile == nil || tile.Build == nil || tile.Build.Health <= 0 || tile.Build.Team != 1 {
 			continue
 		}
-		blockID := int16(tile.Block)
-		if blockID <= 0 && tile.Build != nil {
-			blockID = int16(tile.Build.Block)
+		if !firstTeamBuildOK {
+			firstTeamBuild = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
+			firstTeamBuildOK = true
 		}
-		owner := tile.Team
-		if owner == 0 && tile.Build != nil && tile.Build.Team != 0 {
-			owner = tile.Build.Team
-		}
-		name := resolveName(blockID)
-		if owner == 1 && isCoreName(name) {
+		name := strings.ToLower(strings.TrimSpace(model.BlockNames[int16(tile.Build.Block)]))
+		if strings.Contains(name, "core") || strings.Contains(name, "foundation") || strings.Contains(name, "nucleus") {
 			return protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}, true
 		}
-		if isCoreName(name) {
-			dx := tile.X - centerX
-			dy := tile.Y - centerY
-			dist2 := dx*dx + dy*dy
-			if !hasAnyCore || dist2 < bestAnyCoreDist2 {
-				bestAnyCoreDist2 = dist2
-				bestAnyCore = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
-				bestAnyCoreName = name
-				hasAnyCore = true
-			}
-		}
-		if tile.Block <= 0 && (tile.Build == nil || tile.Build.Health <= 0) {
-			dx := tile.X - centerX
-			dy := tile.Y - centerY
-			dist2 := dx*dx + dy*dy
-			if !hasEmpty || dist2 < bestEmptyDist2 {
-				bestEmptyDist2 = dist2
-				bestEmpty = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
-				hasEmpty = true
-			}
-		}
 	}
-	if hasAnyCore {
-		fmt.Printf("[buildtrace] fallback spawn: use nearest core (team-agnostic) tile=(%d,%d) block=%s\n",
-			bestAnyCore.X, bestAnyCore.Y, bestAnyCoreName)
-		return bestAnyCore, true
-	}
-	if hasEmpty {
-		fmt.Printf("[buildtrace] fallback spawn: use nearest empty tile tile=(%d,%d)\n", bestEmpty.X, bestEmpty.Y)
-		return bestEmpty, true
+	if firstTeamBuildOK {
+		return firstTeamBuild, true
 	}
 	return protocol.Point2{X: int32(model.Width / 2), Y: int32(model.Height / 2)}, true
 }
@@ -4299,11 +4353,7 @@ func resolveRespawnUnitTypeByCoreTile(wld *world.World, tile protocol.Point2, te
 		return fallback
 	}
 	if t, err := model.TileAt(int(tile.X), int(tile.Y)); err == nil && t != nil && t.Block > 0 {
-		blockName := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
-		if blockName == "" {
-			blockName = model.BlockNames[int16(t.Block)]
-		}
-		if unitName, _, ok := coreUnitNameAndRankByBlockName(blockName); ok {
+		if unitName, _, ok := coreUnitNameAndRankByBlockName(model.BlockNames[int16(t.Block)]); ok {
 			if unitTypeID, ok := wld.ResolveUnitTypeID(unitName); ok {
 				return unitTypeID
 			}
@@ -4355,19 +4405,16 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 	bestDist2 := int(^uint(0) >> 1)
 	bestPos := protocol.Point2{}
 	bestName := ""
-	bestAnyRank := -1
-	bestAnyDist2 := int(^uint(0) >> 1)
-	bestAnyPos := protocol.Point2{}
-	bestAnyName := ""
+	fallbackRank := -1
+	fallbackDist2 := int(^uint(0) >> 1)
+	fallbackPos := protocol.Point2{}
+	fallbackName := ""
 	for i := range model.Tiles {
 		t := &model.Tiles[i]
 		if t == nil || t.Block <= 0 {
 			continue
 		}
-		blockName := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
-		if blockName == "" {
-			blockName = model.BlockNames[int16(t.Block)]
-		}
+		blockName := model.BlockNames[int16(t.Block)]
 		_, rank, ok := coreUnitNameAndRankByBlockName(blockName)
 		if !ok {
 			continue
@@ -4375,11 +4422,11 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 		dx := t.X - refX
 		dy := t.Y - refY
 		dist2 := dx*dx + dy*dy
-		if rank > bestAnyRank || (rank == bestAnyRank && dist2 < bestAnyDist2) {
-			bestAnyRank = rank
-			bestAnyDist2 = dist2
-			bestAnyPos = protocol.Point2{X: int32(t.X), Y: int32(t.Y)}
-			bestAnyName = blockName
+		if rank > fallbackRank || (rank == fallbackRank && dist2 < fallbackDist2) {
+			fallbackRank = rank
+			fallbackDist2 = dist2
+			fallbackPos = protocol.Point2{X: int32(t.X), Y: int32(t.Y)}
+			fallbackName = blockName
 		}
 		owner := t.Team
 		if owner == 0 && t.Build != nil && t.Build.Team != 0 {
@@ -4395,27 +4442,13 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 			bestName = blockName
 		}
 	}
-	if bestRank >= 0 {
-		return bestPos, bestName, true
-	}
-	// Some world streams miss team fields on core tiles; fall back to nearest detected core.
-	if bestAnyRank >= 0 {
-		return bestAnyPos, bestAnyName, true
-	}
-	// Last fallback: use world-derived core tile positions (team-tag based).
-	for _, packed := range wld.TeamCorePositions(team) {
-		x, y := unpackTilePos(packed)
-		if model.InBounds(int(x), int(y)) {
-			if t, err := model.TileAt(int(x), int(y)); err == nil && t != nil {
-				name := strings.TrimSpace(wld.BlockNameByID(int16(t.Block)))
-				if name == "" {
-					name = model.BlockNames[int16(t.Block)]
-				}
-				return protocol.Point2{X: x, Y: y}, name, true
-			}
+	if bestRank < 0 {
+		if fallbackRank >= 0 {
+			return fallbackPos, fallbackName, true
 		}
+		return protocol.Point2{}, "", false
 	}
-	return protocol.Point2{}, "", false
+	return bestPos, bestName, true
 }
 
 func resolveConnTeam(c *netserver.Conn, wld *world.World) world.TeamID {
@@ -4424,11 +4457,26 @@ func resolveConnTeam(c *netserver.Conn, wld *world.World) world.TeamID {
 		return defaultTeam
 	}
 	if unitID := c.UnitID(); unitID != 0 {
-		if ent, ok := wld.GetEntity(unitID); ok && ent.Team != 0 {
+		if ent, ok := wld.GetEntity(unitID); ok && ent.Team == defaultTeam {
+			return ent.Team
+		}
+	}
+	if playerID := c.PlayerID(); playerID != 0 {
+		if ent, ok := wld.GetEntity(playerID); ok && ent.Team == defaultTeam {
 			return ent.Team
 		}
 	}
 	return defaultTeam
+}
+
+func resolveBuildOwner(c *netserver.Conn) int32 {
+	if c == nil {
+		return 0
+	}
+	if id := c.PlayerID(); id != 0 {
+		return id
+	}
+	return c.ConnID()
 }
 
 // getSpawnPos 获取重生点位置（支持多核心轮转）
@@ -4438,7 +4486,7 @@ func getSpawnPos(model *world.WorldModel, cache *worldCache, path string) (proto
 		return pos, true
 	}
 	// 2. 回退到模型中的重生点
-	return fallbackSpawnPosFromModel(model, nil)
+	return fallbackSpawnPosFromModel(model)
 }
 
 // spawnPosFromCache 从缓存获取重生点

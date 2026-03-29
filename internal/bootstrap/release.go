@@ -80,17 +80,17 @@ func writeReleaseINI(path string, p releasePolicy) error {
 	content := fmt.Sprintf(`; mdt-server 启动释放控制
 ;
 ; 这个文件只控制“是否释放内置资源到磁盘”。
-; 目录/文件的正常生成位置为 EXE 根目录（assets/data/mods/logs），configs 目录只存放 INI 配置文件。
+; 目录/文件的正常生成位置为 EXE 根目录（assets/data/mods/logs），configs 目录存放 INI 与 JSON 配置文件。
 ;
 ; 重要概念
-; - “释放(release)”：把 EXE 内置打包的资源释放到磁盘（assets/worlds 与 configs/*.ini）。
+; - “释放(release)”：把 EXE 内置打包的资源释放到磁盘（assets/worlds 与 configs 下的配置文件）。
 ;
 ; 二次启动不再释放的逻辑
 ; - 当程序完成一次释放后，会自动把 [release].released 写为 1，表示“已释放过”。
 ; - 想强制再次释放：把 released 改为 0，然后重启。
 ;
 ; 注意
-; - configs/ 目录永远会保留/创建，但 configs 目录里只放配置文件（INI 为主），不要放 assets/data/mods/logs。
+; - configs/ 目录永远会保留/创建，但 configs 目录里只放配置文件（INI/JSON），不要放 assets/data/mods/logs。
 ; - released=0 会执行释放，释放阶段会覆盖写入目标文件；如果你不希望被覆盖，请保持 released=1。
 
 [release]
@@ -179,8 +179,9 @@ func releaseEmbeddedConfigs(configDir string) error {
 			rel, _ := filepath.Rel("configs", path)
 			return os.MkdirAll(filepath.Join(configDir, rel), 0o755)
 		}
-		// 只释放 INI 配置文件，避免把运行期临时文件带入。
-		if strings.ToLower(filepath.Ext(path)) != ".ini" {
+		ext := strings.ToLower(filepath.Ext(path))
+		isJSONConfig := strings.HasPrefix(filepath.ToSlash(path), "configs/json/")
+		if ext != ".ini" && !(isJSONConfig && ext == ".json") {
 			return nil
 		}
 		data, err := fs.ReadFile(mdtserver.BundledFiles, path)

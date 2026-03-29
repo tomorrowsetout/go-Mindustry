@@ -1,0 +1,5 @@
+{"timestamp":"2026-03-29T12:46:45.7685836Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":1779138391,"uuid":"vBF+jfr4okcAAAAAewlNmg==","ip":"113.200.22.34","name":"567"}
+{"timestamp":"2026-03-29T12:46:45.7855875Z","kind":"world_handshake_sent","conn_id":1779138391,"uuid":"vBF+jfr4okcAAAAAewlNmg==","ip":"113.200.22.34","name":"567"}
+{"timestamp":"2026-03-29T12:46:46.0253771Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":1779138391,"uuid":"vBF+jfr4okcAAAAAewlNmg==","ip":"113.200.22.34","name":"567"}
+{"timestamp":"2026-03-29T12:46:47.5816719Z","kind":"tcp_closed","detail":"EOF","conn_id":1779138391,"uuid":"vBF+jfr4okcAAAAAewlNmg==","ip":"113.200.22.34","name":"567"}
+{"timestamp":"2026-03-29T12:46:47.5866763Z","kind":"connection_close","trigger":13,"conn_id":1779138391,"uuid":"vBF+jfr4okcAAAAAewlNmg==","ip":"113.200.22.34:30352","name":"567"}

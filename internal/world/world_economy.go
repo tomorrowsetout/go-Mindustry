@@ -62,8 +62,11 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 	if dt <= 0 {
 		return
 	}
-	for i := range w.model.Tiles {
-		t := &w.model.Tiles[i]
+	for _, pos := range w.activeTilePositions {
+		if pos < 0 || int(pos) >= len(w.model.Tiles) {
+			continue
+		}
+		t := &w.model.Tiles[pos]
 		if t.Build == nil || t.Block <= 0 || t.Team == 0 {
 			continue
 		}
@@ -72,7 +75,6 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 		if !ok {
 			continue
 		}
-		pos := int32(t.Y*w.model.Width + t.X)
 		st := w.factoryStates[pos]
 		if st.UnitType <= 0 {
 			if typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(prof.UnitName)); ok {
@@ -164,6 +166,139 @@ func (w *World) ensureTeamInventory(team TeamID) {
 	w.teamItems[team] = inv
 }
 
+func (w *World) teamCoreBuildsLocked(team TeamID) []*Building {
+	if w.model == nil || team == 0 {
+		return nil
+	}
+	out := make([]*Building, 0, 4)
+	for _, pos := range w.activeTilePositions {
+		if pos < 0 || int(pos) >= len(w.model.Tiles) {
+			continue
+		}
+		tile := &w.model.Tiles[pos]
+		if tile.Team != team || tile.Build == nil || tile.Block <= 0 {
+			continue
+		}
+		if !strings.HasPrefix(w.blockNameByID(int16(tile.Block)), "core-") {
+			continue
+		}
+		out = append(out, tile.Build)
+	}
+	return out
+}
+
+func (w *World) teamHasCoreLocked(team TeamID) bool {
+	return len(w.teamCoreBuildsLocked(team)) > 0
+}
+
+func (w *World) teamCoreItemsLocked(team TeamID) map[ItemID]int32 {
+	cores := w.teamCoreBuildsLocked(team)
+	if len(cores) == 0 {
+		return nil
+	}
+	out := make(map[ItemID]int32)
+	for _, core := range cores {
+		for _, stack := range core.Items {
+			if stack.Amount <= 0 {
+				continue
+			}
+			out[stack.Item] += stack.Amount
+		}
+	}
+	return out
+}
+
+func (w *World) emitTeamCoreItemsLocked(team TeamID, items []ItemID) {
+	if team == 0 || len(items) == 0 {
+		return
+	}
+	totals := w.teamCoreItemsLocked(team)
+	seen := make(map[ItemID]struct{}, len(items))
+	for _, item := range items {
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		w.entityEvents = append(w.entityEvents, EntityEvent{
+			Kind:       EntityEventTeamItems,
+			BuildTeam:  team,
+			ItemID:     item,
+			ItemAmount: totals[item],
+		})
+	}
+}
+
+func (w *World) addItemsToTeamCoresLocked(team TeamID, stacks []ItemStack) bool {
+	cores := w.teamCoreBuildsLocked(team)
+	if len(cores) == 0 || len(stacks) == 0 {
+		return false
+	}
+	changed := make([]ItemID, 0, len(stacks))
+	for _, stack := range stacks {
+		if stack.Amount <= 0 {
+			continue
+		}
+		remaining := stack.Amount
+		for _, core := range cores {
+			if remaining <= 0 {
+				break
+			}
+			core.AddItem(stack.Item, remaining)
+			remaining = 0
+		}
+		if remaining != stack.Amount {
+			changed = append(changed, stack.Item)
+		}
+	}
+	if len(changed) == 0 {
+		return false
+	}
+	w.emitTeamCoreItemsLocked(team, changed)
+	return true
+}
+
+func (w *World) consumeItemsFromTeamCoresLocked(team TeamID, cost []ItemStack) bool {
+	cores := w.teamCoreBuildsLocked(team)
+	if len(cores) == 0 || len(cost) == 0 {
+		return false
+	}
+	totals := w.teamCoreItemsLocked(team)
+	for _, stack := range cost {
+		if stack.Amount <= 0 {
+			continue
+		}
+		if totals[stack.Item] < stack.Amount {
+			return false
+		}
+	}
+	changed := make([]ItemID, 0, len(cost))
+	for _, stack := range cost {
+		if stack.Amount <= 0 {
+			continue
+		}
+		remaining := stack.Amount
+		for _, core := range cores {
+			if remaining <= 0 {
+				break
+			}
+			available := core.ItemAmount(stack.Item)
+			if available <= 0 {
+				continue
+			}
+			use := remaining
+			if available < use {
+				use = available
+			}
+			if core.RemoveItem(stack.Item, use) {
+				remaining -= use
+			}
+		}
+		changed = append(changed, stack.Item)
+	}
+	w.emitTeamCoreItemsLocked(team, changed)
+	return true
+}
+
 func (w *World) consumeBuildCost(team TeamID, blockID int16) bool {
 	name := w.blockNameByID(blockID)
 	cost := w.buildCostByName(name)
@@ -175,38 +310,13 @@ func (w *World) consumeBuildCost(team TeamID, blockID int16) bool {
 		return true
 	}
 	scaled := w.scaleBuildCost(cost, rules)
+	if w.consumeItemsFromTeamCoresLocked(team, scaled) {
+		return true
+	}
+	if w.teamHasCoreLocked(team) {
+		return false
+	}
 	return w.consumeItemsForTeam(team, scaled)
-}
-
-func (w *World) firstMissingBuildCost(team TeamID, blockID int16) (ItemID, int32, bool) {
-	if team == 0 || blockID <= 0 {
-		return 0, 0, false
-	}
-	name := w.blockNameByID(blockID)
-	cost := w.buildCostByName(name)
-	if len(cost) == 0 {
-		return 0, 0, false
-	}
-	rules := w.rulesMgr.Get()
-	if rules != nil && rules.InfiniteResources {
-		return 0, 0, false
-	}
-	scaled := w.scaleBuildCost(cost, rules)
-	if len(scaled) == 0 {
-		return 0, 0, false
-	}
-	w.ensureTeamInventory(team)
-	inv := w.teamItems[team]
-	for _, s := range scaled {
-		if s.Amount <= 0 {
-			continue
-		}
-		cur := inv[s.Item]
-		if cur < s.Amount {
-			return s.Item, s.Amount - cur, true
-		}
-	}
-	return 0, 0, false
 }
 
 func (w *World) buildDurationSeconds(blockID int16, rules *Rules) float32 {
@@ -214,6 +324,9 @@ func (w *World) buildDurationSeconds(blockID int16, rules *Rules) float32 {
 }
 
 func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *Rules) float32 {
+	if rules != nil && (rules.InstantBuild || rules.Editor) {
+		return 0.01
+	}
 	name := w.blockNameByID(blockID)
 	base := float32(1.0)
 	if name != "" {
@@ -227,6 +340,11 @@ func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *R
 	if rules != nil && rules.BuildSpeedMultiplier > 0 {
 		base /= rules.BuildSpeedMultiplier
 	}
+	if team > 0 && rules != nil {
+		if tr, ok := rules.teamRule(team); ok && tr.BuildSpeedMultiplier > 0 {
+			base /= tr.BuildSpeedMultiplier
+		}
+	}
 	// Match vanilla BuilderComp formula:
 	// bs = 1/buildCost * type.buildSpeed * buildSpeedMultiplier * rules.buildSpeed(team)
 	// Here "base" is buildCost/60, so divide by builder speed terms.
@@ -234,6 +352,14 @@ func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *R
 	if team > 0 && w.teamBuilderSpeed != nil {
 		if v, ok := w.teamBuilderSpeed[team]; ok && v > 0 {
 			builderSpeed = v
+		}
+	}
+	if rules != nil && rules.UnitBuildSpeedMultiplier > 0 {
+		builderSpeed *= rules.UnitBuildSpeedMultiplier
+	}
+	if team > 0 && rules != nil {
+		if tr, ok := rules.teamRule(team); ok && tr.UnitBuildSpeedMultiplier > 0 {
+			builderSpeed *= tr.UnitBuildSpeedMultiplier
 		}
 	}
 	if builderSpeed > 0 {
@@ -267,7 +393,7 @@ func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
 	if team == 0 {
 		team = fallbackTeam
 	}
-	w.ensureTeamInventory(team)
+	refundStacks := make([]ItemStack, 0, len(cost))
 	for _, s := range cost {
 		if s.Amount <= 0 {
 			continue
@@ -276,7 +402,14 @@ func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
 		if refund <= 0 {
 			continue
 		}
-		w.addTeamItems(team, s.Item, refund)
+		refundStacks = append(refundStacks, ItemStack{Item: s.Item, Amount: refund})
+	}
+	if w.addItemsToTeamCoresLocked(team, refundStacks) {
+		return
+	}
+	w.ensureTeamInventory(team)
+	for _, stack := range refundStacks {
+		w.addTeamItems(team, stack.Item, stack.Amount)
 	}
 }
 
@@ -293,7 +426,7 @@ func (w *World) refundBuildCost(team TeamID, blockID int16, mul float32) {
 	if rules != nil && rules.InfiniteResources {
 		return
 	}
-	w.ensureTeamInventory(team)
+	refundStacks := make([]ItemStack, 0, len(cost))
 	for _, s := range cost {
 		if s.Amount <= 0 {
 			continue
@@ -302,7 +435,14 @@ func (w *World) refundBuildCost(team TeamID, blockID int16, mul float32) {
 		if add <= 0 {
 			continue
 		}
-		w.addTeamItems(team, s.Item, add)
+		refundStacks = append(refundStacks, ItemStack{Item: s.Item, Amount: add})
+	}
+	if w.addItemsToTeamCoresLocked(team, refundStacks) {
+		return
+	}
+	w.ensureTeamInventory(team)
+	for _, stack := range refundStacks {
+		w.addTeamItems(team, stack.Item, stack.Amount)
 	}
 }
 
@@ -318,32 +458,6 @@ func (w *World) addTeamItems(team TeamID, item ItemID, delta int32) {
 		ItemID:     item,
 		ItemAmount: w.teamItems[team][item],
 	})
-}
-
-// AdjustTeamItem applies item delta to a team inventory and emits sync events.
-// Returns false when subtraction would make inventory negative.
-func (w *World) AdjustTeamItem(team TeamID, item ItemID, delta int32) bool {
-	if team == 0 || delta == 0 {
-		return false
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.ensureTeamInventory(team)
-	inv := w.teamItems[team]
-	if delta < 0 {
-		need := -delta
-		if inv[item] < need {
-			return false
-		}
-	}
-	inv[item] += delta
-	w.entityEvents = append(w.entityEvents, EntityEvent{
-		Kind:       EntityEventTeamItems,
-		BuildTeam:  team,
-		ItemID:     item,
-		ItemAmount: inv[item],
-	})
-	return true
 }
 
 func (w *World) consumeItemsForTeam(team TeamID, cost []ItemStack) bool {

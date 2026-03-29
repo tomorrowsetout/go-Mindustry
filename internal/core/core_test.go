@@ -88,7 +88,7 @@ func TestCore2SendDropRollsBackQueueSize(t *testing.T) {
 	}
 }
 
-func TestCore2PacketHandlersRecordEvents(t *testing.T) {
+func TestCore2PacketHandlersDoNotRecordEventsByDefault(t *testing.T) {
 	c2 := NewCore2(Config{Name: "test", MessageBuf: 4, WorkerCount: 1})
 	rec := &testRecorder{}
 	c2.SetRecorder(rec)
@@ -107,8 +107,32 @@ func TestCore2PacketHandlersRecordEvents(t *testing.T) {
 		Data:   []byte{4},
 	})
 
+	if len(rec.events) != 0 {
+		t.Fatalf("expected no packet events by default, got %d", len(rec.events))
+	}
+}
+
+func TestCore2PacketHandlersRecordEventsWhenVerbose(t *testing.T) {
+	c2 := NewCore2(Config{Name: "test", MessageBuf: 4, WorkerCount: 1, VerboseNetLog: true})
+	rec := &testRecorder{}
+	c2.SetRecorder(rec)
+
+	c2.handlePacketIncoming(&PacketMessage{
+		ConnID:   7,
+		Kind:     "incoming",
+		Packet:   &noopPacket{},
+		Data:     []byte{1, 2, 3},
+		IdleTime: 50 * time.Millisecond,
+	})
+	c2.handlePacketOutgoing(&PacketMessage{
+		ConnID: 7,
+		Kind:   "outgoing",
+		Packet: &noopPacket{},
+		Data:   []byte{4},
+	})
+
 	if len(rec.events) != 2 {
-		t.Fatalf("expected 2 packet events, got %d", len(rec.events))
+		t.Fatalf("expected 2 packet events when verbose, got %d", len(rec.events))
 	}
 	if rec.events[0].Kind != "packet_incoming" || rec.events[1].Kind != "packet_outgoing" {
 		t.Fatalf("unexpected packet event sequence: %+v", rec.events)

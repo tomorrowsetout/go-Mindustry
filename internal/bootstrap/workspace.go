@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	mdtserver "mdt-server"
 	"mdt-server/internal/config"
 )
 
@@ -99,7 +101,8 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 	}
 
 	dirs := []string{
-		configDir, // configs 目录只存 INI 配置文件
+		configDir, // configs 目录存放 INI 与 JSON 配置/字典文件
+		filepath.Join(configDir, "json"),
 		cfg.Runtime.WorldsDir,
 		cfg.Runtime.LogsDir,
 		cfg.Storage.Directory,
@@ -171,6 +174,10 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 		}
 		_ = writeIfMissing(apiCfgPath, []byte("; api settings\n[api]\nenabled = 1\nbind = 0.0.0.0:8090\nkey =\nkeys =\n"), 0o644)
 	}
+	_ = writeIfMissing(filepath.Join(configDir, "Development mode.ini"), []byte("; 开发模式配置\n; 1 = 开启，0 = 关闭\n\n[development]\npacket_events_enabled = 0 ; 数据包事件兼容总开关，实际以 recv/send 两项为准\npacket_recv_events_enabled = 0 ; 记录 packet_recv 事件\npacket_send_events_enabled = 0 ; 记录 packet_send 事件\nterminal_player_logs_enabled = 1 ; 控制 [终端] 玩家进入/退出游戏日志\nrespawn_core_logs_enabled = 1 ; 控制核心坐标、出生点、未找到核心等日志\nrespawn_unit_logs_enabled = 1 ; 控制出生单位、建造速度等日志\nrespawn_packet_logs_enabled = 1 ; 控制玩家出生包发送开始/失败/完成日志\nbuild_snapshot_logs_enabled = 1 ; 控制 [建筑] 快照队列日志\nbuild_place_logs_enabled = 1 ; 控制 [建筑] 建造了 日志\nbuild_finish_logs_enabled = 1 ; 控制 [建筑] 完成建造 日志\nbuild_break_start_logs_enabled = 1 ; 控制 [建筑] 正在拆除 日志\nbuild_break_done_logs_enabled = 1 ; 控制 [建筑] 拆除了 日志\n"), 0o644)
+	_ = writeIfMissing(filepath.Join(configDir, "Personalization.ini"), []byte("; 个性化显示配置\n; 1 = 开启，0 = 关闭\n\n[personalization]\nstartup_report_enabled = 1 ; 控制启动报告输出\nmap_load_details_enabled = 1 ; 控制地图加载详情输出\nunit_id_list_enabled = 1 ; 控制单位 ID 列表输出\nstartup_current_map_line_enabled = 1 ; 控制启动时单独输出 当前地图: ...\nconsole_intro_enabled = 1 ; 控制启动后的信息面板总开关\nconsole_intro_server_name_enabled = 1 ; 控制信息面板中的 服务器名称\nconsole_intro_current_map_enabled = 1 ; 控制信息面板中的 当前地图\nconsole_intro_listen_addr_enabled = 1 ; 控制信息面板中的 监听地址\nconsole_intro_local_ip_enabled = 1 ; 控制信息面板中的 本机IP\nconsole_intro_api_enabled = 1 ; 控制信息面板中的 API地址\nconsole_intro_help_hint_enabled = 1 ; 控制信息面板中的 help all 提示\nstartup_help_enabled = 1 ; 控制启动时完整帮助列表输出\njoin_leave_chat_enabled = 1 ; 控制玩家加入/退出时是否向全服发送聊天提示\nplayer_name_color_enabled = 1 ; 控制终端中玩家名称是否保留颜色显示\nplayer_name_prefix =  ; 玩家显示名前缀，可写 Mindustry 颜色标签\nplayer_name_suffix =  ; 玩家显示名后缀，可写 Mindustry 颜色标签\n"), 0o644)
+	_ = writeBundledConfigIfMissing(configDir, filepath.Join("json", "block_names.json"))
+	_ = writeBundledConfigIfMissing(configDir, filepath.Join("json", "conn_uuid.json"))
 
 	if err := seedMapIfMissing(cfg.Runtime.WorldsDir); err != nil {
 		return out, err
@@ -222,6 +229,29 @@ func seedMapIfMissing(dstDir string) error {
 		return nil
 	}
 	return copyFile(src, dst)
+}
+
+func writeBundledConfigIfMissing(configDir, rel string) error {
+	configDir = strings.TrimSpace(configDir)
+	rel = filepath.Clean(strings.TrimSpace(rel))
+	if configDir == "" || rel == "" || rel == "." {
+		return nil
+	}
+	target := filepath.Join(configDir, rel)
+	if st, err := os.Stat(target); err == nil && !st.IsDir() {
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	bundledPath := filepath.ToSlash(filepath.Join("configs", rel))
+	data, err := fs.ReadFile(mdtserver.BundledFiles, bundledPath)
+	if err != nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, data, 0o644)
 }
 
 func copyFile(src, dst string) error {

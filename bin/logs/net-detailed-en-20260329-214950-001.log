@@ -1,0 +1,42 @@
+2026-03-29T13:49:56.311831Z [NET] kind=tcp_accept packet= conn_id=2087037310 uuid= ip=10.147.17.101 name="" detail=
+2026-03-29T13:49:56.3254554Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=2087037310 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T13:49:56.3570389Z [NET] kind=world_handshake_sent packet= conn_id=2087037310 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T13:49:56.6214088Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=2087037310 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T21:49:56.6312228+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:49:56.6334936+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T13:49:59.2797444Z [NET] kind=tcp_accept packet= conn_id=1064326168 uuid= ip=10.147.17.101 name="" detail=
+2026-03-29T13:49:59.29835Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1064326168 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=version=156 type=official mods=0
+2026-03-29T13:49:59.3144286Z [NET] kind=world_handshake_sent packet= conn_id=1064326168 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T13:49:59.570871Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1064326168 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" detail=
+2026-03-29T21:49:59.579907+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:49:59.5827058+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T21:50:02.417609+08:00 [BUILD] action=placed x=109 y=320 block_id=412 block=item-source team=1 rot=0
+2026-03-29T21:50:03.0842254+08:00 [BUILD] action=constructed x=109 y=320 block_id=412 block=item-source team=1 rot=0
+2026-03-29T21:50:06.6846306+08:00 [BUILD] action=placed x=145 y=324 block_id=258 block=钛传送带 team=1 rot=1
+2026-03-29T21:50:07.3512329+08:00 [BUILD] action=constructed x=145 y=324 block_id=258 block=钛传送带 team=1 rot=1
+2026-03-29T21:50:09.4676078+08:00 [BUILD] action=placed x=145 y=323 block_id=412 block=item-source team=1 rot=0
+2026-03-29T21:50:10.1342456+08:00 [BUILD] action=constructed x=145 y=323 block_id=412 block=item-source team=1 rot=0
+2026-03-29T13:53:09.8454531Z [NET] kind=tcp_accept packet= conn_id=1167561248 uuid= ip=117.25.101.67 name="" detail=
+2026-03-29T13:53:09.9466469Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=1167561248 uuid=mZQbc2Gv5noAAAAAcEMMqA== ip=117.25.101.67 name="满满触手的柠檬（红润的洞穴）" detail=version=156 type=official mods=0
+2026-03-29T13:53:09.9620233Z [NET] kind=world_handshake_sent packet= conn_id=1167561248 uuid=mZQbc2Gv5noAAAAAcEMMqA== ip=117.25.101.67 name="满满触手的柠檬（红润的洞穴）" detail=
+2026-03-29T13:53:10.418729Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=1167561248 uuid=mZQbc2Gv5noAAAAAcEMMqA== ip=117.25.101.67 name="满满触手的柠檬（红润的洞穴）" detail=
+2026-03-29T21:53:10.4294038+08:00 [RESPAWN] player="满满触手的柠檬（红润的洞穴）" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:53:10.4316617+08:00 [RESPAWN] player="满满触手的柠檬（红润的洞穴）" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T13:54:08.6770743Z [NET] kind=read_error packet= conn_id=1167561248 uuid=mZQbc2Gv5noAAAAAcEMMqA== ip=117.25.101.67 name="满满触手的柠檬（红润的洞穴）" detail=packet_id=72 framework_id=-1 err=read tcp 192.168.0.101:6567->117.25.101.67:4583: wsarecv: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+2026-03-29T13:54:08.6792348Z [NET] kind=tcp_closed packet= conn_id=1167561248 uuid=mZQbc2Gv5noAAAAAcEMMqA== ip=117.25.101.67 name="满满触手的柠檬（红润的洞穴）" detail=read tcp 192.168.0.101:6567->117.25.101.67:4583: wsarecv: An existing connection was forcibly closed by the remote host.
+2026-03-29T13:55:23.0488045Z [NET] kind=tcp_accept packet= conn_id=795026575 uuid= ip=223.104.150.87 name="" detail=
+2026-03-29T13:55:23.175705Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=795026575 uuid=5ua126h1mDYAAAAAWAii9g== ip=223.104.150.87 name="午安远" detail=version=156 type=official mods=0
+2026-03-29T13:55:23.1918436Z [NET] kind=world_handshake_sent packet= conn_id=795026575 uuid=5ua126h1mDYAAAAAWAii9g== ip=223.104.150.87 name="午安远" detail=
+2026-03-29T13:55:23.7040427Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=795026575 uuid=5ua126h1mDYAAAAAWAii9g== ip=223.104.150.87 name="午安远" detail=
+2026-03-29T21:55:23.7171035+08:00 [RESPAWN] player="午安远" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:55:23.7197511+08:00 [RESPAWN] player="午安远" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T13:55:37.0653448Z [NET] kind=tcp_closed packet= conn_id=795026575 uuid=5ua126h1mDYAAAAAWAii9g== ip=223.104.150.87 name="午安远" detail=EOF
+2026-03-29T13:56:34.8857385Z [NET] kind=tcp_accept packet= conn_id=2078058543 uuid= ip=120.206.173.232 name="" detail=
+2026-03-29T13:56:34.9824046Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=2078058543 uuid=VT5IjAs8Vu0AAAAA34/WtA== ip=120.206.173.232 name="AlnSheimer" detail=version=156 type=official mods=0
+2026-03-29T13:56:34.996885Z [NET] kind=world_handshake_sent packet= conn_id=2078058543 uuid=VT5IjAs8Vu0AAAAA34/WtA== ip=120.206.173.232 name="AlnSheimer" detail=
+2026-03-29T13:56:36.3224861Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=2078058543 uuid=VT5IjAs8Vu0AAAAA34/WtA== ip=120.206.173.232 name="AlnSheimer" detail=
+2026-03-29T21:56:36.3318743+08:00 [RESPAWN] player="AlnSheimer" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-29T21:56:36.3362238+08:00 [RESPAWN] player="AlnSheimer" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321
+2026-03-29T21:57:25.7741236+08:00 [CHAT] from="AlnSheimer" player_id=5 uuid=VT5IjAs8Vu0AAAAA34/WtA== ip=120.206.173.232:32971 msg="/vote map 23641"
+2026-03-29T13:57:30.4897013Z [NET] kind=tcp_closed packet= conn_id=2078058543 uuid=VT5IjAs8Vu0AAAAA34/WtA== ip=120.206.173.232 name="AlnSheimer" detail=EOF
+2026-03-29T21:57:33.3675626+08:00 [CHAT] from="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" player_id=1 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101:55269 msg="?"
