@@ -39,6 +39,34 @@ type Config struct {
 	TPS int
 }
 
+type itemLogisticsPerf struct {
+	Junctions time.Duration
+	Conveyor  time.Duration
+	Duct      time.Duration
+	Router    time.Duration
+	Bridge    time.Duration
+	Unloader  time.Duration
+	MassDrive time.Duration
+
+	JunctionCount  int
+	ConveyorCount  int
+	DuctCount      int
+	RouterCount    int
+	BridgeCount    int
+	UnloaderCount  int
+	MassDriveCount int
+}
+
+type entitySpatialIndex struct {
+	cellSize int
+	cells    map[int64][]int
+}
+
+type buildingSpatialIndex struct {
+	cellSize int
+	cells    map[int64][]int32
+}
+
 type World struct {
 	mu sync.RWMutex
 
@@ -54,6 +82,7 @@ type World struct {
 
 	tpsWindowStart time.Time
 	tpsWindowTicks int32
+	perfLogAt      time.Time
 
 	start time.Time
 
@@ -73,6 +102,7 @@ type World struct {
 	buildStates         map[int32]buildCombatState
 	pendingBuilds       map[int32]pendingBuildState
 	pendingBreaks       map[int32]pendingBreakState
+	builderStates       map[int32]builderRuntimeState
 	factoryStates       map[int32]factoryState
 	unitMountCDs        map[int32][]float32
 	unitTargets         map[int32]targetTrackState
@@ -109,6 +139,9 @@ type World struct {
 	coreStorageCapacity map[int32]int32
 	blockOccupancy      map[int32]int32
 	activeTilePositions []int32
+	teamBuildingTiles   map[TeamID][]int32
+	teamBuildingSpatial map[TeamID]*buildingSpatialIndex
+	turretTilePositions []int32
 	nextPlanOrder       uint64
 
 	unitProfilesByType     map[int16]weaponProfile
@@ -117,6 +150,14 @@ type World struct {
 	blockCostsByName       map[string][]ItemStack
 	blockBuildTimesByName  map[string]float32
 }
+
+const (
+	// Vars.buildingRange in Mindustry 156.
+	vanillaBuilderRange = 220.0
+	// Builder state comes from clientSnapshot and should stop driving progress
+	// quickly once snapshots stop arriving.
+	builderStateFreshness = 750 * time.Millisecond
+)
 
 type BuildPlanOp struct {
 	Breaking bool
@@ -147,6 +188,17 @@ type pendingBuildState struct {
 	Progress     float32
 	VisualPlaced bool
 	LastHP       float32
+}
+
+type builderRuntimeState struct {
+	Owner      int32
+	Team       TeamID
+	UnitID     int32
+	X          float32
+	Y          float32
+	Active     bool
+	BuildRange float32
+	UpdatedAt  time.Time
 }
 
 type pendingBreakState struct {
@@ -279,10 +331,12 @@ const (
 	EntityEventBuildPlaced         EntityEventKind = "build_placed"
 	EntityEventBuildConstructed    EntityEventKind = "build_constructed"
 	EntityEventBuildDeconstructing EntityEventKind = "build_deconstructing"
+	EntityEventBuildCancelled      EntityEventKind = "build_cancelled"
 	EntityEventBuildDestroyed      EntityEventKind = "build_destroyed"
 	EntityEventBuildHealth         EntityEventKind = "build_health"
 	EntityEventTeamItems           EntityEventKind = "team_items"
 	EntityEventBulletFired         EntityEventKind = "bullet_fired"
+	EntityEventEffect              EntityEventKind = "effect"
 )
 
 type EntityEvent struct {
@@ -290,6 +344,7 @@ type EntityEvent struct {
 	Entity RawEntity
 	// BuildPos is packed tile position (Point2), not linear tile index.
 	BuildPos    int32
+	BuildOwner  int32
 	BuildTeam   TeamID
 	BuildBlock  int16
 	BuildRot    int8
@@ -298,6 +353,10 @@ type EntityEvent struct {
 	ItemID      ItemID
 	ItemAmount  int32
 	Bullet      BulletEvent
+	EffectName  string
+	EffectX     float32
+	EffectY     float32
+	EffectRot   float32
 }
 
 func packTilePos(x, y int) int32 {
@@ -341,6 +400,10 @@ type simBullet struct {
 	FragmentSpread float32
 	FragmentSpeed  float32
 	FragmentLife   float32
+	ShootEffect    string
+	SmokeEffect    string
+	HitEffect      string
+	DespawnEffect  string
 	TargetAir      bool
 	TargetGround   bool
 	TargetPriority string
@@ -363,6 +426,10 @@ type weaponProfile struct {
 	FragmentSpread  float32
 	FragmentSpeed   float32
 	FragmentLife    float32
+	ShootEffect     string
+	SmokeEffect     string
+	HitEffect       string
+	DespawnEffect   string
 	PreferBuildings bool
 	TargetAir       bool
 	TargetGround    bool
@@ -383,6 +450,10 @@ type buildingWeaponProfile struct {
 	Pierce         int32
 	ChainCount     int32
 	ChainRange     float32
+	ShootEffect    string
+	SmokeEffect    string
+	HitEffect      string
+	DespawnEffect  string
 	HitBuildings   bool
 	TargetBuilds   bool
 	TargetAir      bool
@@ -467,6 +538,10 @@ type vanillaUnitProfile struct {
 	FragmentSpread  float32 `json:"fragment_spread"`
 	FragmentSpeed   float32 `json:"fragment_speed"`
 	FragmentLife    float32 `json:"fragment_life"`
+	ShootEffect     string  `json:"shoot_effect,omitempty"`
+	SmokeEffect     string  `json:"smoke_effect,omitempty"`
+	HitEffect       string  `json:"hit_effect,omitempty"`
+	DespawnEffect   string  `json:"despawn_effect,omitempty"`
 	PreferBuildings bool    `json:"prefer_buildings"`
 	TargetAir       bool    `json:"target_air"`
 	TargetGround    bool    `json:"target_ground"`
@@ -489,6 +564,10 @@ type vanillaTurretProfile struct {
 	Pierce         int32   `json:"pierce"`
 	ChainCount     int32   `json:"chain_count"`
 	ChainRange     float32 `json:"chain_range"`
+	ShootEffect    string  `json:"shoot_effect,omitempty"`
+	SmokeEffect    string  `json:"smoke_effect,omitempty"`
+	HitEffect      string  `json:"hit_effect,omitempty"`
+	DespawnEffect  string  `json:"despawn_effect,omitempty"`
 	HitBuildings   bool    `json:"hit_buildings"`
 	TargetBuilds   bool    `json:"target_builds"`
 	TargetAir      bool    `json:"target_air"`
@@ -645,6 +724,7 @@ func New(cfg Config) *World {
 		buildStates:            map[int32]buildCombatState{},
 		pendingBuilds:          map[int32]pendingBuildState{},
 		pendingBreaks:          map[int32]pendingBreakState{},
+		builderStates:          map[int32]builderRuntimeState{},
 		factoryStates:          map[int32]factoryState{},
 		unitMountCDs:           map[int32][]float32{},
 		unitTargets:            map[int32]targetTrackState{},
@@ -680,6 +760,9 @@ func New(cfg Config) *World {
 		teamPrimaryCore:        map[TeamID]int32{},
 		coreStorageCapacity:    map[int32]int32{},
 		blockOccupancy:         map[int32]int32{},
+		teamBuildingTiles:      map[TeamID][]int32{},
+		teamBuildingSpatial:    map[TeamID]*buildingSpatialIndex{},
+		turretTilePositions:    []int32{},
 		unitProfilesByType:     cloneUnitWeaponProfiles(weaponProfilesByType),
 		unitProfilesByName:     map[string]weaponProfile{},
 		buildingProfilesByName: cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
@@ -693,6 +776,7 @@ func New(cfg Config) *World {
 func (w *World) Step(delta time.Duration) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	stepStartedAt := time.Now()
 	w.tick++
 	now := time.Now()
 	if w.tpsWindowStart.IsZero() {
@@ -728,15 +812,98 @@ func (w *World) Step(delta time.Duration) {
 		}
 	}
 
+	pendingBuildStartedAt := time.Now()
 	w.stepPendingBuilds(delta)
+	pendingBuildDur := time.Since(pendingBuildStartedAt)
+
+	pendingBreakStartedAt := time.Now()
 	w.stepPendingBreaks(delta)
+	pendingBreakDur := time.Since(pendingBreakStartedAt)
+
+	factoryStartedAt := time.Now()
 	w.stepFactoryProduction(delta)
+	factoryDur := time.Since(factoryStartedAt)
+
+	sandboxStartedAt := time.Now()
 	w.stepSandboxSources(delta)
+	sandboxDur := time.Since(sandboxStartedAt)
+
+	liquidStartedAt := time.Now()
 	w.stepLiquidLogistics(delta)
-	w.stepItemLogistics(delta)
+	liquidDur := time.Since(liquidStartedAt)
+
+	itemStartedAt := time.Now()
+	itemPerf := w.stepItemLogistics(delta)
+	itemDur := time.Since(itemStartedAt)
+
+	payloadStartedAt := time.Now()
 	w.stepPayloadLogistics(delta)
+	payloadDur := time.Since(payloadStartedAt)
+
+	reactorStartedAt := time.Now()
 	w.stepNuclearReactors(delta)
-	w.stepEntities(delta)
+	reactorDur := time.Since(reactorStartedAt)
+
+	entitiesStartedAt := time.Now()
+	entityMovementDur, entityCombatDur, buildingCombatDur, bulletDur := w.stepEntities(delta)
+	entitiesDur := time.Since(entitiesStartedAt)
+
+	totalDur := time.Since(stepStartedAt)
+	if w.shouldLogPerfLocked(totalDur) {
+		entityCount := 0
+		if w.model != nil {
+			entityCount = len(w.model.Entities)
+		}
+		fmt.Printf("[perf] step=%s tps=%d/%d active=%d entities=%d bullets=%d pendingBuilds=%d pendingBreaks=%d phases{build=%s break=%s factory=%s sandbox=%s liquid=%s item=%s payload=%s reactor=%s entities=%s} itemPhases{junction=%s/%d conveyor=%s/%d duct=%s/%d router=%s/%d bridge=%s/%d unloader=%s/%d mass=%s/%d} entityPhases{move=%s combat=%s building=%s bullets=%s}\n",
+			totalDur.Round(time.Millisecond),
+			w.actualTps,
+			w.tps,
+			len(w.activeTilePositions),
+			entityCount,
+			len(w.bullets),
+			len(w.pendingBuilds),
+			len(w.pendingBreaks),
+			pendingBuildDur.Round(time.Millisecond),
+			pendingBreakDur.Round(time.Millisecond),
+			factoryDur.Round(time.Millisecond),
+			sandboxDur.Round(time.Millisecond),
+			liquidDur.Round(time.Millisecond),
+			itemDur.Round(time.Millisecond),
+			payloadDur.Round(time.Millisecond),
+			reactorDur.Round(time.Millisecond),
+			entitiesDur.Round(time.Millisecond),
+			itemPerf.Junctions.Round(time.Millisecond),
+			itemPerf.JunctionCount,
+			itemPerf.Conveyor.Round(time.Millisecond),
+			itemPerf.ConveyorCount,
+			itemPerf.Duct.Round(time.Millisecond),
+			itemPerf.DuctCount,
+			itemPerf.Router.Round(time.Millisecond),
+			itemPerf.RouterCount,
+			itemPerf.Bridge.Round(time.Millisecond),
+			itemPerf.BridgeCount,
+			itemPerf.Unloader.Round(time.Millisecond),
+			itemPerf.UnloaderCount,
+			itemPerf.MassDrive.Round(time.Millisecond),
+			itemPerf.MassDriveCount,
+			entityMovementDur.Round(time.Millisecond),
+			entityCombatDur.Round(time.Millisecond),
+			buildingCombatDur.Round(time.Millisecond),
+			bulletDur.Round(time.Millisecond),
+		)
+		w.perfLogAt = time.Now()
+	}
+}
+
+func (w *World) shouldLogPerfLocked(totalDur time.Duration) bool {
+	now := time.Now()
+	if !w.perfLogAt.IsZero() && now.Sub(w.perfLogAt) < 2*time.Second {
+		return false
+	}
+	if totalDur >= 50*time.Millisecond {
+		return true
+	}
+	return w.actualTps > 0 && w.actualTps <= int8(max(20, int(w.tps)/2))
 }
 
 func (w *World) ConfigureItemSource(pos int32, item ItemID) {
@@ -1431,6 +1598,8 @@ func (w *World) stepNuclearReactors(delta time.Duration) {
 		reactorCoolantPower       = float32(0.5)
 		reactorExplosionRadius    = 19
 		reactorExplosionDamage    = float32(1250 * 4)
+		reactorSmokeThreshold     = float32(0.3)
+		reactorSmokeRadius        = float32(12)
 	)
 	for _, pos := range w.activeTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
@@ -1464,6 +1633,21 @@ func (w *World) stepNuclearReactors(delta time.Duration) {
 			maxUsed := minf(cur.Amount, state.Heat/reactorCoolantPower)
 			if maxUsed > 0 && tile.Build.RemoveLiquid(cur.Liquid, maxUsed) {
 				state.Heat -= maxUsed * reactorCoolantPower
+			}
+		}
+
+		if state.Heat > reactorSmokeThreshold {
+			smoke := 1 + (state.Heat-reactorSmokeThreshold)/(1-reactorSmokeThreshold)
+			chance := clampf((smoke/20)*deltaFrames, 0, 1)
+			if rand.Float32() < chance {
+				cx := float32(tile.X*8 + 4)
+				cy := float32(tile.Y*8 + 4)
+				w.emitEffectLocked(
+					"reactorsmoke",
+					cx+(rand.Float32()*2-1)*reactorSmokeRadius,
+					cy+(rand.Float32()*2-1)*reactorSmokeRadius,
+					0,
+				)
 			}
 		}
 
@@ -1589,6 +1773,7 @@ func (w *World) explodeNuclearReactorLocked(x, y int, pos int32, team TeamID, ra
 		w.clearBuildingRuntimeLocked(pos)
 		return
 	}
+	w.emitEffectLocked("reactorexplosion", float32(x*8+4), float32(y*8+4), 0)
 	for ty := y - radius; ty <= y+radius; ty++ {
 		for tx := x - radius; tx <= x+radius; tx++ {
 			if !w.model.InBounds(tx, ty) {
@@ -2030,15 +2215,19 @@ func (w *World) routerStateLocked(pos int32, tile *Tile) *routerRuntimeState {
 	return st
 }
 
-func (w *World) stepItemLogistics(delta time.Duration) {
+func (w *World) stepItemLogistics(delta time.Duration) itemLogisticsPerf {
+	var perf itemLogisticsPerf
 	if w.model == nil {
-		return
+		return perf
 	}
 	dt := float32(delta.Seconds())
 	if dt <= 0 {
-		return
+		return perf
 	}
+	junctionStartedAt := time.Now()
 	w.stepJunctions(dt)
+	perf.Junctions = time.Since(junctionStartedAt)
+	perf.JunctionCount = len(w.junctionQueues)
 	for _, pos := range w.activeTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
@@ -2047,44 +2236,102 @@ func (w *World) stepItemLogistics(delta time.Duration) {
 		if tile.Build == nil || tile.Block == 0 {
 			continue
 		}
-		switch w.blockNameByID(int16(tile.Block)) {
+		name := w.blockNameByID(int16(tile.Block))
+		switch name {
 		case "conveyor":
+			startedAt := time.Now()
 			w.stepConveyorLocked(pos, tile, 0.03, dt)
+			perf.Conveyor += time.Since(startedAt)
+			perf.ConveyorCount++
 		case "titanium-conveyor", "armored-conveyor":
+			startedAt := time.Now()
 			w.stepConveyorLocked(pos, tile, 0.08, dt)
+			perf.Conveyor += time.Since(startedAt)
+			perf.ConveyorCount++
 		case "duct":
+			startedAt := time.Now()
 			w.stepDuctLocked(pos, tile, 4, false, dt)
+			perf.Duct += time.Since(startedAt)
+			perf.DuctCount++
 		case "armored-duct":
+			startedAt := time.Now()
 			w.stepDuctLocked(pos, tile, 4, true, dt)
+			perf.Duct += time.Since(startedAt)
+			perf.DuctCount++
 		case "duct-router":
+			startedAt := time.Now()
 			w.stepDuctRouterLocked(pos, tile, 4, false, dt)
+			perf.Router += time.Since(startedAt)
+			perf.RouterCount++
 		case "overflow-duct":
+			startedAt := time.Now()
 			w.stepOverflowDuctLocked(pos, tile, 4, false, dt)
+			perf.Router += time.Since(startedAt)
+			perf.RouterCount++
 		case "underflow-duct":
+			startedAt := time.Now()
 			w.stepOverflowDuctLocked(pos, tile, 4, true, dt)
+			perf.Router += time.Since(startedAt)
+			perf.RouterCount++
 		case "duct-bridge":
+			startedAt := time.Now()
 			w.stepDuctBridgeLocked(pos, tile, 4, dt)
+			perf.Bridge += time.Since(startedAt)
+			perf.BridgeCount++
 		case "duct-unloader":
+			startedAt := time.Now()
 			w.stepDirectionalUnloaderLocked(pos, tile, 4, dt)
+			perf.Unloader += time.Since(startedAt)
+			perf.UnloaderCount++
 		case "router", "distributor":
+			startedAt := time.Now()
 			w.stepRouterLocked(pos, tile, 8, dt)
+			perf.Router += time.Since(startedAt)
+			perf.RouterCount++
 		case "bridge-conveyor":
+			startedAt := time.Now()
 			w.stepBridgeConveyorLocked(pos, tile, 11, dt)
+			perf.Bridge += time.Since(startedAt)
+			perf.BridgeCount++
 		case "phase-conveyor":
+			startedAt := time.Now()
 			w.stepPhaseConveyorLocked(pos, tile, dt)
+			perf.Bridge += time.Since(startedAt)
+			perf.BridgeCount++
 		case "plastanium-conveyor":
+			startedAt := time.Now()
 			w.stepStackConveyorLocked(pos, tile, 4.0/60.0, 2, true, dt)
+			perf.Conveyor += time.Since(startedAt)
+			perf.ConveyorCount++
 		case "surge-conveyor":
+			startedAt := time.Now()
 			w.stepStackConveyorLocked(pos, tile, 5.0/60.0, 2, false, dt)
+			perf.Conveyor += time.Since(startedAt)
+			perf.ConveyorCount++
 		case "surge-router":
+			startedAt := time.Now()
 			w.stepStackRouterLocked(pos, tile, 6, dt)
+			perf.Router += time.Since(startedAt)
+			perf.RouterCount++
 		case "unloader":
+			startedAt := time.Now()
 			w.stepUnloaderLocked(pos, tile, dt)
+			perf.Unloader += time.Since(startedAt)
+			perf.UnloaderCount++
 		case "mass-driver":
+			startedAt := time.Now()
 			w.stepMassDriverLocked(pos, tile, dt)
+			perf.MassDrive += time.Since(startedAt)
+			perf.MassDriveCount++
 		}
 	}
+	massShotStartedAt := time.Now()
 	w.stepMassDriverShotsLocked(dt)
+	perf.MassDrive += time.Since(massShotStartedAt)
+	if len(w.massDriverShots) > 0 {
+		perf.MassDriveCount += len(w.massDriverShots)
+	}
+	return perf
 }
 
 func (w *World) payloadStateLocked(pos int32) *payloadRuntimeState {
@@ -2367,6 +2614,8 @@ func (w *World) stepPayloadLogistics(delta time.Duration) {
 			continue
 		}
 		switch w.blockNameByID(int16(tile.Block)) {
+		case "ground-factory", "air-factory", "naval-factory":
+			w.stepUnitFactoryPayloadLocked(pos, tile, frames)
 		case "payload-conveyor", "reinforced-payload-conveyor":
 			w.stepPayloadConveyorLocked(pos, tile, payloadMoveTimeByName(w.blockNameByID(int16(tile.Block))), frames)
 		case "payload-router", "reinforced-payload-router":
@@ -2382,6 +2631,114 @@ func (w *World) stepPayloadLogistics(delta time.Duration) {
 		}
 	}
 	w.stepPayloadDriverShotsLocked(frames)
+}
+
+func (w *World) stepUnitFactoryPayloadLocked(pos int32, tile *Tile, frames float32) {
+	st := w.payloadStateLocked(pos)
+	if st.Payload == nil {
+		st.Move = 0
+		w.syncPayloadTileLocked(tile, nil)
+		return
+	}
+	moveTime := w.unitBlockPayloadMoveFramesLocked(tile)
+	st.Move += frames
+	if st.Move < moveTime {
+		w.syncPayloadTileLocked(tile, st.Payload)
+		return
+	}
+	if targetPos, ok := w.payloadFrontTargetLocked(pos, tile, tile.Rotation); ok && w.payloadMoveOutLocked(pos, tile, targetPos) {
+		return
+	}
+	if w.dumpUnitPayloadFromTileLocked(pos, tile) {
+		return
+	}
+	st.Move = moveTime
+	w.syncPayloadTileLocked(tile, st.Payload)
+}
+
+func (w *World) unitBlockPayloadMoveFramesLocked(tile *Tile) float32 {
+	size := float32(w.blockSizeForTileLocked(tile))
+	// Match PayloadBlock payloadSpeed=0.7f closely enough for server-side timing.
+	frames := (size * 8 / 2) / 0.7
+	if frames < 1 {
+		return 1
+	}
+	return frames
+}
+
+func (w *World) dumpUnitPayloadFromTileLocked(pos int32, tile *Tile) bool {
+	if tile == nil || tile.Build == nil || w.model == nil {
+		return false
+	}
+	state := w.payloadStateLocked(pos)
+	payload := state.Payload
+	if payload == nil || payload.Kind != payloadKindUnit {
+		return false
+	}
+	typeID := payload.UnitTypeID
+	if typeID <= 0 {
+		if st, ok := w.factoryStates[pos]; ok && st.UnitType > 0 {
+			typeID = st.UnitType
+		}
+	}
+	if typeID <= 0 {
+		return false
+	}
+	rotation := float32(tile.Rotation) * 90
+	dist := float32(w.blockSizeForTileLocked(tile))*4 + 0.1
+	rad := float32(rotation * math.Pi / 180)
+	spawnX := float32(tile.X*8+4) + float32(math.Cos(float64(rad)))*dist
+	spawnY := float32(tile.Y*8+4) + float32(math.Sin(float64(rad)))*dist
+	if !w.canDumpProducedUnitLocked(tile.Build.Team, typeID, spawnX, spawnY, rotation) {
+		return false
+	}
+	ent := w.newProducedUnitEntityLocked(typeID, tile.Build.Team, spawnX, spawnY, rotation)
+	w.model.AddEntity(ent)
+	w.clearPayloadLocked(pos, tile)
+	return true
+}
+
+func (w *World) canDumpProducedUnitLocked(team TeamID, typeID int16, x, y, rotation float32) bool {
+	if team == 0 || typeID <= 0 {
+		return false
+	}
+	counts := map[TeamID]map[int16]int32{
+		team: map[int16]int32{typeID: w.teamUnitCountByTypeLocked(team, typeID)},
+	}
+	if !w.canCreateUnitLocked(team, typeID, w.rulesMgr.Get(), nil, counts) {
+		return false
+	}
+	dx := float32(math.Cos(float64(rotation * math.Pi / 180)))
+	dy := float32(math.Sin(float64(rotation * math.Pi / 180)))
+	tx := int((x + dx) / 8)
+	ty := int((y + dy) / 8)
+	if _, ok := w.buildingOccupyingCellLocked(tx, ty); ok {
+		return false
+	}
+	tmp := w.newProducedUnitEntityLocked(typeID, team, x, y, rotation)
+	if !isEntityFlying(tmp) {
+		selfRadius := tmp.HitRadius
+		if selfRadius <= 0 {
+			selfRadius = entityHitRadiusForType(typeID)
+		}
+		maxDist := selfRadius * 1.05
+		for _, other := range w.model.Entities {
+			if other.Health <= 0 || isEntityFlying(other) {
+				continue
+			}
+			otherRadius := other.HitRadius
+			if otherRadius <= 0 {
+				otherRadius = entityHitRadiusForType(other.TypeID)
+			}
+			limit := maxDist + otherRadius*0.5
+			dx := other.X - x
+			dy := other.Y - y
+			if dx*dx+dy*dy <= limit*limit {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (w *World) stepPayloadConveyorLocked(pos int32, tile *Tile, moveTime, frames float32) {
@@ -3032,9 +3389,7 @@ func (w *World) stepDirectionalUnloaderLocked(pos int32, tile *Tile, speed float
 		}
 		return
 	}
-	start := w.blockDumpIndex[pos]
-	for i := 0; i < 256; i++ {
-		item := ItemID((start + i) % 256)
+	for _, item := range w.rotatedInventoryItemIDsLocked(backPos, w.blockDumpIndex[pos]) {
 		if tryMove(item) {
 			w.blockDumpIndex[pos] = int(item) + 1
 			return
@@ -3345,6 +3700,15 @@ func (w *World) stepMassDriverLocked(pos int32, tile *Tile, dt float32) {
 		TravelFrames: travelFrames,
 		Transferred:  items,
 	})
+	srcX := float32(tile.X*8 + 4)
+	srcY := float32(tile.Y*8 + 4)
+	dstX := float32(targetTile.X*8 + 4)
+	dstY := float32(targetTile.Y*8 + 4)
+	angle := lookAt(srcX, srcY, dstX, dstY)
+	rad := float32(angle * math.Pi / 180)
+	const massDriverEffectOffset = float32(7)
+	w.emitEffectLocked("shootbig2", srcX+float32(math.Cos(float64(rad)))*massDriverEffectOffset, srcY+float32(math.Sin(float64(rad)))*massDriverEffectOffset, angle)
+	w.emitEffectLocked("shootbigsmoke2", srcX+float32(math.Cos(float64(rad)))*massDriverEffectOffset, srcY+float32(math.Sin(float64(rad)))*massDriverEffectOffset, angle)
 }
 
 func (w *World) stepMassDriverShotsLocked(dt float32) {
@@ -3382,6 +3746,7 @@ func (w *World) stepMassDriverShotsLocked(dt float32) {
 			total += amount
 		}
 		w.massDriverStateLocked(shot.ToPos).ReloadCounter = 1
+		w.emitEffectLocked("minebig", float32(targetTile.X*8+4), float32(targetTile.Y*8+4), 0)
 	}
 	w.massDriverShots = kept
 }
@@ -4138,18 +4503,96 @@ func (w *World) unloaderTargetItemLocked(pos int32, neighbors []int32) (ItemID, 
 		}
 		return 0, false
 	}
-	start := 0
-	if idx, ok := w.blockDumpIndex[pos]; ok {
-		start = idx
-	}
-	for i := 0; i < 256; i++ {
-		item := ItemID((start + i) % 256)
+	for _, item := range w.rotatedUnloaderCandidateItemIDsLocked(pos, neighbors) {
 		if _, _, found := w.unloaderTransferPairLocked(pos, neighbors, item); found {
 			w.blockDumpIndex[pos] = int(item)
 			return item, true
 		}
 	}
 	return 0, false
+}
+
+func (w *World) rotatedUnloaderCandidateItemIDsLocked(pos int32, neighbors []int32) []ItemID {
+	start := 0
+	if idx, ok := w.blockDumpIndex[pos]; ok {
+		start = idx
+	}
+	seen := make(map[ItemID]struct{}, 16)
+	items := make([]ItemID, 0, 16)
+	for _, otherPos := range neighbors {
+		if otherPos < 0 || int(otherPos) >= len(w.model.Tiles) || otherPos == pos {
+			continue
+		}
+		other := &w.model.Tiles[otherPos]
+		if other.Build == nil || other.Team != w.model.Tiles[pos].Team {
+			continue
+		}
+		w.appendInventoryItemIDsLocked(otherPos, &items, seen)
+	}
+	return rotateItemIDsByStart(items, start)
+}
+
+func (w *World) rotatedInventoryItemIDsLocked(pos int32, start int) []ItemID {
+	items := make([]ItemID, 0, 8)
+	seen := make(map[ItemID]struct{}, 8)
+	w.appendInventoryItemIDsLocked(pos, &items, seen)
+	return rotateItemIDsByStart(items, start)
+}
+
+func (w *World) appendInventoryItemIDsLocked(pos int32, dst *[]ItemID, seen map[ItemID]struct{}) {
+	if seen == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return
+	}
+	if _, _, build, ok := w.sharedCoreInventoryLocked(pos); ok {
+		for _, stack := range build.Items {
+			if stack.Amount <= 0 {
+				continue
+			}
+			if _, exists := seen[stack.Item]; exists {
+				continue
+			}
+			seen[stack.Item] = struct{}{}
+			*dst = append(*dst, stack.Item)
+		}
+		return
+	}
+	tile := &w.model.Tiles[pos]
+	if tile.Build == nil {
+		return
+	}
+	for _, stack := range tile.Build.Items {
+		if stack.Amount <= 0 {
+			continue
+		}
+		if _, exists := seen[stack.Item]; exists {
+			continue
+		}
+		seen[stack.Item] = struct{}{}
+		*dst = append(*dst, stack.Item)
+	}
+}
+
+func rotateItemIDsByStart(items []ItemID, start int) []ItemID {
+	if len(items) == 0 {
+		return nil
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i] < items[j]
+	})
+	if start <= 0 {
+		return items
+	}
+	split := 0
+	for split < len(items) && int(items[split]) < start {
+		split++
+	}
+	if split == 0 || split >= len(items) {
+		return items
+	}
+	out := make([]ItemID, 0, len(items))
+	out = append(out, items[split:]...)
+	out = append(out, items[:split]...)
+	return out
 }
 
 func (w *World) unloaderTransferPairLocked(pos int32, neighbors []int32, item ItemID) (int32, int32, bool) {
@@ -4686,7 +5129,24 @@ func blockFootprintRange(size int) (int, int) {
 	return -((size - 1) / 2), size / 2
 }
 
+var blockEdgeOffsetCache = newBlockEdgeOffsetCache()
+
+func newBlockEdgeOffsetCache() map[int][][2]int {
+	cache := make(map[int][][2]int, 6)
+	for size := 1; size <= 6; size++ {
+		cache[size] = computeBlockEdgeOffsets(size)
+	}
+	return cache
+}
+
 func blockEdgeOffsets(size int) [][2]int {
+	if cached, ok := blockEdgeOffsetCache[size]; ok {
+		return cached
+	}
+	return computeBlockEdgeOffsets(size)
+}
+
+func computeBlockEdgeOffsets(size int) [][2]int {
 	low, high := blockFootprintRange(size)
 	out := make([][2]int, 0, size*4)
 	for x := low; x <= high; x++ {
@@ -4720,6 +5180,9 @@ func blockEdgeOffsets(size int) [][2]int {
 func (w *World) rebuildBlockOccupancyLocked() {
 	w.blockOccupancy = map[int32]int32{}
 	w.activeTilePositions = w.activeTilePositions[:0]
+	w.teamBuildingTiles = map[TeamID][]int32{}
+	w.teamBuildingSpatial = map[TeamID]*buildingSpatialIndex{}
+	w.turretTilePositions = w.turretTilePositions[:0]
 	if w.model == nil {
 		return
 	}
@@ -4728,7 +5191,7 @@ func (w *World) rebuildBlockOccupancyLocked() {
 		if tile.Build == nil || tile.Block == 0 {
 			continue
 		}
-		w.activeTilePositions = append(w.activeTilePositions, int32(i))
+		w.indexActiveTileLocked(int32(i), tile)
 		w.setBuildingOccupancyLocked(int32(i), tile, true)
 	}
 	w.refreshCoreStorageLinksLocked()
@@ -4736,6 +5199,9 @@ func (w *World) rebuildBlockOccupancyLocked() {
 
 func (w *World) rebuildActiveTilesLocked() {
 	w.activeTilePositions = w.activeTilePositions[:0]
+	w.teamBuildingTiles = map[TeamID][]int32{}
+	w.teamBuildingSpatial = map[TeamID]*buildingSpatialIndex{}
+	w.turretTilePositions = w.turretTilePositions[:0]
 	if w.model == nil {
 		return
 	}
@@ -4744,7 +5210,30 @@ func (w *World) rebuildActiveTilesLocked() {
 		if tile.Build == nil || tile.Block == 0 {
 			continue
 		}
-		w.activeTilePositions = append(w.activeTilePositions, int32(i))
+		w.indexActiveTileLocked(int32(i), tile)
+	}
+}
+
+func (w *World) indexActiveTileLocked(pos int32, tile *Tile) {
+	if tile == nil || tile.Build == nil || tile.Block == 0 {
+		return
+	}
+	w.activeTilePositions = append(w.activeTilePositions, pos)
+	team := tile.Build.Team
+	if team == 0 {
+		team = tile.Team
+	}
+	if team != 0 {
+		w.teamBuildingTiles[team] = append(w.teamBuildingTiles[team], pos)
+		idx := w.teamBuildingSpatial[team]
+		if idx == nil {
+			idx = &buildingSpatialIndex{cellSize: 64, cells: map[int64][]int32{}}
+			w.teamBuildingSpatial[team] = idx
+		}
+		idx.insert(tile.X, tile.Y, pos)
+	}
+	if prof, ok := w.getBuildingWeaponProfile(int16(tile.Build.Block)); ok && prof.Damage > 0 && prof.Interval > 0 && prof.Range > 0 {
+		w.turretTilePositions = append(w.turretTilePositions, pos)
 	}
 }
 
@@ -4966,9 +5455,11 @@ func (w *World) SetModel(m *WorldModel) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.model = m
+	w.rulesMgr.Set(DefaultRules())
 	w.buildStates = map[int32]buildCombatState{}
 	w.pendingBuilds = map[int32]pendingBuildState{}
 	w.pendingBreaks = map[int32]pendingBreakState{}
+	w.builderStates = map[int32]builderRuntimeState{}
 	w.factoryStates = map[int32]factoryState{}
 	w.unitMountCDs = map[int32][]float32{}
 	w.unitTargets = map[int32]targetTrackState{}
@@ -5004,18 +5495,33 @@ func (w *World) SetModel(m *WorldModel) {
 	w.coreStorageCapacity = map[int32]int32{}
 	w.blockOccupancy = map[int32]int32{}
 	w.activeTilePositions = nil
+	w.teamBuildingTiles = map[TeamID][]int32{}
+	w.teamBuildingSpatial = map[TeamID]*buildingSpatialIndex{}
+	w.turretTilePositions = nil
 	w.nextPlanOrder = 0
 	w.blockNamesByID = nil
 	w.unitNamesByID = nil
 	w.unitTypeDefsByID = nil
 
-	// 从 tags 解析规则并应用
-	if m != nil && m.Tags != nil {
-		if rulesJSON, ok := m.Tags["rules"]; ok && rulesJSON != "" {
-			w.rulesMgr.FromJSON([]byte(rulesJSON))
-			// 应用倍率到现有单位和建筑
-			w.applyRulesToEntities()
+	// 每次切图都从默认规则重新解析，再按原版 Gamemode 预设与地图 rules 叠加，
+	// 避免旧地图规则残留，也避免漏掉 attack/sandbox/editor/pvp 的模式默认值。
+	if m != nil {
+		base := DefaultRules()
+		var overlay Rules
+		if m.Tags != nil {
+			if raw := strings.TrimSpace(m.Tags["rules"]); raw != "" {
+				_ = json.Unmarshal([]byte(raw), &overlay)
+			}
 		}
+		applyGamemodeDefaults(base, inferGamemodeFromModel(m, &overlay))
+		if m.Tags != nil {
+			if raw := strings.TrimSpace(m.Tags["rules"]); raw != "" {
+				_ = json.Unmarshal([]byte(raw), base)
+			}
+		}
+		w.rulesMgr.Set(base)
+		// 应用倍率到现有单位和建筑
+		w.applyRulesToEntities()
 	}
 
 	if m != nil && len(m.BlockNames) > 0 {
@@ -5039,6 +5545,86 @@ func (w *World) SetModel(m *WorldModel) {
 	w.rebuildBlockOccupancyLocked()
 	w.restoreTileConfigsLocked()
 	w.restorePayloadStatesLocked()
+}
+
+func (w *World) UpdateBuilderState(owner int32, team TeamID, unitID int32, x, y float32, active bool, buildRange float32) {
+	if w == nil || owner == 0 {
+		return
+	}
+	if buildRange <= 0 {
+		buildRange = vanillaBuilderRange
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.builderStates == nil {
+		w.builderStates = map[int32]builderRuntimeState{}
+	}
+	w.builderStates[owner] = builderRuntimeState{
+		Owner:      owner,
+		Team:       team,
+		UnitID:     unitID,
+		X:          x,
+		Y:          y,
+		Active:     active,
+		BuildRange: buildRange,
+		UpdatedAt:  time.Now(),
+	}
+}
+
+func (w *World) ClearBuilderState(owner int32) {
+	if w == nil || owner == 0 {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.builderStates, owner)
+}
+
+func (w *World) builderCanActLocked(owner int32, team TeamID, tile *Tile) bool {
+	if owner == 0 || tile == nil {
+		return true
+	}
+	state, ok := w.builderStates[owner]
+	if !ok {
+		return false
+	}
+	if !state.Active {
+		return false
+	}
+	if !state.UpdatedAt.IsZero() && time.Since(state.UpdatedAt) > builderStateFreshness {
+		return false
+	}
+	if state.Team != 0 && team != 0 && state.Team != team {
+		return false
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && (rules.Editor || rules.InfiniteResources || rules.teamInfiniteResources(team)) {
+		return true
+	}
+	rangeLimit := state.BuildRange
+	if rangeLimit <= 0 {
+		rangeLimit = vanillaBuilderRange
+	}
+	tx := float32(tile.X*8 + 4)
+	ty := float32(tile.Y*8 + 4)
+	dx := tx - state.X
+	dy := ty - state.Y
+	return dx*dx+dy*dy <= rangeLimit*rangeLimit
+}
+
+func (w *World) appendBuildCancelledLocked(pos int32, st pendingBuildState) {
+	if !st.VisualPlaced {
+		return
+	}
+	x := int(pos % int32(w.model.Width))
+	y := int(pos / int32(w.model.Width))
+	w.entityEvents = append(w.entityEvents, EntityEvent{
+		Kind:       EntityEventBuildCancelled,
+		BuildPos:   packTilePos(x, y),
+		BuildOwner: st.Owner,
+		BuildTeam:  st.Team,
+		BuildBlock: st.BlockID,
+	})
 }
 
 func (w *World) stepPendingBuilds(delta time.Duration) {
@@ -5103,10 +5689,14 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			delete(w.pendingBuilds, pos)
 			continue
 		}
+		if !w.builderCanActLocked(st.Owner, st.Team, tile) {
+			continue
+		}
 		if !st.VisualPlaced {
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:        EntityEventBuildPlaced,
 				BuildPos:    packTilePos(tile.X, tile.Y),
+				BuildOwner:  st.Owner,
 				BuildTeam:   st.Team,
 				BuildBlock:  st.BlockID,
 				BuildRot:    st.Rotation,
@@ -5126,7 +5716,7 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 		if hpNow < 1 {
 			hpNow = 1
 		}
-		if hpNow-st.LastHP >= 25 || st.Progress >= 1 {
+		if hpNow-st.LastHP >= 1 || st.Progress >= 1 {
 			st.LastHP = hpNow
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
@@ -5160,6 +5750,7 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 		}, EntityEvent{
 			Kind:        EntityEventBuildConstructed,
 			BuildPos:    packTilePos(tile.X, tile.Y),
+			BuildOwner:  st.Owner,
 			BuildTeam:   st.Team,
 			BuildBlock:  st.BlockID,
 			BuildRot:    st.Rotation,
@@ -5234,14 +5825,18 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 			delete(w.pendingBreaks, pos)
 			continue
 		}
+		if !w.builderCanActLocked(st.Owner, st.Team, tile) {
+			continue
+		}
 		breakDuration := w.buildDurationSecondsForTeam(st.BlockID, st.Team, rules)
-		if breakDuration < 0.6 {
-			breakDuration = 0.6
+		if breakDuration < float32(1.0/60.0) {
+			breakDuration = float32(1.0 / 60.0)
 		}
 		if !st.VisualStart {
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:       EntityEventBuildDeconstructing,
 				BuildPos:   packTilePos(tile.X, tile.Y),
+				BuildOwner: st.Owner,
 				BuildTeam:  st.Team,
 				BuildBlock: st.BlockID,
 				BuildRot:   st.Rotation,
@@ -5256,7 +5851,7 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 		if tile.Build != nil {
 			tile.Build.Health = hpNow
 		}
-		if st.LastHP-hpNow >= 25 || st.Progress >= 1 {
+		if st.LastHP-hpNow >= 1 || st.Progress >= 1 {
 			st.LastHP = hpNow
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
@@ -5285,6 +5880,7 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 		w.entityEvents = append(w.entityEvents, EntityEvent{
 			Kind:       EntityEventBuildDestroyed,
 			BuildPos:   packTilePos(tile.X, tile.Y),
+			BuildOwner: st.Owner,
 			BuildTeam:  teamOld,
 			BuildBlock: st.BlockID,
 		})
@@ -5325,6 +5921,20 @@ func (w *World) resolveUnitTypeIDLocked(want string) (int16, bool) {
 		if normalizeUnitName(name) == want {
 			return id, true
 		}
+	}
+	switch want {
+	case "alpha":
+		return 35, true
+	case "beta":
+		return 36, true
+	case "gamma":
+		return 37, true
+	case "evoke":
+		return 53, true
+	case "incite":
+		return 54, true
+	case "emanate":
+		return 55, true
 	}
 	return 0, false
 }
@@ -5503,6 +6113,18 @@ func mergeUnitProfile(p *weaponProfile, u vanillaUnitProfile) {
 	p.FragmentSpread = u.FragmentSpread
 	p.FragmentSpeed = u.FragmentSpeed
 	p.FragmentLife = u.FragmentLife
+	if strings.TrimSpace(u.ShootEffect) != "" {
+		p.ShootEffect = strings.TrimSpace(u.ShootEffect)
+	}
+	if strings.TrimSpace(u.SmokeEffect) != "" {
+		p.SmokeEffect = strings.TrimSpace(u.SmokeEffect)
+	}
+	if strings.TrimSpace(u.HitEffect) != "" {
+		p.HitEffect = strings.TrimSpace(u.HitEffect)
+	}
+	if strings.TrimSpace(u.DespawnEffect) != "" {
+		p.DespawnEffect = strings.TrimSpace(u.DespawnEffect)
+	}
 	p.PreferBuildings = u.PreferBuildings
 	p.TargetAir = u.TargetAir
 	p.TargetGround = u.TargetGround
@@ -5540,6 +6162,18 @@ func mergeBuildingProfile(p *buildingWeaponProfile, t vanillaTurretProfile) {
 	p.Pierce = t.Pierce
 	p.ChainCount = t.ChainCount
 	p.ChainRange = t.ChainRange
+	if strings.TrimSpace(t.ShootEffect) != "" {
+		p.ShootEffect = strings.TrimSpace(t.ShootEffect)
+	}
+	if strings.TrimSpace(t.SmokeEffect) != "" {
+		p.SmokeEffect = strings.TrimSpace(t.SmokeEffect)
+	}
+	if strings.TrimSpace(t.HitEffect) != "" {
+		p.HitEffect = strings.TrimSpace(t.HitEffect)
+	}
+	if strings.TrimSpace(t.DespawnEffect) != "" {
+		p.DespawnEffect = strings.TrimSpace(t.DespawnEffect)
+	}
 	p.HitBuildings = t.HitBuildings
 	p.TargetBuilds = t.TargetBuilds
 	p.TargetAir = t.TargetAir
@@ -5561,6 +6195,15 @@ func (w *World) Model() *WorldModel {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.model
+}
+
+func (w *World) CloneModel() *WorldModel {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.model == nil {
+		return nil
+	}
+	return w.model.Clone()
 }
 
 func (w *World) AddEntity(typeID int16, x, y float32, team TeamID) (RawEntity, error) {
@@ -5588,11 +6231,30 @@ func (w *World) AddEntity(typeID int16, x, y float32, team TeamID) (RawEntity, e
 	return w.model.AddEntity(ent), nil
 }
 
+func (w *World) ReserveEntityID() int32 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil {
+		return 0
+	}
+	if w.model.NextEntityID <= 0 {
+		w.model.NextEntityID = 1
+	}
+	id := w.model.NextEntityID
+	w.model.NextEntityID++
+	return id
+}
+
 func (w *World) AddEntityWithID(typeID int16, id int32, x, y float32, team TeamID) (RawEntity, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.model == nil {
 		return RawEntity{}, ErrOutOfBounds
+	}
+	for i := range w.model.Entities {
+		if w.model.Entities[i].ID == id {
+			return RawEntity{}, ErrEntityExists
+		}
 	}
 	ent := RawEntity{
 		TypeID:      typeID,
@@ -5649,7 +6311,7 @@ func (w *World) GetEntity(id int32) (RawEntity, bool) {
 func (w *World) TeamItems(team TeamID) map[ItemID]int32 {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if items := w.teamCoreItemsLocked(team); len(items) > 0 {
+	if items := w.teamCoreItemsLocked(team); items != nil {
 		return items
 	}
 	src := w.teamItems[team]
@@ -5669,7 +6331,9 @@ func (w *World) TeamCoreItemSnapshots() []TeamCoreItemSnapshot {
 	if w.model == nil {
 		return nil
 	}
+	rules := w.rulesMgr.Get()
 	teams := make(map[TeamID]map[ItemID]int32)
+	teamsWithSync := make(map[TeamID]struct{})
 	for _, pos := range w.activeTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
@@ -5681,6 +6345,7 @@ func (w *World) TeamCoreItemSnapshots() []TeamCoreItemSnapshot {
 		if !strings.HasPrefix(w.blockNameByID(int16(tile.Block)), "core-") {
 			continue
 		}
+		teamsWithSync[tile.Team] = struct{}{}
 		items, ok := teams[tile.Team]
 		if !ok {
 			items = make(map[ItemID]int32)
@@ -5691,6 +6356,45 @@ func (w *World) TeamCoreItemSnapshots() []TeamCoreItemSnapshot {
 				continue
 			}
 			items[stack.Item] += stack.Amount
+		}
+	}
+	for pos, corePos := range w.storageLinkedCore {
+		if pos < 0 || corePos < 0 || int(pos) >= len(w.model.Tiles) || int(corePos) >= len(w.model.Tiles) {
+			continue
+		}
+		coreTile := &w.model.Tiles[corePos]
+		storageTile := &w.model.Tiles[pos]
+		if coreTile.Team == 0 || coreTile.Team != storageTile.Team || storageTile.Build == nil || storageTile.Block == 0 {
+			continue
+		}
+		teamsWithSync[coreTile.Team] = struct{}{}
+	}
+	for team := range teamsWithSync {
+		items := teams[team]
+		hasRealItems := false
+		for _, amount := range items {
+			if amount > 0 {
+				hasRealItems = true
+				break
+			}
+		}
+		if hasRealItems {
+			continue
+		}
+		if rules == nil || !rules.teamFillItems(team) {
+			continue
+		}
+		if len(w.teamItems[team]) == 0 {
+			continue
+		}
+		if items == nil {
+			items = make(map[ItemID]int32)
+			teams[team] = items
+		}
+		for item, amount := range w.teamItems[team] {
+			if amount > 0 {
+				items[item] = amount
+			}
 		}
 	}
 	if len(teams) == 0 {
@@ -5786,13 +6490,54 @@ func unitBuildSpeedByName(name string) float32 {
 	}
 }
 
+func fallbackUnitNameByTypeID(typeID int16) string {
+	switch typeID {
+	case 35:
+		return "alpha"
+	case 36:
+		return "beta"
+	case 37:
+		return "gamma"
+	case 53:
+		return "evoke"
+	case 54:
+		return "incite"
+	case 55:
+		return "emanate"
+	default:
+		return ""
+	}
+}
+
+func fallbackCoreUnitTypeDef(name string) (vanilla.UnitTypeDef, bool) {
+	switch normalizeUnitName(name) {
+	case "alpha":
+		return vanilla.UnitTypeDef{Name: "alpha", Health: 150, Speed: 3, HitSize: 8, RotateSpeed: 15}, true
+	case "beta":
+		return vanilla.UnitTypeDef{Name: "beta", Health: 170, Speed: 3.3, HitSize: 9, RotateSpeed: 17}, true
+	case "gamma":
+		return vanilla.UnitTypeDef{Name: "gamma", Health: 220, Speed: 3.55, HitSize: 11, RotateSpeed: 19}, true
+	case "evoke":
+		return vanilla.UnitTypeDef{Name: "evoke", Health: 300, Armor: 1, Speed: 5.6, HitSize: 9, RotateSpeed: 15}, true
+	case "incite":
+		return vanilla.UnitTypeDef{Name: "incite", Health: 500, Armor: 2, Speed: 7, HitSize: 11, RotateSpeed: 17}, true
+	case "emanate":
+		return vanilla.UnitTypeDef{Name: "emanate", Health: 700, Armor: 3, Speed: 7.5, HitSize: 12, RotateSpeed: 19}, true
+	default:
+		return vanilla.UnitTypeDef{}, false
+	}
+}
+
 func (w *World) BuilderSpeedForUnitType(typeID int16) float32 {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if w.unitNamesByID == nil {
-		return 0.5
+	name := ""
+	if w.unitNamesByID != nil {
+		name = w.unitNamesByID[typeID]
 	}
-	name := w.unitNamesByID[typeID]
+	if strings.TrimSpace(name) == "" {
+		name = fallbackUnitNameByTypeID(typeID)
+	}
 	return unitBuildSpeedByName(name)
 }
 
@@ -5962,14 +6707,7 @@ func (w *World) ApplyBuildPlanSnapshotForOwner(owner int32, team TeamID, ops []B
 		}
 		delete(w.pendingBuilds, pos)
 		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		x := int(pos % int32(w.model.Width))
-		y := int(pos / int32(w.model.Width))
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:       EntityEventBuildDestroyed,
-			BuildPos:   packTilePos(x, y),
-			BuildTeam:  st.Team,
-			BuildBlock: st.BlockID,
-		})
+		w.appendBuildCancelledLocked(pos, st)
 		addChanged(pos)
 	}
 	for pos, st := range w.pendingBreaks {
@@ -6006,12 +6744,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			}
 			delete(w.pendingBuilds, pos)
 			w.refundBuildCost(st.Team, st.BlockID, 1.0)
-			w.entityEvents = append(w.entityEvents, EntityEvent{
-				Kind:       EntityEventBuildDestroyed,
-				BuildPos:   packTilePos(tile.X, tile.Y),
-				BuildTeam:  st.Team,
-				BuildBlock: st.BlockID,
-			})
+			w.appendBuildCancelledLocked(pos, st)
 			addChanged(pos)
 		}
 		delete(w.factoryStates, pos)
@@ -6028,7 +6761,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			return
 		}
 		if rules := w.rulesMgr.Get(); rules != nil && (rules.InstantBuild || rules.Editor) {
-			w.destroyTileLocked(tile, team)
+			w.destroyTileLocked(tile, team, owner)
 			delete(w.pendingBreaks, pos)
 			addChanged(pos)
 			return
@@ -6067,6 +6800,58 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 		}
 		w.refundBuildCost(pending.Team, pending.BlockID, 1.0)
 	}
+	if rules := w.rulesMgr.Get(); rules != nil &&
+		rules.DerelictRepair &&
+		team != 0 &&
+		tile.Team == 0 &&
+		tile.Block == BlockID(op.BlockID) {
+		tile.Team = team
+		tile.Rotation = op.Rotation
+		if tile.Build == nil {
+			tile.Build = &Building{
+				Block:     tile.Block,
+				Team:      team,
+				Rotation:  op.Rotation,
+				X:         tile.X,
+				Y:         tile.Y,
+				Health:    1000,
+				MaxHealth: 1000,
+			}
+		}
+		tile.Build.Team = team
+		tile.Build.Rotation = op.Rotation
+		if tile.Build.Health <= 0 {
+			tile.Build.Health = 1000
+		}
+		if tile.Build.MaxHealth <= 0 {
+			tile.Build.MaxHealth = 1000
+		}
+		w.setBuildingOccupancyLocked(pos, tile, true)
+		w.rebuildActiveTilesLocked()
+		w.refreshCoreStorageLinksLocked()
+		w.applyBuildingConfigLocked(pos, op.Config, true)
+		w.ensureTeamInventory(team)
+		w.entityEvents = append(w.entityEvents,
+			EntityEvent{
+				Kind:     EntityEventBuildHealth,
+				BuildPos: packTilePos(tile.X, tile.Y),
+				BuildHP:  tile.Build.Health,
+			},
+			EntityEvent{
+				Kind:        EntityEventBuildConstructed,
+				BuildPos:    packTilePos(tile.X, tile.Y),
+				BuildOwner:  owner,
+				BuildTeam:   team,
+				BuildBlock:  op.BlockID,
+				BuildRot:    op.Rotation,
+				BuildConfig: op.Config,
+			},
+		)
+		delete(w.pendingBreaks, pos)
+		delete(w.pendingBuilds, pos)
+		addChanged(pos)
+		return
+	}
 	if tile.Block == BlockID(op.BlockID) && tile.Team == team && tile.Rotation == op.Rotation && tile.Build != nil {
 		w.applyBuildingConfigLocked(pos, op.Config, true)
 		delete(w.pendingBreaks, pos)
@@ -6078,7 +6863,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 		return
 	}
 	if rules := w.rulesMgr.Get(); rules != nil && (rules.InstantBuild || rules.Editor) {
-		w.placeTileLocked(tile, team, op.BlockID, int8(op.Rotation), op.Config)
+		w.placeTileLocked(tile, team, op.BlockID, int8(op.Rotation), op.Config, owner)
 		delete(w.pendingBuilds, pos)
 		delete(w.pendingBreaks, pos)
 		addChanged(pos)
@@ -6097,7 +6882,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 	addChanged(pos)
 }
 
-func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation int8, config any) {
+func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation int8, config any, owner int32) {
 	if tile == nil {
 		return
 	}
@@ -6106,6 +6891,7 @@ func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation
 		EntityEvent{
 			Kind:        EntityEventBuildPlaced,
 			BuildPos:    pos,
+			BuildOwner:  owner,
 			BuildTeam:   team,
 			BuildBlock:  blockID,
 			BuildRot:    rotation,
@@ -6137,6 +6923,7 @@ func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind:        EntityEventBuildConstructed,
 		BuildPos:    pos,
+		BuildOwner:  owner,
 		BuildTeam:   team,
 		BuildBlock:  blockID,
 		BuildRot:    rotation,
@@ -6144,7 +6931,7 @@ func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation
 	})
 }
 
-func (w *World) destroyTileLocked(tile *Tile, fallbackTeam TeamID) {
+func (w *World) destroyTileLocked(tile *Tile, fallbackTeam TeamID, owner int32) {
 	if tile == nil || (tile.Block == 0 && tile.Build == nil) {
 		return
 	}
@@ -6169,6 +6956,7 @@ func (w *World) destroyTileLocked(tile *Tile, fallbackTeam TeamID) {
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind:       EntityEventBuildDestroyed,
 		BuildPos:   packTilePos(tile.X, tile.Y),
+		BuildOwner: owner,
 		BuildTeam:  teamOld,
 		BuildBlock: blockID,
 	})
@@ -6196,13 +6984,7 @@ func (w *World) CancelBuildPlansPackedForOwner(owner int32, positions []int32) {
 			}
 			delete(w.pendingBuilds, pos)
 			w.refundBuildCost(st.Team, st.BlockID, 1.0)
-			// Ensure client-side construct ghost is cleared when queue cancellation happens mid-build.
-			w.entityEvents = append(w.entityEvents, EntityEvent{
-				Kind:       EntityEventBuildDestroyed,
-				BuildPos:   packTilePos(x, y),
-				BuildTeam:  st.Team,
-				BuildBlock: st.BlockID,
-			})
+			w.appendBuildCancelledLocked(pos, st)
 		}
 		if st, ok := w.pendingBreaks[pos]; ok {
 			if owner != 0 && st.Owner != 0 && st.Owner != owner {
@@ -6239,13 +7021,7 @@ func (w *World) CancelBuildAtForOwner(owner int32, x, y int32, breaking bool) {
 		}
 		delete(w.pendingBuilds, pos)
 		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		// Ensure client-side construct ghost is cleared when queue cancellation happens mid-build.
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:       EntityEventBuildDestroyed,
-			BuildPos:   packTilePos(int(x), int(y)),
-			BuildTeam:  st.Team,
-			BuildBlock: st.BlockID,
-		})
+		w.appendBuildCancelledLocked(pos, st)
 	}
 }
 
@@ -6264,14 +7040,7 @@ func (w *World) CancelBuildPlansByTeam(team TeamID) {
 		}
 		delete(w.pendingBuilds, pos)
 		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		x := int(pos % int32(w.model.Width))
-		y := int(pos / int32(w.model.Width))
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:       EntityEventBuildDestroyed,
-			BuildPos:   packTilePos(x, y),
-			BuildTeam:  st.Team,
-			BuildBlock: st.BlockID,
-		})
+		w.appendBuildCancelledLocked(pos, st)
 	}
 	for pos, st := range w.pendingBreaks {
 		if st.Team == team {
@@ -6295,14 +7064,7 @@ func (w *World) CancelBuildPlansByOwner(owner int32) {
 		}
 		delete(w.pendingBuilds, pos)
 		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		x := int(pos % int32(w.model.Width))
-		y := int(pos / int32(w.model.Width))
-		w.entityEvents = append(w.entityEvents, EntityEvent{
-			Kind:       EntityEventBuildDestroyed,
-			BuildPos:   packTilePos(x, y),
-			BuildTeam:  st.Team,
-			BuildBlock: st.BlockID,
-		})
+		w.appendBuildCancelledLocked(pos, st)
 	}
 	for pos, st := range w.pendingBreaks {
 		if st.Owner == owner {
@@ -6345,6 +7107,24 @@ func (w *World) SetEntityPosition(id int32, x, y, rotation float32) (RawEntity, 
 		e.X = x
 		e.Y = y
 		e.Rotation = rotation
+		w.model.EntitiesRev++
+		return *e, true
+	}
+	return RawEntity{}, false
+}
+
+func (w *World) SetEntityPlayerController(id, playerID int32) (RawEntity, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.model == nil {
+		return RawEntity{}, false
+	}
+	for i := range w.model.Entities {
+		if w.model.Entities[i].ID != id {
+			continue
+		}
+		e := &w.model.Entities[i]
+		e.PlayerID = playerID
 		w.model.EntitiesRev++
 		return *e, true
 	}
@@ -6458,14 +7238,15 @@ func (w *World) DrainEntityEvents() []EntityEvent {
 	return out
 }
 
-func (w *World) stepEntities(delta time.Duration) {
+func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, buildingCombatDur, bulletDur time.Duration) {
 	if w.model == nil || len(w.model.Entities) == 0 {
-		return
+		return 0, 0, 0, 0
 	}
 	dt := float32(delta.Seconds())
 	if dt <= 0 {
-		return
+		return 0, 0, 0, 0
 	}
+	movementStartedAt := time.Now()
 	maxX := float32(w.model.Width * 8)
 	maxY := float32(w.model.Height * 8)
 	idToIndex := map[int32]int{}
@@ -6510,6 +7291,14 @@ func (w *World) stepEntities(delta time.Duration) {
 		}
 
 		out := e.X < 0 || e.Y < 0 || e.X > maxX || e.Y > maxY
+		if out && e.PlayerID != 0 {
+			e.X = clampf(e.X, 0, maxX)
+			e.Y = clampf(e.Y, 0, maxY)
+			e.VelX = 0
+			e.VelY = 0
+			out = false
+			w.model.EntitiesRev++
+		}
 		expired := e.LifeSec > 0 && e.AgeSec >= e.LifeSec
 		dead := e.Health <= 0
 		if !out && !expired && !dead {
@@ -6533,12 +7322,25 @@ func (w *World) stepEntities(delta time.Duration) {
 	for i := range w.model.Entities {
 		idToIndex[w.model.Entities[i].ID] = i
 	}
-	w.stepEntityCombat(dt, idToIndex)
-	w.stepBuildingCombat(dt)
+	spatial := buildEntitySpatialIndex(w.model.Entities)
+	teamSpatial := buildTeamEntitySpatialIndexes(w.model.Entities)
+	movementDur = time.Since(movementStartedAt)
+
+	combatStartedAt := time.Now()
+	w.stepEntityCombat(dt, idToIndex, spatial, teamSpatial)
+	combatDur = time.Since(combatStartedAt)
+
+	buildingCombatStartedAt := time.Now()
+	w.stepBuildingCombat(dt, idToIndex, spatial, teamSpatial)
+	buildingCombatDur = time.Since(buildingCombatStartedAt)
+
+	bulletStartedAt := time.Now()
 	w.stepBullets(dt, idToIndex)
+	bulletDur = time.Since(bulletStartedAt)
+	return movementDur, combatDur, buildingCombatDur, bulletDur
 }
 
-func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int) {
+func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex) {
 	ents := w.model.Entities
 	if len(ents) == 0 {
 		return
@@ -6549,7 +7351,7 @@ func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int) {
 			continue
 		}
 		if mounts, ok := unitMountProfilesByType[e.TypeID]; ok && len(mounts) > 0 {
-			w.stepEntityMountedCombat(e, mounts, dt, idToIndex)
+			w.stepEntityMountedCombat(e, mounts, dt, idToIndex, spatial, teamSpatial)
 			continue
 		}
 		if e.AttackCooldown > 0 {
@@ -6566,21 +7368,21 @@ func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int) {
 		}
 		track := w.unitTargets[e.ID]
 		retargetDelay := maxf(e.AttackInterval*0.45, 0.18)
-		if tid, ok := w.acquireTrackedEntityTarget(*e, ents, idToIndex, rangeLimit, e.AttackTargetAir, e.AttackTargetGround, e.AttackTargetPriority, &track, dt, retargetDelay); ok {
+		if tid, ok := w.acquireTrackedEntityTarget(*e, ents, idToIndex, spatial, teamSpatial, rangeLimit, e.AttackTargetAir, e.AttackTargetGround, e.AttackTargetPriority, &track, dt, retargetDelay); ok {
 			if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(ents) {
 				target := &ents[idx]
 				e.AttackCooldown = maxf(e.AttackInterval, 0.2)
 				e.Rotation = lookAt(e.X, e.Y, target.X, target.Y)
 				if e.AttackFireMode == "beam" {
+					w.emitAttackFireEffectsLocked(*e)
 					w.applyDamageToEntity(target, e.AttackDamage)
 					applySlow(target, e.AttackSlowSec, e.AttackSlowMul)
+					w.emitAttackHitEffectLocked(*e, target.X, target.Y)
 					w.applyBeamChain(*e, idx)
 				} else {
 					w.spawnBullet(*e, target.X, target.Y)
 				}
-				if !e.AttackPreferBuildings {
-					continue
-				}
+				continue
 			}
 		}
 		w.unitTargets[e.ID] = track
@@ -6590,7 +7392,9 @@ func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int) {
 				e.AttackCooldown = maxf(e.AttackInterval, 0.2)
 				e.Rotation = lookAt(e.X, e.Y, tx, ty)
 				if e.AttackFireMode == "beam" {
+					w.emitAttackFireEffectsLocked(*e)
 					_ = w.applyDamageToBuilding(pos, e.AttackDamage)
+					w.emitAttackHitEffectLocked(*e, tx, ty)
 				} else {
 					w.spawnBullet(*e, tx, ty)
 				}
@@ -6599,7 +7403,7 @@ func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int) {
 	}
 }
 
-func (w *World) stepEntityMountedCombat(e *RawEntity, mounts []unitWeaponMountProfile, dt float32, idToIndex map[int32]int) {
+func (w *World) stepEntityMountedCombat(e *RawEntity, mounts []unitWeaponMountProfile, dt float32, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex) {
 	if e == nil || len(mounts) == 0 {
 		return
 	}
@@ -6624,7 +7428,7 @@ func (w *World) stepEntityMountedCombat(e *RawEntity, mounts []unitWeaponMountPr
 	unitFired := false
 	track := w.unitTargets[e.ID]
 	retargetDelay := maxf(e.AttackInterval*0.45, 0.18)
-	if tid, ok := w.acquireTrackedEntityTarget(*e, w.model.Entities, idToIndex, rangeLimit, e.AttackTargetAir, e.AttackTargetGround, e.AttackTargetPriority, &track, dt, retargetDelay); ok {
+	if tid, ok := w.acquireTrackedEntityTarget(*e, w.model.Entities, idToIndex, spatial, teamSpatial, rangeLimit, e.AttackTargetAir, e.AttackTargetGround, e.AttackTargetPriority, &track, dt, retargetDelay); ok {
 		if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(w.model.Entities) {
 			target := &w.model.Entities[idx]
 			for mi := range mounts {
@@ -6638,7 +7442,7 @@ func (w *World) stepEntityMountedCombat(e *RawEntity, mounts []unitWeaponMountPr
 			}
 		}
 	}
-	if e.AttackBuildings && (!unitFired || e.AttackPreferBuildings) {
+	if e.AttackBuildings && !unitFired {
 		if pos, tx, ty, ok := w.findNearestEnemyBuilding(*e, rangeLimit); ok {
 			for mi := range mounts {
 				if cds[mi] > 0 {
@@ -6665,8 +7469,10 @@ func (w *World) fireEntityMountAtUnit(e *RawEntity, target *RawEntity, mount uni
 	src.Rotation = aimAngle
 	if src.AttackFireMode == "beam" {
 		scale := maxf(mount.DamageMul, 0.05)
+		w.emitAttackFireEffectsLocked(src)
 		w.applyDamageToEntity(target, src.AttackDamage*scale)
 		applySlow(target, src.AttackSlowSec*scale, src.AttackSlowMul)
+		w.emitAttackHitEffectLocked(src, target.X, target.Y)
 		w.applyBeamChain(src, targetIdx)
 		return true
 	}
@@ -6690,7 +7496,9 @@ func (w *World) fireEntityMountAtBuilding(e *RawEntity, pos int32, tx, ty float3
 	src.Rotation = lookAt(src.X, src.Y, tx, ty) + mount.AngleOffset
 	if src.AttackFireMode == "beam" {
 		scale := maxf(mount.DamageMul, 0.05)
+		w.emitAttackFireEffectsLocked(src)
 		_ = w.applyDamageToBuilding(pos, src.AttackDamage*scale)
+		w.emitAttackHitEffectLocked(src, tx, ty)
 		return true
 	}
 	if mount.AngleOffset != 0 {
@@ -6724,7 +7532,7 @@ func applyMountStats(src *RawEntity, mount unitWeaponMountProfile) {
 	}
 }
 
-func (w *World) stepBuildingCombat(dt float32) {
+func (w *World) stepBuildingCombat(dt float32, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex) {
 	if w.model == nil {
 		return
 	}
@@ -6732,11 +7540,7 @@ func (w *World) stepBuildingCombat(dt float32) {
 	if len(ents) == 0 {
 		return
 	}
-	idToIndex := make(map[int32]int, len(ents))
-	for i := range ents {
-		idToIndex[ents[i].ID] = i
-	}
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.turretTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -6792,6 +7596,10 @@ func (w *World) stepBuildingCombat(dt float32) {
 			AttackPierce:         prof.Pierce,
 			AttackChainCount:     prof.ChainCount,
 			AttackChainRange:     prof.ChainRange,
+			AttackShootEffect:    prof.ShootEffect,
+			AttackSmokeEffect:    prof.SmokeEffect,
+			AttackHitEffect:      prof.HitEffect,
+			AttackDespawnEffect:  prof.DespawnEffect,
 			AttackTargetAir:      prof.TargetAir,
 			AttackTargetGround:   prof.TargetGround,
 			AttackTargetPriority: prof.TargetPriority,
@@ -6799,7 +7607,7 @@ func (w *World) stepBuildingCombat(dt float32) {
 		}
 
 		allowShot := state.Cooldown <= 0 && (state.BurstRemain == 0 || state.BurstDelay <= 0)
-		if allowShot && w.tryFireBuildingShot(&src, &state, prof, ents, idToIndex) {
+		if allowShot && w.tryFireBuildingShot(&src, &state, prof, ents, idToIndex, spatial, teamSpatial) {
 			if state.BurstRemain > 0 {
 				state.BurstRemain--
 				state.BurstDelay = maxf(prof.BurstSpacing, 0.02)
@@ -6834,7 +7642,7 @@ func (w *World) regenBuildState(state buildCombatState, prof buildingWeaponProfi
 	return state
 }
 
-func (w *World) tryFireBuildingShot(src *RawEntity, state *buildCombatState, prof buildingWeaponProfile, ents []RawEntity, idToIndex map[int32]int) bool {
+func (w *World) tryFireBuildingShot(src *RawEntity, state *buildCombatState, prof buildingWeaponProfile, ents []RawEntity, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex) bool {
 	if src == nil || state == nil {
 		return false
 	}
@@ -6848,13 +7656,15 @@ func (w *World) tryFireBuildingShot(src *RawEntity, state *buildCombatState, pro
 	fired := false
 	track := targetTrackState{TargetID: state.TargetID, RetargetCD: state.RetargetCD}
 	retargetDelay := maxf(prof.Interval*0.55, 0.22)
-	if tid, ok := w.acquireTrackedEntityTarget(*src, ents, idToIndex, prof.Range, prof.TargetAir, prof.TargetGround, prof.TargetPriority, &track, 0, retargetDelay); ok {
+	if tid, ok := w.acquireTrackedEntityTarget(*src, ents, idToIndex, spatial, teamSpatial, prof.Range, prof.TargetAir, prof.TargetGround, prof.TargetPriority, &track, 0, retargetDelay); ok {
 		if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(ents) {
 			target := &ents[idx]
 			src.Rotation = lookAt(src.X, src.Y, target.X, target.Y)
 			if src.AttackFireMode == "beam" {
+				w.emitAttackFireEffectsLocked(*src)
 				w.applyDamageToEntity(target, src.AttackDamage)
 				applySlow(target, src.AttackSlowSec, src.AttackSlowMul)
+				w.emitAttackHitEffectLocked(*src, target.X, target.Y)
 				w.applyBeamChain(*src, idx)
 			} else {
 				w.spawnBullet(*src, target.X, target.Y)
@@ -6868,7 +7678,9 @@ func (w *World) tryFireBuildingShot(src *RawEntity, state *buildCombatState, pro
 		if bpos, tx, ty, ok := w.findNearestEnemyBuilding(*src, prof.Range); ok {
 			src.Rotation = lookAt(src.X, src.Y, tx, ty)
 			if src.AttackFireMode == "beam" {
+				w.emitAttackFireEffectsLocked(*src)
 				_ = w.applyDamageToBuilding(bpos, src.AttackDamage)
+				w.emitAttackHitEffectLocked(*src, tx, ty)
 			} else {
 				w.spawnBullet(*src, tx, ty)
 			}
@@ -6927,12 +7739,17 @@ func (w *World) spawnBullet(src RawEntity, tx, ty float32) {
 		FragmentSpread: src.AttackFragmentSpread,
 		FragmentSpeed:  src.AttackFragmentSpeed,
 		FragmentLife:   src.AttackFragmentLife,
+		ShootEffect:    src.AttackShootEffect,
+		SmokeEffect:    src.AttackSmokeEffect,
+		HitEffect:      src.AttackHitEffect,
+		DespawnEffect:  src.AttackDespawnEffect,
 		TargetAir:      src.AttackTargetAir,
 		TargetGround:   src.AttackTargetGround,
 		TargetPriority: src.AttackTargetPriority,
 	}
 	w.bulletNextID++
 	w.bullets = append(w.bullets, b)
+	w.emitAttackFireEffectsLocked(src)
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind: EntityEventBulletFired,
 		Bullet: BulletEvent{
@@ -6956,6 +7773,7 @@ func (w *World) stepBullets(dt float32, idToIndex map[int32]int) {
 		b.X += b.VX * dt
 		b.Y += b.VY * dt
 		hit := false
+		impacted := false
 		if b.HitUnits {
 			if tid, ok := findHitEnemyEntity(*b, w.model.Entities, b.Radius, b.TargetAir, b.TargetGround); ok {
 				if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(w.model.Entities) {
@@ -6964,6 +7782,7 @@ func (w *World) stepBullets(dt float32, idToIndex map[int32]int) {
 					w.applyChainDamage(*b, idx)
 					w.applySplashDamage(*b)
 					hit = true
+					impacted = true
 					if b.PierceRemain > 0 {
 						b.PierceRemain--
 						hit = false
@@ -6976,10 +7795,17 @@ func (w *World) stepBullets(dt float32, idToIndex map[int32]int) {
 				if w.applyDamageToBuilding(pos, b.Damage) {
 					w.applySplashDamage(*b)
 					hit = true
+					impacted = true
 				}
 			}
 		}
 		expired := b.AgeSec >= b.LifeSec
+		impactRot := float32(math.Atan2(float64(b.VY), float64(b.VX)) * 180 / math.Pi)
+		if impacted {
+			w.emitEffectLocked(b.HitEffect, b.X, b.Y, impactRot)
+		} else if expired {
+			w.emitEffectLocked(b.DespawnEffect, b.X, b.Y, impactRot)
+		}
 		if !hit && !expired {
 			i++
 			continue
@@ -7038,6 +7864,10 @@ func (w *World) spawnBulletFragments(parent simBullet) {
 			PierceRemain:   0,
 			ChainCount:     0,
 			ChainRange:     0,
+			ShootEffect:    "",
+			SmokeEffect:    "",
+			HitEffect:      parent.HitEffect,
+			DespawnEffect:  parent.DespawnEffect,
 			TargetAir:      parent.TargetAir,
 			TargetGround:   parent.TargetGround,
 			TargetPriority: parent.TargetPriority,
@@ -7196,6 +8026,9 @@ func (w *World) applyDamageToEntity(e *RawEntity, dmg float32) {
 	if e == nil || dmg <= 0 {
 		return
 	}
+	if e.PlayerID != 0 {
+		return
+	}
 	armor := e.Armor
 	if armor > 0 {
 		dmg -= armor
@@ -7235,16 +8068,26 @@ func (w *World) findNearestEnemyBuilding(src RawEntity, rangeLimit float32) (int
 	bestPos := int32(0)
 	var bestX, bestY float32
 	found := false
-	for _, pos := range w.activeTilePositions {
+	rangeTiles := int(math.Ceil(float64(rangeLimit/8))) + 1
+	centerX := int(src.X / 8)
+	centerY := int(src.Y / 8)
+	minX := max(0, centerX-rangeTiles)
+	maxX := min(w.model.Width-1, centerX+rangeTiles)
+	minY := max(0, centerY-rangeTiles)
+	maxY := min(w.model.Height-1, centerY+rangeTiles)
+	visitPos := func(pos int32) {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
-			continue
+			return
 		}
 		t := &w.model.Tiles[pos]
 		if t.Build == nil || t.Build.Health <= 0 {
-			continue
+			return
 		}
 		if t.Build.Team == src.Team {
-			continue
+			return
+		}
+		if t.X < minX || t.X > maxX || t.Y < minY || t.Y > maxY {
+			return
 		}
 		tx := float32(t.X*8 + 4)
 		ty := float32(t.Y*8 + 4)
@@ -7252,13 +8095,51 @@ func (w *World) findNearestEnemyBuilding(src RawEntity, rangeLimit float32) (int
 		dy := ty - src.Y
 		d2 := dx*dx + dy*dy
 		if d2 > bestDist2 {
-			continue
+			return
 		}
 		bestDist2 = d2
 		bestPos = pos
 		bestX = tx
 		bestY = ty
 		found = true
+	}
+	if len(w.teamBuildingSpatial) != 0 {
+		for team, idx := range w.teamBuildingSpatial {
+			if team == 0 || team == src.Team {
+				continue
+			}
+			if idx == nil {
+				continue
+			}
+			minCX := (minX * 8) / idx.cellSize
+			maxCX := (maxX * 8) / idx.cellSize
+			minCY := (minY * 8) / idx.cellSize
+			maxCY := (maxY * 8) / idx.cellSize
+			for cy := minCY; cy <= maxCY; cy++ {
+				for cx := minCX; cx <= maxCX; cx++ {
+					for _, pos := range idx.cells[packSpatialCell(cx, cy)] {
+						visitPos(pos)
+					}
+				}
+			}
+		}
+	} else if len(w.teamBuildingTiles) != 0 {
+		for team, positions := range w.teamBuildingTiles {
+			if team == 0 || team == src.Team {
+				continue
+			}
+			for _, pos := range positions {
+				visitPos(pos)
+			}
+		}
+	} else {
+		for y := minY; y <= maxY; y++ {
+			row := y * w.model.Width
+			for x := minX; x <= maxX; x++ {
+				pos := int32(row + x)
+				visitPos(pos)
+			}
+		}
 	}
 	if !found {
 		return 0, 0, 0, false
@@ -7308,6 +8189,8 @@ func (w *World) acquireTrackedEntityTarget(
 	src RawEntity,
 	ents []RawEntity,
 	idToIndex map[int32]int,
+	spatial *entitySpatialIndex,
+	teamSpatial map[TeamID]*entitySpatialIndex,
 	rangeLimit float32,
 	allowAir, allowGround bool,
 	priority string,
@@ -7316,7 +8199,7 @@ func (w *World) acquireTrackedEntityTarget(
 	retargetDelay float32,
 ) (int32, bool) {
 	if state == nil {
-		return findNearestEnemyEntity(src, ents, rangeLimit, allowAir, allowGround, priority)
+		return findNearestEnemyEntity(src, ents, spatial, teamSpatial, rangeLimit, allowAir, allowGround, priority)
 	}
 	if state.RetargetCD > 0 {
 		state.RetargetCD -= dt
@@ -7335,7 +8218,7 @@ func (w *World) acquireTrackedEntityTarget(
 	if state.RetargetCD > 0 {
 		return 0, false
 	}
-	tid, ok := findNearestEnemyEntity(src, ents, rangeLimit, allowAir, allowGround, priority)
+	tid, ok := findNearestEnemyEntity(src, ents, spatial, teamSpatial, rangeLimit, allowAir, allowGround, priority)
 	if !ok {
 		return 0, false
 	}
@@ -7359,8 +8242,15 @@ func findEntityIndexByID(ents []RawEntity, idToIndex map[int32]int, id int32) (i
 	return -1, false
 }
 
+func isPlayerControlledEntity(e RawEntity) bool {
+	return e.PlayerID != 0
+}
+
 func targetStillValid(src RawEntity, target RawEntity, rangeLimit float32, allowAir, allowGround bool) bool {
 	if target.Health <= 0 || target.Team == src.Team {
+		return false
+	}
+	if isPlayerControlledEntity(target) {
 		return false
 	}
 	if !canTargetEntity(target, allowAir, allowGround) {
@@ -7371,38 +8261,138 @@ func targetStillValid(src RawEntity, target RawEntity, rangeLimit float32, allow
 	return dx*dx+dy*dy <= rangeLimit*rangeLimit
 }
 
-func findNearestEnemyEntity(src RawEntity, ents []RawEntity, rangeLimit float32, allowAir, allowGround bool, priority string) (int32, bool) {
+func findNearestEnemyEntity(src RawEntity, ents []RawEntity, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex, rangeLimit float32, allowAir, allowGround bool, priority string) (int32, bool) {
 	if !allowAir && !allowGround {
 		allowAir, allowGround = true, true
 	}
 	bestDist2 := rangeLimit * rangeLimit
 	bestID := int32(0)
 	bestScore := float32(math.MaxFloat32)
-	for i := range ents {
+	bestPriority := float32(-99999)
+	visit := func(i int) {
+		if i < 0 || i >= len(ents) {
+			return
+		}
 		e := ents[i]
 		if e.ID == src.ID || e.Health <= 0 {
-			continue
+			return
+		}
+		if isPlayerControlledEntity(e) {
+			return
 		}
 		if e.Team == src.Team {
-			continue
+			return
 		}
 		if !canTargetEntity(e, allowAir, allowGround) {
-			continue
+			return
 		}
 		dx := e.X - src.X
 		dy := e.Y - src.Y
 		d2 := dx*dx + dy*dy
 		if d2 > bestDist2 {
-			continue
+			return
 		}
 		score := targetPriorityScore(src, e, d2, priority)
-		if score < bestScore {
+		targetPriority := entityTargetPriorityValue(e)
+		if bestID == 0 || targetPriority > bestPriority || (targetPriority >= bestPriority && score < bestScore) {
+			bestPriority = targetPriority
 			bestScore = score
 			bestDist2 = d2
 			bestID = e.ID
 		}
 	}
+	if len(teamSpatial) != 0 {
+		for team, idx := range teamSpatial {
+			if team == 0 || team == src.Team || idx == nil {
+				continue
+			}
+			idx.forEachInRange(src.X, src.Y, rangeLimit, visit)
+		}
+	} else if spatial != nil {
+		spatial.forEachInRange(src.X, src.Y, rangeLimit, visit)
+	} else {
+		for i := range ents {
+			visit(i)
+		}
+	}
 	return bestID, bestID != 0
+}
+
+func buildEntitySpatialIndex(ents []RawEntity) *entitySpatialIndex {
+	if len(ents) == 0 {
+		return nil
+	}
+	const entitySpatialCellSize = 64
+	idx := &entitySpatialIndex{
+		cellSize: entitySpatialCellSize,
+		cells:    make(map[int64][]int, len(ents)),
+	}
+	for i := range ents {
+		cx := int(math.Floor(float64(ents[i].X) / float64(entitySpatialCellSize)))
+		cy := int(math.Floor(float64(ents[i].Y) / float64(entitySpatialCellSize)))
+		key := packSpatialCell(cx, cy)
+		idx.cells[key] = append(idx.cells[key], i)
+	}
+	return idx
+}
+
+func buildTeamEntitySpatialIndexes(ents []RawEntity) map[TeamID]*entitySpatialIndex {
+	if len(ents) == 0 {
+		return nil
+	}
+	const entitySpatialCellSize = 64
+	out := make(map[TeamID]*entitySpatialIndex)
+	for i := range ents {
+		team := ents[i].Team
+		if team == 0 {
+			continue
+		}
+		idx := out[team]
+		if idx == nil {
+			idx = &entitySpatialIndex{
+				cellSize: entitySpatialCellSize,
+				cells:    map[int64][]int{},
+			}
+			out[team] = idx
+		}
+		cx := int(math.Floor(float64(ents[i].X) / float64(entitySpatialCellSize)))
+		cy := int(math.Floor(float64(ents[i].Y) / float64(entitySpatialCellSize)))
+		key := packSpatialCell(cx, cy)
+		idx.cells[key] = append(idx.cells[key], i)
+	}
+	return out
+}
+
+func (idx *buildingSpatialIndex) insert(tileX, tileY int, pos int32) {
+	if idx == nil || idx.cellSize <= 0 {
+		return
+	}
+	cx := tileX * 8 / idx.cellSize
+	cy := tileY * 8 / idx.cellSize
+	key := packSpatialCell(cx, cy)
+	idx.cells[key] = append(idx.cells[key], pos)
+}
+
+func packSpatialCell(x, y int) int64 {
+	return (int64(int32(x)) << 32) | int64(uint32(y))
+}
+
+func (idx *entitySpatialIndex) forEachInRange(x, y, radius float32, visit func(i int)) {
+	if idx == nil || idx.cellSize <= 0 || visit == nil {
+		return
+	}
+	cell := float32(idx.cellSize)
+	minCX := int(math.Floor(float64((x - radius) / cell)))
+	maxCX := int(math.Floor(float64((x + radius) / cell)))
+	minCY := int(math.Floor(float64((y - radius) / cell)))
+	maxCY := int(math.Floor(float64((y + radius) / cell)))
+	for cy := minCY; cy <= maxCY; cy++ {
+		for cx := minCX; cx <= maxCX; cx++ {
+			for _, i := range idx.cells[packSpatialCell(cx, cy)] {
+				visit(i)
+			}
+		}
+	}
 }
 
 func findHitEnemyEntity(b simBullet, ents []RawEntity, radius float32, allowAir, allowGround bool) (int32, bool) {
@@ -7414,6 +8404,9 @@ func findHitEnemyEntity(b simBullet, ents []RawEntity, radius float32, allowAir,
 	for i := range ents {
 		e := ents[i]
 		if e.Health <= 0 || e.Team == b.Team {
+			continue
+		}
+		if isPlayerControlledEntity(e) {
 			continue
 		}
 		if !canTargetEntity(e, allowAir, allowGround) {
@@ -7436,6 +8429,11 @@ func findHitEnemyEntity(b simBullet, ents []RawEntity, radius float32, allowAir,
 }
 
 func targetPriorityScore(src RawEntity, e RawEntity, d2 float32, priority string) float32 {
+	_ = src
+	base := d2 - e.HitRadius*e.HitRadius
+	if base < 0 {
+		base = 0
+	}
 	dist := float32(math.Sqrt(float64(d2)))
 	switch strings.ToLower(strings.TrimSpace(priority)) {
 	case "lowest_health", "lowhp":
@@ -7446,8 +8444,16 @@ func targetPriorityScore(src RawEntity, e RawEntity, d2 float32, priority string
 		threat := e.AttackDamage*1.8 + e.MaxHealth*0.15
 		return -threat + dist*0.30
 	default:
-		return d2
+		return base
 	}
+}
+
+func entityTargetPriorityValue(e RawEntity) float32 {
+	// Vanilla UnitType.targetPriority defaults to 0; missile-style units are below that.
+	if e.LifeSec > 0 && e.AgeSec >= 0 {
+		return -1
+	}
+	return 0
 }
 
 func canTargetEntity(e RawEntity, allowAir, allowGround bool) bool {
@@ -7559,6 +8565,10 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 			e.AttackFragmentSpread = p.FragmentSpread
 			e.AttackFragmentSpeed = p.FragmentSpeed
 			e.AttackFragmentLife = p.FragmentLife
+			e.AttackShootEffect = p.ShootEffect
+			e.AttackSmokeEffect = p.SmokeEffect
+			e.AttackHitEffect = p.HitEffect
+			e.AttackDespawnEffect = p.DespawnEffect
 			e.AttackPreferBuildings = p.PreferBuildings
 			e.AttackTargetAir = p.TargetAir
 			e.AttackTargetGround = p.TargetGround
@@ -7593,6 +8603,10 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 	e.AttackFragmentSpread = p.FragmentSpread
 	e.AttackFragmentSpeed = p.FragmentSpeed
 	e.AttackFragmentLife = p.FragmentLife
+	e.AttackShootEffect = p.ShootEffect
+	e.AttackSmokeEffect = p.SmokeEffect
+	e.AttackHitEffect = p.HitEffect
+	e.AttackDespawnEffect = p.DespawnEffect
 	e.AttackPreferBuildings = p.PreferBuildings
 	e.AttackTargetAir = p.TargetAir
 	e.AttackTargetGround = p.TargetGround
@@ -7604,23 +8618,67 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 }
 
 func (w *World) applyUnitTypeDef(e *RawEntity) {
-	if e == nil || w.unitTypeDefsByID == nil {
+	if e == nil {
 		return
 	}
-	if def, ok := w.unitTypeDefsByID[e.TypeID]; ok {
-		if def.Health > 0 {
-			e.Health = def.Health
-			e.MaxHealth = def.Health
+	def, ok := vanilla.UnitTypeDef{}, false
+	if w.unitTypeDefsByID != nil {
+		def, ok = w.unitTypeDefsByID[e.TypeID]
+	}
+	if name := strings.TrimSpace(w.unitNamesByID[e.TypeID]); name != "" {
+		if fallback, fallbackOK := fallbackCoreUnitTypeDef(name); fallbackOK {
+			if !ok || def.Health <= 0 {
+				def.Health = fallback.Health
+			}
+			if !ok || def.Armor <= 0 {
+				def.Armor = fallback.Armor
+			}
+			if !ok || def.HitSize <= 0 {
+				def.HitSize = fallback.HitSize
+			}
+			if !ok || def.Speed <= 0 {
+				def.Speed = fallback.Speed
+			}
+			if !ok || def.RotateSpeed <= 0 {
+				def.RotateSpeed = fallback.RotateSpeed
+			}
+			ok = true
 		}
-		if def.Armor > 0 {
-			e.Armor = def.Armor
+	} else if fallbackName := fallbackUnitNameByTypeID(e.TypeID); fallbackName != "" {
+		if fallback, fallbackOK := fallbackCoreUnitTypeDef(fallbackName); fallbackOK {
+			if !ok || def.Health <= 0 {
+				def.Health = fallback.Health
+			}
+			if !ok || def.Armor <= 0 {
+				def.Armor = fallback.Armor
+			}
+			if !ok || def.HitSize <= 0 {
+				def.HitSize = fallback.HitSize
+			}
+			if !ok || def.Speed <= 0 {
+				def.Speed = fallback.Speed
+			}
+			if !ok || def.RotateSpeed <= 0 {
+				def.RotateSpeed = fallback.RotateSpeed
+			}
+			ok = true
 		}
-		if def.HitSize > 0 {
-			e.HitRadius = def.HitSize
-		}
-		if def.Speed > 0 {
-			e.MoveSpeed = def.Speed
-		}
+	}
+	if !ok {
+		return
+	}
+	if def.Health > 0 {
+		e.Health = def.Health
+		e.MaxHealth = def.Health
+	}
+	if def.Armor > 0 {
+		e.Armor = def.Armor
+	}
+	if def.HitSize > 0 {
+		e.HitRadius = def.HitSize
+	}
+	if def.Speed > 0 {
+		e.MoveSpeed = def.Speed
 	}
 }
 
@@ -7642,6 +8700,10 @@ func (w *World) applyWeaponFromUnitTypeDef(e *RawEntity) bool {
 	e.AttackBulletSpeed = def.Weapon.BulletSpeed
 	e.AttackSplashRadius = def.Weapon.SplashRadius
 	e.AttackPierce = def.Weapon.Pierce
+	e.AttackShootEffect = ""
+	e.AttackSmokeEffect = ""
+	e.AttackHitEffect = ""
+	e.AttackDespawnEffect = ""
 	e.AttackTargetAir = def.Weapon.TargetAir
 	e.AttackTargetGround = def.Weapon.TargetGround
 	e.AttackBuildings = def.Weapon.TargetGround
@@ -7703,6 +8765,41 @@ func minf(a, b float32) float32 {
 
 func lookAt(x, y, tx, ty float32) float32 {
 	return float32(math.Atan2(float64(ty-y), float64(tx-x)) * 180 / math.Pi)
+}
+
+func normalizeEffectName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" || name == "none" {
+		return ""
+	}
+	return name
+}
+
+func (w *World) emitEffectLocked(name string, x, y, rotation float32) {
+	name = normalizeEffectName(name)
+	if w == nil || name == "" {
+		return
+	}
+	w.entityEvents = append(w.entityEvents, EntityEvent{
+		Kind:       EntityEventEffect,
+		EffectName: name,
+		EffectX:    x,
+		EffectY:    y,
+		EffectRot:  rotation,
+	})
+}
+
+func (w *World) emitAttackFireEffectsLocked(src RawEntity) {
+	w.emitEffectLocked(src.AttackShootEffect, src.X, src.Y, src.Rotation)
+	w.emitEffectLocked(src.AttackSmokeEffect, src.X, src.Y, src.Rotation)
+}
+
+func (w *World) emitAttackHitEffectLocked(src RawEntity, x, y float32) {
+	w.emitEffectLocked(src.AttackHitEffect, x, y, src.Rotation)
+}
+
+func (w *World) emitAttackDespawnEffectLocked(src RawEntity, x, y float32) {
+	w.emitEffectLocked(src.AttackDespawnEffect, x, y, src.Rotation)
 }
 
 func applyBehaviorMotion(e *RawEntity, ents []RawEntity, idToIndex map[int32]int) {
@@ -7820,10 +8917,8 @@ func (w *World) addEnemy(unitType int16, x, y float32) {
 		return
 	}
 
-	// 使用 RawEntity 结构创建敌人
 	unit := RawEntity{
 		TypeID:       unitType,
-		ID:           int32(len(w.model.Entities) + 1),
 		X:            x,
 		Y:            y,
 		Team:         2, // 敌人 team
@@ -7832,6 +8927,9 @@ func (w *World) addEnemy(unitType int16, x, y float32) {
 		AttackDamage: 10,
 		SlowMul:      1,
 		Rotation:     0,
+		RuntimeInit:  true,
 	}
-	w.model.Entities = append(w.model.Entities, unit)
+	w.applyUnitTypeDef(&unit)
+	w.applyWeaponProfile(&unit)
+	w.model.AddEntity(unit)
 }

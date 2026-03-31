@@ -1,0 +1,16 @@
+2026-03-31T06:20:52.4505748Z [NET] kind=tcp_accept packet= conn_id=1700697967 uuid= ip=10.147.17.101 name="" detail=
+2026-03-31T06:20:52.4637307Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-03-31T06:20:52.6486517Z [NET] kind=world_handshake_sent packet= conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=
+2026-03-31T06:20:53.0952863Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=
+2026-03-31T14:20:53.4718832+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-nucleus core_x=239 core_y=343 spawn_x=239 spawn_y=343
+2026-03-31T14:20:53.64939+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=239 spawn_y=343
+2026-03-31T14:20:58.2057825+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-nucleus core_x=239 core_y=343 spawn_x=239 spawn_y=343
+2026-03-31T14:20:58.5244262+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=239 spawn_y=343
+2026-03-31T06:20:59.4620472Z [NET] kind=tcp_closed packet= conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=EOF
+2026-03-31T06:21:01.4834612Z [NET] kind=tcp_accept packet= conn_id=1577138965 uuid= ip=10.147.17.101 name="" detail=
+2026-03-31T06:21:01.4978801Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-03-31T06:21:01.5552831Z [NET] kind=world_handshake_sent packet= conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=
+2026-03-31T06:21:01.9677985Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=
+2026-03-31T14:21:02.2058742+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-nucleus core_x=239 core_y=343 spawn_x=239 spawn_y=343
+2026-03-31T14:21:02.7252673+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=239 spawn_y=343
+2026-03-31T06:21:05.9130775Z [NET] kind=tcp_closed packet= conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=EOF

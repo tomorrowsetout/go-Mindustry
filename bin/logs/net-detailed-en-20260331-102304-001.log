@@ -1,0 +1,66 @@
+2026-03-31T02:23:08.8064128Z [NET] kind=tcp_accept packet= conn_id=2052476500 uuid= ip=10.147.17.101 name="" detail=
+2026-03-31T02:23:08.8148387Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=87402 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-03-31T02:23:08.8678872Z [NET] kind=world_handshake_sent packet= conn_id=87402 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]87402[]" detail=
+2026-03-31T02:23:09.8041126Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=87402 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]87402[]" detail=
+2026-03-31T10:23:09.8500685+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=371 spawn_y=164 tile=core-shard
+2026-03-31T10:23:09.8617896+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=35 build_speed=0.50 spawn_x=371 spawn_y=164
+2026-03-31T10:23:12.0687865+08:00 [BUILD] action=placed x=380 y=164 block_id=257 block=传送带 team=1 rot=1
+2026-03-31T10:23:14.0191173+08:00 [BUILD] action=destroyed x=380 y=175 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0191173+08:00 [BUILD] action=destroyed x=380 y=164 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0196241+08:00 [BUILD] action=destroyed x=380 y=165 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0196241+08:00 [BUILD] action=destroyed x=380 y=167 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0196241+08:00 [BUILD] action=destroyed x=380 y=168 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0196241+08:00 [BUILD] action=destroyed x=380 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0196241+08:00 [BUILD] action=destroyed x=380 y=176 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0196241+08:00 [BUILD] action=destroyed x=380 y=179 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0201731+08:00 [BUILD] action=destroyed x=380 y=172 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0201731+08:00 [BUILD] action=destroyed x=380 y=173 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0201731+08:00 [BUILD] action=destroyed x=380 y=174 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0201731+08:00 [BUILD] action=destroyed x=380 y=166 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0206912+08:00 [BUILD] action=destroyed x=380 y=169 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0212331+08:00 [BUILD] action=destroyed x=380 y=170 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0212331+08:00 [BUILD] action=destroyed x=380 y=178 block_id=257 block=传送带 team=1
+2026-03-31T10:23:14.0212331+08:00 [BUILD] action=destroyed x=380 y=177 block_id=257 block=传送带 team=1
+2026-03-31T10:23:16.1020642+08:00 [BUILD] action=placed x=373 y=171 block_id=257 block=传送带 team=1 rot=2
+2026-03-31T10:23:18.1024637+08:00 [BUILD] action=constructed x=373 y=171 block_id=257 block=传送带 team=1 rot=2
+2026-03-31T10:23:18.1189616+08:00 [BUILD] action=placed x=372 y=171 block_id=257 block=传送带 team=1 rot=2
+2026-03-31T10:23:19.2854527+08:00 [BUILD] action=destroyed x=360 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2854527+08:00 [BUILD] action=destroyed x=357 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2854527+08:00 [BUILD] action=destroyed x=356 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2859601+08:00 [BUILD] action=destroyed x=372 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2859601+08:00 [BUILD] action=destroyed x=370 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2859601+08:00 [BUILD] action=destroyed x=368 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2859601+08:00 [BUILD] action=destroyed x=366 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2859601+08:00 [BUILD] action=destroyed x=362 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2865033+08:00 [BUILD] action=destroyed x=359 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2865033+08:00 [BUILD] action=destroyed x=371 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2865033+08:00 [BUILD] action=destroyed x=367 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2865033+08:00 [BUILD] action=destroyed x=364 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.2875668+08:00 [BUILD] action=destroyed x=363 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.28764+08:00 [BUILD] action=destroyed x=358 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.28764+08:00 [BUILD] action=destroyed x=365 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.28764+08:00 [BUILD] action=destroyed x=361 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:19.28764+08:00 [BUILD] action=destroyed x=369 y=171 block_id=257 block=传送带 team=1
+2026-03-31T10:23:29.3829634+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=185 spawn_y=71 tile=core-foundation
+2026-03-31T10:23:29.3905901+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=185 spawn_y=71
+2026-03-31T10:23:48.3143897+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=185 spawn_y=71 tile=core-foundation
+2026-03-31T10:23:48.3216094+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=185 spawn_y=71
+2026-03-31T10:23:51.4095306+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=185 spawn_y=71 tile=core-foundation
+2026-03-31T10:23:51.417305+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=185 spawn_y=71
+2026-03-31T10:23:54.1598353+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=185 spawn_y=71 tile=core-foundation
+2026-03-31T10:23:54.1675901+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=185 spawn_y=71
+2026-03-31T10:23:56.9091142+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=185 spawn_y=71 tile=core-foundation
+2026-03-31T10:23:56.9162517+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=185 spawn_y=71
+2026-03-31T10:23:59.661528+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 no_core=1 spawn_x=185 spawn_y=71 tile=core-foundation
+2026-03-31T10:23:59.6692054+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=185 spawn_y=71
+2026-03-31T10:24:55.1021044+08:00 [BUILD] action=deconstructing x=180 y=112 block_id=326 block=气动钻头 team=1
+2026-03-31T10:24:56.435798+08:00 [BUILD] action=destroyed x=180 y=112 block_id=326 block=气动钻头 team=1
+2026-03-31T10:24:56.4520619+08:00 [BUILD] action=deconstructing x=179 y=118 block_id=230 block=废墙 team=1
+2026-03-31T10:24:57.7856263+08:00 [BUILD] action=destroyed x=179 y=118 block_id=230 block=废墙 team=1
+2026-03-31T10:24:57.8021601+08:00 [BUILD] action=deconstructing x=179 y=110 block_id=258 block=钛传送带 team=1
+2026-03-31T10:25:02.2356654+08:00 [BUILD] action=deconstructing x=182 y=107 block_id=363 block=气旋 team=1
+2026-03-31T10:25:03.5690577+08:00 [BUILD] action=destroyed x=182 y=107 block_id=363 block=气旋 team=1
+2026-03-31T10:25:05.3522014+08:00 [BUILD] action=deconstructing x=186 y=103 block_id=231 block=大型废墙 team=1
+2026-03-31T10:25:06.6856509+08:00 [BUILD] action=destroyed x=186 y=103 block_id=231 block=大型废墙 team=1
+2026-03-31T10:25:07.9188094+08:00 [BUILD] action=deconstructing x=174 y=106 block_id=354 block=蓝瑟 team=1
+2026-03-31T10:25:09.2520578+08:00 [BUILD] action=destroyed x=174 y=106 block_id=354 block=蓝瑟 team=1

@@ -26,10 +26,11 @@ type PublicConnUUIDFile struct {
 }
 
 type PublicConnUUIDStore struct {
-	mu   sync.Mutex
-	path string
-	rng  *rand.Rand
-	data PublicConnUUIDFile
+	mu         sync.Mutex
+	path       string
+	autoCreate bool
+	rng        *rand.Rand
+	data       PublicConnUUIDFile
 }
 
 type legacyPublicConnUUIDRecord struct {
@@ -49,17 +50,20 @@ type legacyPublicConnUUIDFile struct {
 	ByUUID    map[string]*legacyPublicConnUUIDRecord `json:"by_uuid"`
 }
 
-func NewPublicConnUUIDStore(path string) (*PublicConnUUIDStore, error) {
+func NewPublicConnUUIDStore(path string, autoCreate bool) (*PublicConnUUIDStore, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, fmt.Errorf("empty conn_uuid path")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+	if autoCreate {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
 	}
 	s := &PublicConnUUIDStore{
-		path: path,
-		rng:  rand.New(rand.NewSource(time.Now().UnixNano())),
+		path:       path,
+		autoCreate: autoCreate,
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 		data: PublicConnUUIDFile{
 			Version: 1,
 			ByUUID:  map[string]*PublicConnUUIDRecord{},
@@ -90,14 +94,23 @@ func (s *PublicConnUUIDStore) Ensure(uuid, name, ip string) (string, error) {
 		s.data.ByUUID = map[string]*PublicConnUUIDRecord{}
 	}
 	rec := s.data.ByUUID[uuid]
+	if rec == nil && !s.autoCreate {
+		return "", nil
+	}
 	if rec == nil {
 		rec = &PublicConnUUIDRecord{
 			FirstSeen: now,
 		}
 		s.data.ByUUID[uuid] = rec
 	}
+	if strings.TrimSpace(rec.ConnUUID) == "" && !s.autoCreate {
+		return "", nil
+	}
 	if strings.TrimSpace(rec.ConnUUID) == "" {
 		rec.ConnUUID = s.generateConnUUIDLocked()
+	}
+	if !s.autoCreate {
+		return strings.TrimSpace(rec.ConnUUID), nil
 	}
 	if rec.FirstSeen == "" {
 		rec.FirstSeen = now
@@ -148,6 +161,9 @@ func (s *PublicConnUUIDStore) ObserveDisconnect(uuid, name, ip string) error {
 	if s.data.ByUUID == nil {
 		s.data.ByUUID = map[string]*PublicConnUUIDRecord{}
 	}
+	if !s.autoCreate {
+		return nil
+	}
 	rec := s.data.ByUUID[uuid]
 	if rec == nil {
 		rec = &PublicConnUUIDRecord{
@@ -171,6 +187,9 @@ func (s *PublicConnUUIDStore) load() error {
 	raw, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if !s.autoCreate {
+				return nil
+			}
 			return s.flushLocked()
 		}
 		return err
@@ -213,6 +232,9 @@ func (s *PublicConnUUIDStore) load() error {
 }
 
 func (s *PublicConnUUIDStore) flushLocked() error {
+	if !s.autoCreate {
+		return nil
+	}
 	if s.data.ByUUID == nil {
 		s.data.ByUUID = map[string]*PublicConnUUIDRecord{}
 	}
@@ -231,17 +253,29 @@ func (s *PublicConnUUIDStore) flushLocked() error {
 
 func (s *PublicConnUUIDStore) generateConnUUIDLocked() string {
 	used := make(map[string]struct{}, len(s.data.ByUUID))
+	usedByDigits := make(map[int]int64, 7)
 	for _, rec := range s.data.ByUUID {
 		id := strings.TrimSpace(rec.ConnUUID)
 		if id != "" {
+			if _, ok := used[id]; ok {
+				continue
+			}
 			used[id] = struct{}{}
+			digits := len(id)
+			if digits >= 5 && digits <= 11 {
+				usedByDigits[digits]++
+			}
 		}
 	}
-	for digits := 7; digits <= 11; digits++ {
+	for digits := 5; digits <= 11; digits++ {
 		min := pow10(digits - 1)
-		max := pow10(digits) - 1
-		for attempt := 0; attempt < 64; attempt++ {
-			n := s.rng.Int63n(max-min+1) + min
+		span := 9 * min
+		if usedByDigits[digits] >= span {
+			continue
+		}
+		start := s.rng.Int63n(span)
+		for offset := int64(0); offset < span; offset++ {
+			n := min + ((start + offset) % span)
 			id := fmt.Sprintf("%d", n)
 			if _, exists := used[id]; exists {
 				continue

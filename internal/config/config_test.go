@@ -199,3 +199,27 @@ build_finish_logs_enabled = 0
 		t.Fatalf("expected sundries build finish toggle to load without main config")
 	}
 }
+
+func TestLoadConfigINI_PreservesMindustryColorTags(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+	payload := `
+[server]
+name = [#F285D1]镜[#F285E3]像[#E59AFF]物[#CC99FF]语
+desc = [accent]欢迎[] [#87ceeb]测试[]
+`
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Runtime.ServerName != "[#F285D1]镜[#F285E3]像[#E59AFF]物[#CC99FF]语" {
+		t.Fatalf("server name color tags lost: %q", cfg.Runtime.ServerName)
+	}
+	if cfg.Runtime.ServerDesc != "[accent]欢迎[] [#87ceeb]测试[]" {
+		t.Fatalf("server desc color tags lost: %q", cfg.Runtime.ServerDesc)
+	}
+}

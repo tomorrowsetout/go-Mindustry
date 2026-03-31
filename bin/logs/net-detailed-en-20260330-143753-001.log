@@ -1,0 +1,6 @@
+2026-03-30T06:39:35.619381Z [NET] kind=tcp_accept packet= conn_id=644483772 uuid= ip=10.147.17.101 name="" detail=
+2026-03-30T06:39:35.6335824Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-03-30T06:39:35.6554218Z [NET] kind=world_handshake_sent packet= conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=
+2026-03-30T06:39:35.9152598Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=17594 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=10.147.17.101 name="[scarlet]（未绑定）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]17594[]" detail=
+2026-03-30T14:39:35.9246956+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-acropolis core_x=105 core_y=321 spawn_x=105 spawn_y=321
+2026-03-30T14:39:35.927565+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=105 spawn_y=321

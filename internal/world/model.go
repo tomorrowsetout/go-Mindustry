@@ -6,6 +6,7 @@ import (
 )
 
 var ErrOutOfBounds = errors.New("world: out of bounds")
+var ErrEntityExists = errors.New("world: entity id already exists")
 
 type TeamID byte
 
@@ -191,6 +192,7 @@ func (u *Unit) DistanceTo(other *Unit) float32 {
 type RawEntity struct {
 	TypeID      int16
 	ID          int32
+	PlayerID    int32
 	X           float32
 	Y           float32
 	Rotation    float32
@@ -224,6 +226,10 @@ type RawEntity struct {
 	AttackFragmentSpread  float32
 	AttackFragmentSpeed   float32
 	AttackFragmentLife    float32
+	AttackShootEffect     string
+	AttackSmokeEffect     string
+	AttackHitEffect       string
+	AttackDespawnEffect   string
 	AttackTargetAir       bool
 	AttackTargetGround    bool
 	AttackTargetPriority  string
@@ -266,6 +272,71 @@ type WorldModel struct {
 	UnitNames   map[int16]string
 
 	EntitiesRev byte
+}
+
+func (w *WorldModel) Clone() *WorldModel {
+	if w == nil {
+		return nil
+	}
+	out := &WorldModel{
+		Width:        w.Width,
+		Height:       w.Height,
+		NextEntityID: w.NextEntityID,
+		MSAVVersion:  w.MSAVVersion,
+		EntitiesRev:  w.EntitiesRev,
+		Content:      append([]byte(nil), w.Content...),
+		Patches:      append([]byte(nil), w.Patches...),
+		RawMap:       append([]byte(nil), w.RawMap...),
+		RawEntities:  append([]byte(nil), w.RawEntities...),
+		Markers:      append([]byte(nil), w.Markers...),
+		Custom:       append([]byte(nil), w.Custom...),
+	}
+	if len(w.Tags) > 0 {
+		out.Tags = make(map[string]string, len(w.Tags))
+		for k, v := range w.Tags {
+			out.Tags[k] = v
+		}
+	}
+	if len(w.BlockNames) > 0 {
+		out.BlockNames = make(map[int16]string, len(w.BlockNames))
+		for k, v := range w.BlockNames {
+			out.BlockNames[k] = v
+		}
+	}
+	if len(w.UnitNames) > 0 {
+		out.UnitNames = make(map[int16]string, len(w.UnitNames))
+		for k, v := range w.UnitNames {
+			out.UnitNames[k] = v
+		}
+	}
+	if len(w.Tiles) > 0 {
+		out.Tiles = make([]Tile, len(w.Tiles))
+		for i := range w.Tiles {
+			out.Tiles[i] = w.Tiles[i]
+			if w.Tiles[i].Build != nil {
+				build := *w.Tiles[i].Build
+				build.Items = append([]ItemStack(nil), build.Items...)
+				build.Liquids = append([]LiquidStack(nil), build.Liquids...)
+				build.Config = append([]byte(nil), build.Config...)
+				build.Payload = append([]byte(nil), build.Payload...)
+				out.Tiles[i].Build = &build
+			}
+		}
+	}
+	if len(w.Units) > 0 {
+		out.Units = make(map[int32]*Unit, len(w.Units))
+		for id, unit := range w.Units {
+			if unit == nil {
+				continue
+			}
+			copyUnit := *unit
+			out.Units[id] = &copyUnit
+		}
+	} else {
+		out.Units = make(map[int32]*Unit)
+	}
+	out.Entities = append([]RawEntity(nil), w.Entities...)
+	return out
 }
 
 func NewWorldModel(width, height int) *WorldModel {

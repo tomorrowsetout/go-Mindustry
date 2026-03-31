@@ -2,15 +2,18 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"math"
 	mathrand "math/rand"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,11 +50,98 @@ type worldState struct {
 	current string
 }
 
+type bindStatusCacheEntry struct {
+	bound     bool
+	expiresAt time.Time
+}
+
+type bindStatusResolver struct {
+	mode     string
+	apiURL   string
+	client   *http.Client
+	cacheTTL time.Duration
+	identity *persist.PlayerIdentityStore
+	mu       sync.Mutex
+	cache    map[string]bindStatusCacheEntry
+}
+
+func newBindStatusResolver(mode, apiURL string, timeout, cacheTTL time.Duration, identity *persist.PlayerIdentityStore) *bindStatusResolver {
+	if timeout <= 0 {
+		timeout = 1500 * time.Millisecond
+	}
+	if cacheTTL <= 0 {
+		cacheTTL = 30 * time.Second
+	}
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode != "api" {
+		mode = "internal"
+	}
+	return &bindStatusResolver{
+		mode:     mode,
+		apiURL:   strings.TrimSpace(apiURL),
+		client:   &http.Client{Timeout: timeout},
+		cacheTTL: cacheTTL,
+		identity: identity,
+		cache:    map[string]bindStatusCacheEntry{},
+	}
+}
+
+func (r *bindStatusResolver) Bound(connUUID string) bool {
+	connUUID = strings.TrimSpace(connUUID)
+	if connUUID == "" {
+		return false
+	}
+	if r == nil {
+		return false
+	}
+	if r.mode != "api" {
+		rec, ok := r.identity.Lookup(connUUID)
+		return ok && rec.Bound
+	}
+	now := time.Now()
+	r.mu.Lock()
+	if rec, ok := r.cache[connUUID]; ok && now.Before(rec.expiresAt) {
+		r.mu.Unlock()
+		return rec.bound
+	}
+	r.mu.Unlock()
+
+	url := strings.ReplaceAll(r.apiURL, "{id}", connUUID)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(string(body)))
+	bound := text == "yes"
+	r.mu.Lock()
+	r.cache[connUUID] = bindStatusCacheEntry{bound: bound, expiresAt: now.Add(r.cacheTTL)}
+	r.mu.Unlock()
+	return bound
+}
+
 var runtimePlayerNameColorEnabled atomic.Bool
 var runtimePublicConnUUIDEnabled atomic.Bool
 var runtimeJoinLeaveChatEnabled atomic.Bool
 var runtimePlayerNamePrefix atomic.Value
 var runtimePlayerNameSuffix atomic.Value
+var runtimePlayerBindPrefixEnabled atomic.Bool
+var runtimePlayerBoundPrefix atomic.Value
+var runtimePlayerUnboundPrefix atomic.Value
+var runtimePlayerTitleEnabled atomic.Bool
+var runtimePlayerConnIDSuffixEnabled atomic.Bool
+var runtimePlayerConnIDSuffixFormat atomic.Value
+var runtimePublicConnUUIDStore *persist.PublicConnUUIDStore
+var runtimePlayerIdentityStore *persist.PlayerIdentityStore
+var runtimeBindStatusResolver *bindStatusResolver
 var blockNameTranslationMu sync.RWMutex
 var blockNameTranslations = defaultBlockNameTranslations()
 
@@ -204,13 +294,20 @@ func publicConnIDValue(store *persist.PublicConnUUIDStore, uuid string, connID i
 	if !runtimePublicConnUUIDEnabled.Load() {
 		return strconv.FormatInt(int64(connID), 10)
 	}
+	if id := publicConnUUIDValue(store, uuid); id != "" {
+		return id
+	}
+	return strconv.FormatInt(int64(connID), 10)
+}
+
+func publicConnUUIDValue(store *persist.PublicConnUUIDStore, uuid string) string {
 	uuid = strings.TrimSpace(uuid)
 	if uuid != "" && store != nil {
 		if id, ok := store.Lookup(uuid); ok && strings.TrimSpace(id) != "" {
 			return strings.TrimSpace(id)
 		}
 	}
-	return strconv.FormatInt(int64(connID), 10)
+	return ""
 }
 
 func buildCoreSnapshotData(wld *world.World) []byte {
@@ -590,6 +687,7 @@ func main() {
 	runtimeAssetsDir = cfg.Runtime.AssetsDir
 	runtimeWorldRoots = []string{cfg.Runtime.WorldsDir}
 	applyBlockNameTranslations(configDir)
+	initStatusBarRuntime(cfg)
 
 	startMemoryGuard(cfg.Core)
 
@@ -678,30 +776,71 @@ func main() {
 	runtimeJoinLeaveChatEnabled.Store(cfg.Personalization.JoinLeaveChatEnabled)
 	runtimePlayerNamePrefix.Store(cfg.Personalization.PlayerNamePrefix)
 	runtimePlayerNameSuffix.Store(cfg.Personalization.PlayerNameSuffix)
+	runtimePlayerBindPrefixEnabled.Store(cfg.Personalization.PlayerBindPrefixEnabled)
+	runtimePlayerBoundPrefix.Store(cfg.Personalization.PlayerBoundPrefix)
+	runtimePlayerUnboundPrefix.Store(cfg.Personalization.PlayerUnboundPrefix)
+	runtimePlayerTitleEnabled.Store(cfg.Personalization.PlayerTitleEnabled)
+	runtimePlayerConnIDSuffixEnabled.Store(cfg.Personalization.PlayerConnIDSuffixEnabled)
+	runtimePlayerConnIDSuffixFormat.Store(cfg.Personalization.PlayerConnIDSuffixFormat)
 	if cfg.Personalization.StartupCurrentMapLineEnabled {
 		fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
 	}
+
+	var publicConnUUIDStore *persist.PublicConnUUIDStore
+	var playerIdentityStore *persist.PlayerIdentityStore
 
 	srv := netserver.NewServer(*addr, *buildVersion)
 	srv.SetVerboseNetLog(false)
 	srv.SetPacketRecvEventsEnabled(cfg.Development.PacketRecvEventsEnabled)
 	srv.SetPacketSendEventsEnabled(cfg.Development.PacketSendEventsEnabled)
 	srv.SetTerminalPlayerLogsEnabled(cfg.Development.TerminalPlayerLogsEnabled)
+	srv.SetTerminalPlayerUUIDEnabled(cfg.Development.TerminalPlayerUUIDEnabled)
 	srv.SetRespawnPacketLogsEnabled(cfg.Development.RespawnPacketLogsEnabled)
 	srv.SetPlayerNameColorEnabled(cfg.Personalization.PlayerNameColorEnabled)
 	srv.SetTranslatedConnLog(cfg.Control.TranslatedConnLogEnabled)
 	srv.SetJoinLeaveChatEnabled(cfg.Personalization.JoinLeaveChatEnabled)
+	startStatusBarLoop(srv)
 	srv.SetPlayerDisplayFormatter(func(c *netserver.Conn) string {
 		if c == nil {
 			return ""
 		}
-		return formatDisplayPlayerNameRaw(c.Name())
+		return formatDisplayPlayerNameRaw(c.Name(), c, publicConnUUIDStore, playerIdentityStore)
 	})
 	srv.RefreshPlayerDisplayNames()
+	var (
+		effectIDMu      sync.RWMutex
+		effectIDsByName = map[string]int16{}
+	)
+	setEffectIDs := func(ids *vanilla.ContentIDsFile) {
+		next := make(map[string]int16)
+		if ids != nil {
+			for _, entry := range ids.Effects {
+				name := strings.ToLower(strings.TrimSpace(entry.Name))
+				if name == "" {
+					continue
+				}
+				next[name] = entry.ID
+			}
+		}
+		effectIDMu.Lock()
+		effectIDsByName = next
+		effectIDMu.Unlock()
+	}
+	lookupEffectID := func(name string) (int16, bool) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" {
+			return 0, false
+		}
+		effectIDMu.RLock()
+		id, ok := effectIDsByName[name]
+		effectIDMu.RUnlock()
+		return id, ok
+	}
 	contentIDsPath := filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json")
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
 		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
 	} else {
+		setEffectIDs(ids)
 		count := vanilla.ApplyContentIDs(srv.Content, ids)
 		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
 	}
@@ -713,6 +852,7 @@ func main() {
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 	wld := world.New(world.Config{TPS: sim.DefaultTPS})
+	playerMining := newPlayerMiningService()
 	// clientSnapshot writes client motion/position back into the authoritative world model.
 	// This mirrors vanilla NetServer.clientSnapshot behavior; without it, entitySnapshot will
 	// keep snapping units back to stale positions.
@@ -828,8 +968,14 @@ func main() {
 		if err != nil {
 			return 0, 0, false
 		}
-		_ = ent
+		_, _ = wld.SetEntityPlayerController(ent.ID, c.PlayerID())
 		return x, y, true
+	}
+	srv.ReserveUnitIDFn = func() int32 {
+		if wld == nil {
+			return 0
+		}
+		return wld.ReserveEntityID()
 	}
 	srv.DropUnitFn = func(unitID int32) {
 		if wld == nil {
@@ -858,6 +1004,7 @@ func main() {
 	var unitNamesByID map[int16]string
 	var loadedModel *world.WorldModel
 	var loadedMapPath string
+	invalidateWorldCache := func() {}
 
 	var playerSpawnTypeID int32 = int32(defaultPlayerRespawnUnitID)
 	if err := wld.LoadVanillaProfiles(cfg.Runtime.VanillaProfiles); err != nil {
@@ -899,7 +1046,7 @@ func main() {
 			spawnType = alphaID
 		}
 		atomic.StoreInt32(&playerSpawnTypeID, int32(spawnType))
-		wld.SetTeamBuilderSpeed(world.TeamID(1), wld.BuilderSpeedForUnitType(spawnType))
+		wld.SetTeamBuilderSpeed(resolveDefaultPlayerTeam(wld), wld.BuilderSpeedForUnitType(spawnType))
 		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
 	if persistedOK {
@@ -932,16 +1079,37 @@ func main() {
 	}
 	runtimePublicConnUUIDEnabled.Store(cfg.Control.PublicConnUUIDEnabled)
 	publicConnUUIDPath := resolveConfigSidecarPath(runtimeConfigDir, cfg.Control.PublicConnUUIDFile)
-	publicConnUUIDStore, publicConnUUIDErr := persist.NewPublicConnUUIDStore(publicConnUUIDPath)
+	var publicConnUUIDErr error
+	publicConnUUIDStore, publicConnUUIDErr = persist.NewPublicConnUUIDStore(publicConnUUIDPath, cfg.Control.ConnUUIDAutoCreateEnabled)
 	if publicConnUUIDErr != nil {
 		log.Warn("public conn_uuid store init failed", logging.Field{Key: "error", Value: publicConnUUIDErr.Error()})
 		startup.warn("公开 conn_uuid", publicConnUUIDErr.Error())
 	} else {
 		startup.ok("公开 conn_uuid", publicConnUUIDPath)
+		runtimePublicConnUUIDStore = publicConnUUIDStore
 	}
+	playerIdentityPath := resolveConfigSidecarPath(runtimeConfigDir, cfg.Personalization.PlayerIdentityFile)
+	playerIdentityStore, publicIdentityErr := persist.NewPlayerIdentityStore(playerIdentityPath, cfg.Control.PlayerIdentityAutoCreateEnabled)
+	if publicIdentityErr != nil {
+		log.Warn("player identity store init failed", logging.Field{Key: "error", Value: publicIdentityErr.Error()})
+		startup.warn("玩家身份配置", publicIdentityErr.Error())
+	} else {
+		startup.ok("玩家身份配置", playerIdentityPath)
+		runtimePlayerIdentityStore = playerIdentityStore
+	}
+	runtimeBindStatusResolver = newBindStatusResolver(
+		cfg.Personalization.PlayerBindSource,
+		cfg.Personalization.PlayerBindAPIURL,
+		time.Duration(cfg.Personalization.PlayerBindAPITimeoutMs)*time.Millisecond,
+		time.Duration(cfg.Personalization.PlayerBindAPICacheSec)*time.Second,
+		playerIdentityStore,
+	)
 	srv.OnEvent = func(ev netserver.NetEvent) {
 		if publicConnUUIDStore != nil && ev.Kind == "connect_packet" && runtimePublicConnUUIDEnabled.Load() {
-			_, _ = publicConnUUIDStore.Ensure(ev.UUID, ev.Name, ev.IP)
+			connUUID, _ := publicConnUUIDStore.Ensure(ev.UUID, ev.Name, ev.IP)
+			if playerIdentityStore != nil && strings.TrimSpace(connUUID) != "" {
+				_, _, _ = playerIdentityStore.Ensure(connUUID)
+			}
 		}
 		_ = recorder.Record(storage.Event{
 			Timestamp: ev.Timestamp,
@@ -996,6 +1164,7 @@ func main() {
 	scriptCtl.SetDailyGC(cfg.Script.DailyGCTime)
 
 	cache := &worldCache{}
+	invalidateWorldCache = cache.invalidate
 	srv.WorldDataFn = func(conn *netserver.Conn, _ *protocol.ConnectPacket) ([]byte, error) {
 		path := state.get()
 		base, err := cache.get(path)
@@ -1021,12 +1190,21 @@ func main() {
 		if conn == nil {
 			return
 		}
-		// Wait until client applies world stream, then patch runtime build states.
+		// Wait until client applies world stream, then only push lightweight runtime overlays.
 		time.Sleep(350 * time.Millisecond)
-		syncCurrentWorldToConn(conn, wld)
+		syncRulesToConn(conn, wld)
+		syncWorldDiffToConn(conn, wld, cache.model(state.get()))
+	}
+	srv.OnHotReloadConnFn = func(conn *netserver.Conn) {
+		if conn == nil {
+			return
+		}
+		syncRulesToConn(conn, wld)
+		syncWorldDiffToConn(conn, wld, cache.model(state.get()))
+		srv.RefreshPlayerDisplayNames()
 	}
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {
-		if pos, ok := resolveTeamCoreTile(wld, world.TeamID(1), protocol.Point2{}); ok {
+		if pos, ok := resolveTeamCoreTile(wld, resolveDefaultPlayerTeam(wld), protocol.Point2{}); ok {
 			return pos, true
 		}
 		pos, ok, err := cache.spawnPos(state.get())
@@ -1035,6 +1213,39 @@ func main() {
 		}
 		// Fallback for maps where core tile cannot be parsed from msav metadata.
 		return fallbackSpawnPosFromModel(wld.Model())
+	}
+	srv.AssignTeamForConnFn = func(c *netserver.Conn) byte {
+		return byte(assignConnTeamVanilla(srv, wld, c))
+	}
+	spawnRefForConn := func(c *netserver.Conn) protocol.Point2 {
+		if c == nil {
+			return protocol.Point2{}
+		}
+		if wld != nil {
+			if unitID := c.UnitID(); unitID != 0 {
+				if ent, ok := wld.GetEntity(unitID); ok {
+					return protocol.Point2{
+						X: int32(math.Round((float64(ent.X) - 4) / 8)),
+						Y: int32(math.Round((float64(ent.Y) - 4) / 8)),
+					}
+				}
+			}
+		}
+		x, y := c.SnapshotPos()
+		if x == 0 && y == 0 {
+			return protocol.Point2{}
+		}
+		return protocol.Point2{
+			X: int32(math.Round((float64(x) - 4) / 8)),
+			Y: int32(math.Round((float64(y) - 4) / 8)),
+		}
+	}
+	srv.SpawnTileForConnFn = func(c *netserver.Conn) (protocol.Point2, bool) {
+		team := resolveConnTeam(c, wld)
+		if pos, ok := resolveTeamCoreTile(wld, team, spawnRefForConn(c)); ok {
+			return pos, true
+		}
+		return srv.SpawnTileFn()
 	}
 	// Official 156 build authority comes from clientSnapshot/clientPlanSnapshot queues.
 	// Do not feed legacy/compat beginPlace packets into a second custom queue, otherwise
@@ -1050,18 +1261,32 @@ func main() {
 	var (
 		snapshotLogMu sync.Mutex
 		snapshotLogBy = make(map[int32]snapshotLogKey)
-		teamActorMu   sync.Mutex
-		teamActorBy   = make(map[world.TeamID]string)
+		ownerActorMu  sync.RWMutex
+		ownerActorBy  = make(map[int32]string)
 	)
+	buildActor := func(owner int32, team world.TeamID) string {
+		if owner != 0 {
+			ownerActorMu.RLock()
+			actor := strings.TrimSpace(ownerActorBy[owner])
+			ownerActorMu.RUnlock()
+			if actor != "" {
+				return actor
+			}
+		}
+		return fmt.Sprintf("team-%d", team)
+	}
 	srv.OnBuildPlanSnapshot = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
 		if c == nil {
 			return
 		}
 		owner := resolveBuildOwner(c)
 		team := resolveConnTeam(c, wld)
-		teamActorMu.Lock()
-		teamActorBy[team] = displayPlayerName(c)
-		teamActorMu.Unlock()
+		snapX, snapY := c.SnapshotPos()
+		// UnitType.buildRange defaults to Vars.buildingRange in 156.
+		wld.UpdateBuilderState(owner, team, c.UnitID(), snapX, snapY, !c.IsDead() && c.IsBuilding() && c.UnitID() != 0, 220)
+		ownerActorMu.Lock()
+		ownerActorBy[owner] = displayPlayerName(c)
+		ownerActorMu.Unlock()
 		if len(plans) == 0 {
 			key := snapshotLogKey{count: 0}
 			snapshotLogMu.Lock()
@@ -1125,6 +1350,13 @@ func main() {
 			return
 		}
 		owner := resolveBuildOwner(c)
+		if cfg.Building.Translated {
+			action := "取消建造"
+			if breaking {
+				action = "取消拆除"
+			}
+			fmt.Printf("[建筑] 玩家=%s (x%d-y%d) %s\n", displayPlayerName(c), x, y, action)
+		}
 		if shouldLogBuildSnapshots() && !cfg.Building.Translated {
 			fmt.Printf("[buildtrace] recv removeQueue player=%d remote=%s xy=(%d,%d) breaking=%v\n", c.PlayerID(), c.RemoteAddr().String(), x, y, breaking)
 		}
@@ -1174,7 +1406,18 @@ func main() {
 				switch ev.Kind {
 				case world.EntityEventRemoved:
 					broadcastUnitDestroy(srv, ev.Entity.ID)
-					srv.MarkUnitDead(ev.Entity.ID, "world-removed")
+					if ev.Entity.Health <= 0 {
+						if _, ok := srv.PlayerUnitIDSet()[ev.Entity.ID]; ok {
+							fmt.Printf("[net] world removed player-unit=%d hp=%.2f pos=(%.1f,%.1f) team=%d\n",
+								ev.Entity.ID, ev.Entity.Health, ev.Entity.X, ev.Entity.Y, ev.Entity.Team)
+						}
+						srv.MarkUnitDead(ev.Entity.ID, "world-removed")
+					} else {
+						if _, ok := srv.PlayerUnitIDSet()[ev.Entity.ID]; ok {
+							fmt.Printf("[net] ignored unit removal conn-unit=%d source=world-removed-positive-health hp=%.2f pos=(%.1f,%.1f)\n",
+								ev.Entity.ID, ev.Entity.Health, ev.Entity.X, ev.Entity.Y)
+						}
+					}
 				case world.EntityEventBuildPlaced:
 					x, y := unpackTilePos(ev.BuildPos)
 					if shouldFileLogBuildPlace() {
@@ -1183,12 +1426,7 @@ func main() {
 					}
 					if shouldLogBuildPlace() {
 						if cfg.Building.Translated {
-							teamActorMu.Lock()
-							actor := teamActorBy[ev.BuildTeam]
-							teamActorMu.Unlock()
-							if strings.TrimSpace(actor) == "" {
-								actor = fmt.Sprintf("team-%d", ev.BuildTeam)
-							}
+							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
 							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 建造了 block=%d(%s) team=%d rot=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot)
 						} else {
 							fmt.Printf("[buildtrace] placed xy=(%d,%d) block=%d team=%d rot=%d\n", x, y, ev.BuildBlock, ev.BuildTeam, ev.BuildRot)
@@ -1203,12 +1441,7 @@ func main() {
 					}
 					if shouldLogBuildFinish() {
 						if cfg.Building.Translated {
-							teamActorMu.Lock()
-							actor := teamActorBy[ev.BuildTeam]
-							teamActorMu.Unlock()
-							if strings.TrimSpace(actor) == "" {
-								actor = fmt.Sprintf("team-%d", ev.BuildTeam)
-							}
+							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
 							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 完成建造 block=%d(%s) team=%d rot=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam, ev.BuildRot)
 						} else {
 							fmt.Printf("[buildtrace] constructed xy=(%d,%d) block=%d team=%d rot=%d\n", x, y, ev.BuildBlock, ev.BuildTeam, ev.BuildRot)
@@ -1229,18 +1462,24 @@ func main() {
 					}
 					if shouldLogBuildBreakStart() {
 						if cfg.Building.Translated {
-							teamActorMu.Lock()
-							actor := teamActorBy[ev.BuildTeam]
-							teamActorMu.Unlock()
-							if strings.TrimSpace(actor) == "" {
-								actor = fmt.Sprintf("team-%d", ev.BuildTeam)
-							}
+							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
 							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 正在拆除 block=%d(%s) team=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
 						} else {
 							fmt.Printf("[buildtrace] deconstructing xy=(%d,%d) block=%d team=%d\n", x, y, ev.BuildBlock, ev.BuildTeam)
 						}
 					}
 					broadcastBuildDeconstructBegin(srv, ev.BuildPos, byte(ev.BuildTeam))
+				case world.EntityEventBuildCancelled:
+					x, y := unpackTilePos(ev.BuildPos)
+					if shouldLogBuildBreakDone() {
+						if cfg.Building.Translated {
+							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
+							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 取消了建造 block=%d(%s) team=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
+						} else {
+							fmt.Printf("[buildtrace] cancelled xy=(%d,%d) block=%d team=%d\n", x, y, ev.BuildBlock, ev.BuildTeam)
+						}
+					}
+					broadcastBuildDestroyed(srv, ev.BuildPos, ev.BuildBlock)
 				case world.EntityEventBuildDestroyed:
 					x, y := unpackTilePos(ev.BuildPos)
 					if shouldFileLogBuildBreakDone() {
@@ -1249,12 +1488,7 @@ func main() {
 					}
 					if shouldLogBuildBreakDone() {
 						if cfg.Building.Translated {
-							teamActorMu.Lock()
-							actor := teamActorBy[ev.BuildTeam]
-							teamActorMu.Unlock()
-							if strings.TrimSpace(actor) == "" {
-								actor = fmt.Sprintf("team-%d", ev.BuildTeam)
-							}
+							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
 							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 拆除了 block=%d(%s) team=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
 						} else {
 							fmt.Printf("[buildtrace] destroyed xy=(%d,%d) block=%d team=%d\n", x, y, ev.BuildBlock, ev.BuildTeam)
@@ -1271,6 +1505,10 @@ func main() {
 					}
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
+				case world.EntityEventEffect:
+					if effectID, ok := lookupEffectID(ev.EffectName); ok {
+						broadcastEffectReliable(srv, effectID, ev.EffectX, ev.EffectY, ev.EffectRot)
+					}
 				}
 			}
 			if len(buildHealth) > 0 {
@@ -1293,15 +1531,26 @@ func main() {
 			detailLog.LogLine(fmt.Sprintf("%s [CHAT] from=%q player_id=%d uuid=%s ip=%s msg=%q",
 				time.Now().Format(time.RFC3339Nano), c.Name(), c.PlayerID(), c.UUID(), c.RemoteAddr().String(), strings.TrimSpace(msg)))
 		}
-		switch strings.TrimSpace(msg) {
+		trimmed := strings.TrimSpace(msg)
+		switch trimmed {
 		case "/help":
 			sendChatHelp(srv, c, cfg)
 			return true
 		case "/status":
 			srv.SendStatusTo(c)
 			return true
+		case "/sync":
+			if c == nil {
+				return true
+			}
+			if err := srv.SyncWorldToConn(c); err != nil {
+				srv.SendChat(c, "[scarlet]重同步失败[]")
+				return true
+			}
+			srv.SendChat(c, "[accent]正在重新同步世界状态...[]")
+			return true
 		}
-		if strings.EqualFold(strings.TrimSpace(msg), "/stop") {
+		if strings.EqualFold(trimmed, "/stop") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1316,7 +1565,7 @@ func main() {
 			}()
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/summon ") {
+		if strings.HasPrefix(trimmed, "/summon ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1392,7 +1641,7 @@ func main() {
 			srv.BroadcastChat(fmt.Sprintf("[accent]OP召唤单位[] firstId=%d count=%d type=%d(%s) x=%.1f y=%.1f team=%d", firstID, success, typeID, typeName, x, y, team))
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/despawn ") {
+		if strings.HasPrefix(trimmed, "/despawn ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1415,7 +1664,7 @@ func main() {
 			srv.BroadcastChat(fmt.Sprintf("[accent]OP移除单位[] id=%d", id))
 			return true
 		}
-		if strings.EqualFold(strings.TrimSpace(msg), "/kill") {
+		if strings.EqualFold(trimmed, "/kill") {
 			if c == nil {
 				return true
 			}
@@ -1426,7 +1675,7 @@ func main() {
 			srv.SendChat(c, "[accent]已执行 /kill：当前单位已清除[]")
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/umove ") {
+		if strings.HasPrefix(trimmed, "/umove ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1465,7 +1714,7 @@ func main() {
 			srv.SendChat(c, fmt.Sprintf("[accent]单位运动已设置[] id=%d vx=%.2f vy=%.2f rv=%.2f", id, vx, vy, rotVel))
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/uteleport ") {
+		if strings.HasPrefix(trimmed, "/uteleport ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1504,7 +1753,7 @@ func main() {
 			srv.SendChat(c, fmt.Sprintf("[accent]单位传送完成[] id=%d x=%.1f y=%.1f rot=%.1f", id, x, y, rot))
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/ulife ") {
+		if strings.HasPrefix(trimmed, "/ulife ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1532,7 +1781,7 @@ func main() {
 			srv.SendChat(c, fmt.Sprintf("[accent]单位寿命已设置[] id=%d life=%.2fs", id, life))
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/ufollow ") {
+		if strings.HasPrefix(trimmed, "/ufollow ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1566,7 +1815,7 @@ func main() {
 			srv.SendChat(c, fmt.Sprintf("[accent]单位跟随已设置[] id=%d -> target=%d speed=%.2f", id, targetID, speed))
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/upatrol ") {
+		if strings.HasPrefix(trimmed, "/upatrol ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1615,7 +1864,7 @@ func main() {
 			srv.SendChat(c, fmt.Sprintf("[accent]单位巡逻已设置[] id=%d A(%.1f,%.1f) B(%.1f,%.1f) speed=%.2f", id, x1, y1, x2, y2, speed))
 			return true
 		}
-		if strings.HasPrefix(strings.TrimSpace(msg), "/ubehavior ") {
+		if strings.HasPrefix(trimmed, "/ubehavior ") {
 			if c == nil || !srv.IsOp(c.UUID()) {
 				srv.SendChat(c, "[scarlet]没有权限（需要OP）[]")
 				return true
@@ -1641,6 +1890,10 @@ func main() {
 			}
 			saveState()
 			srv.SendChat(c, fmt.Sprintf("[accent]单位行为已清除[] id=%d", id))
+			return true
+		}
+		if strings.HasPrefix(trimmed, "/") {
+			srv.SendChat(c, fmt.Sprintf("[scarlet]无效命令: %s[]", trimmed))
 			return true
 		}
 		return false
@@ -1679,6 +1932,7 @@ func main() {
 		})
 		serverCore.SetGameTickFn(func(_ uint64, delta time.Duration) {
 			wld.Step(delta)
+			playerMining.Tick(wld, srv, delta)
 		})
 
 		netCore := netserver.NewNetworkCoreWithCore(srv, serverCore.Core2)
@@ -1699,6 +1953,7 @@ func main() {
 					_ = publicConnUUIDStore.ObserveDisconnect(c.UUID(), c.Name(), host)
 				}
 				buildService.ClearOwner(resolveBuildOwner(c))
+				wld.ClearBuilderState(resolveBuildOwner(c))
 				if unitID := c.UnitID(); unitID != 0 {
 					wld.RemoveEntity(unitID)
 				}
@@ -1733,6 +1988,7 @@ func main() {
 				_ = publicConnUUIDStore.ObserveDisconnect(c.UUID(), c.Name(), host)
 			}
 			buildService.ClearOwner(resolveBuildOwner(c))
+			wld.ClearBuilderState(resolveBuildOwner(c))
 			if unitID := c.UnitID(); unitID != 0 {
 				wld.RemoveEntity(unitID)
 			}
@@ -1751,6 +2007,7 @@ func main() {
 				steps := 0
 				for !now.Before(next) && steps < maxCatchUp {
 					wld.Step(interval)
+					playerMining.Tick(wld, srv, interval)
 					steps++
 					next = next.Add(interval)
 					now = time.Now()
@@ -1937,6 +2194,7 @@ func main() {
 			srv.SetPacketRecvEventsEnabled(loaded.Development.PacketRecvEventsEnabled)
 			srv.SetPacketSendEventsEnabled(loaded.Development.PacketSendEventsEnabled)
 			srv.SetTerminalPlayerLogsEnabled(loaded.Development.TerminalPlayerLogsEnabled)
+			srv.SetTerminalPlayerUUIDEnabled(loaded.Development.TerminalPlayerUUIDEnabled)
 			srv.SetRespawnPacketLogsEnabled(loaded.Development.RespawnPacketLogsEnabled)
 			srv.SetPlayerNameColorEnabled(loaded.Personalization.PlayerNameColorEnabled)
 			srv.SetTranslatedConnLog(loaded.Control.TranslatedConnLogEnabled)
@@ -1944,6 +2202,20 @@ func main() {
 			runtimeJoinLeaveChatEnabled.Store(loaded.Personalization.JoinLeaveChatEnabled)
 			runtimePlayerNamePrefix.Store(loaded.Personalization.PlayerNamePrefix)
 			runtimePlayerNameSuffix.Store(loaded.Personalization.PlayerNameSuffix)
+			runtimePlayerBindPrefixEnabled.Store(loaded.Personalization.PlayerBindPrefixEnabled)
+			runtimePlayerBoundPrefix.Store(loaded.Personalization.PlayerBoundPrefix)
+			runtimePlayerUnboundPrefix.Store(loaded.Personalization.PlayerUnboundPrefix)
+			runtimePlayerTitleEnabled.Store(loaded.Personalization.PlayerTitleEnabled)
+			runtimePlayerConnIDSuffixEnabled.Store(loaded.Personalization.PlayerConnIDSuffixEnabled)
+			runtimePlayerConnIDSuffixFormat.Store(loaded.Personalization.PlayerConnIDSuffixFormat)
+			initStatusBarRuntime(loaded)
+			runtimeBindStatusResolver = newBindStatusResolver(
+				loaded.Personalization.PlayerBindSource,
+				loaded.Personalization.PlayerBindAPIURL,
+				time.Duration(loaded.Personalization.PlayerBindAPITimeoutMs)*time.Millisecond,
+				time.Duration(loaded.Personalization.PlayerBindAPICacheSec)*time.Second,
+				runtimePlayerIdentityStore,
+			)
 			srv.RefreshPlayerDisplayNames()
 			runtimePublicConnUUIDEnabled.Store(loaded.Control.PublicConnUUIDEnabled)
 			applyBlockNameTranslations(configDir)
@@ -1952,6 +2224,15 @@ func main() {
 			}
 			if loaded.Control.PublicConnUUIDFile != cfg.Control.PublicConnUUIDFile && cfg.Control.ReloadLogEnabled {
 				fmt.Printf("[config] public_conn_uuid_file changed to %s, restart required to reopen mapping file\n", loaded.Control.PublicConnUUIDFile)
+			}
+			if loaded.Control.ConnUUIDAutoCreateEnabled != cfg.Control.ConnUUIDAutoCreateEnabled && cfg.Control.ReloadLogEnabled {
+				fmt.Printf("[config] conn_uuid_auto_create changed to %t, restart required to reopen mapping policy\n", loaded.Control.ConnUUIDAutoCreateEnabled)
+			}
+			if loaded.Control.PlayerIdentityAutoCreateEnabled != cfg.Control.PlayerIdentityAutoCreateEnabled && cfg.Control.ReloadLogEnabled {
+				fmt.Printf("[config] player_identity_auto_create changed to %t, restart required to reopen identity file policy\n", loaded.Control.PlayerIdentityAutoCreateEnabled)
+			}
+			if loaded.Personalization.PlayerIdentityFile != cfg.Personalization.PlayerIdentityFile && cfg.Control.ReloadLogEnabled {
+				fmt.Printf("[config] player_identity_file changed to %s, restart required to reopen identity file\n", loaded.Personalization.PlayerIdentityFile)
 			}
 
 			if apiSrv != nil {
@@ -2011,6 +2292,7 @@ func main() {
 		if err != nil {
 			return err
 		}
+		setEffectIDs(ids)
 		_ = vanilla.ApplyContentIDs(srv.Content, ids)
 		return nil
 	}
@@ -2024,7 +2306,7 @@ func main() {
 	if cfg.Personalization.UnitIDListEnabled {
 		printUnitIDList(unitNamesByID)
 	}
-	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, reloadVanillaProfiles, reloadVanillaContentIDs, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
+	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, invalidateWorldCache, reloadVanillaProfiles, reloadVanillaContentIDs, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
 	if serverCore != nil {
 		go func() {
 			if err := srv.Serve(); err != nil {
@@ -2122,6 +2404,7 @@ func runConsole(
 	monitor *statusMonitor,
 	saveOps func(),
 	loadWorldModel func(path string),
+	invalidateWorldCache func(),
 	reloadVanillaProfiles func(path string) error,
 	reloadVanillaContentIDs func(path string) error,
 	removeEntityByID func(id int32) bool,
@@ -2214,8 +2497,33 @@ func runConsole(
 			}
 			state.set(next)
 			loadWorldModel(next)
+			if invalidateWorldCache != nil {
+				invalidateWorldCache()
+			}
 			fmt.Printf("地图已切换: %s\n", next)
 			reloaded, failed := srv.ReloadWorldLiveForAll()
+			if reloaded == 0 && failed == 0 {
+				fmt.Println("已应用新地图（当前无在线玩家）")
+			} else {
+				fmt.Printf("已应用新地图（原版式重载: 成功=%d 失败=%d，不踢出在线玩家）\n", reloaded, failed)
+			}
+		case "hotload":
+			if len(parts) < 2 {
+				fmt.Println("用法: hotload random | hotload <地图名> | hotload <.msav 文件路径>")
+				continue
+			}
+			next, err := resolveWorldSelection(parts[1])
+			if err != nil {
+				fmt.Printf("热加载切图失败: %v\n", err)
+				continue
+			}
+			state.set(next)
+			loadWorldModel(next)
+			if invalidateWorldCache != nil {
+				invalidateWorldCache()
+			}
+			fmt.Printf("地图已热加载: %s\n", next)
+			reloaded, failed := srv.ReloadWorldLiveForAllLegacy()
 			if reloaded == 0 && failed == 0 {
 				fmt.Println("已应用新地图（当前无在线玩家）")
 			} else {
@@ -2984,9 +3292,11 @@ func printHelpCategory(cfg config.Config, category string) {
 		printHelpCmd("server name <名称>", "设置服务器名称（写入配置）")
 		printHelpCmd("server desc <简介>", "设置服务器简介（写入配置）")
 		printHelpCmd("server players <虚拟人数>", "设置大厅虚拟人数（写入配置）")
-		printHelpCmd("host random", "切换到随机地图")
-		printHelpCmd("host <map-name>", "切换到 core/assets/maps/default/<map-name>.msav")
-		printHelpCmd("host <file-path>", "切换到指定 .msav")
+		printHelpCmd("host random", "原版式重载到随机地图（不踢人）")
+		printHelpCmd("host <map-name>", "原版式重载到 core/assets/maps/default/<map-name>.msav")
+		printHelpCmd("host <file-path>", "原版式重载到指定 .msav")
+		printHelpCmd("hotload random", "在线热加载到随机地图（不踢人）")
+		printHelpCmd("hotload <map-name|file-path>", "在线热加载到指定地图（不踢人）")
 		printHelpCmd("ip", "显示本机 IP 和监听地址")
 		printHelpCmd("selfcheck", "基本自检（地址/端口/地图/配置）")
 	case "vanilla":
@@ -3118,6 +3428,7 @@ func sendChatHelp(srv *netserver.Server, c *netserver.Conn, cfg config.Config) {
 	srv.SendChat(c, "[accent]命令列表：")
 	srv.SendChat(c, "[white]/help[] 查看命令")
 	srv.SendChat(c, "[white]/status[] 服务器状态")
+	srv.SendChat(c, "[white]/sync[] 重新同步当前世界状态")
 	srv.SendChat(c, "[white]/summon <typeId|unitName> [x y] [count] [team][] 召唤单位（OP，省略坐标=玩家脚底）")
 	srv.SendChat(c, "[white]/despawn <entityId>[] 移除单位（OP）")
 	srv.SendChat(c, "[white]/kill[] 杀死当前单位（附身/未附身均可）")
@@ -3453,12 +3764,77 @@ func currentPlayerNameSuffix() string {
 	return ""
 }
 
-func formatDisplayPlayerNameRaw(name string) string {
+func currentPlayerBoundPrefix() string {
+	if v := runtimePlayerBoundPrefix.Load(); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func currentPlayerUnboundPrefix() string {
+	if v := runtimePlayerUnboundPrefix.Load(); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func currentPlayerConnIDSuffixFormat() string {
+	if v := runtimePlayerConnIDSuffixFormat.Load(); v != nil {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return " [gray]{id}[]"
+}
+
+func applyIDFormat(format, id string) string {
+	if strings.TrimSpace(format) == "" || strings.TrimSpace(id) == "" {
+		return ""
+	}
+	return strings.ReplaceAll(format, "{id}", id)
+}
+
+func formatDisplayPlayerNameRaw(name string, c *netserver.Conn, publicStore *persist.PublicConnUUIDStore, identityStore *persist.PlayerIdentityStore) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "未知玩家"
 	}
-	return currentPlayerNamePrefix() + name + currentPlayerNameSuffix()
+	if publicStore == nil {
+		publicStore = runtimePublicConnUUIDStore
+	}
+	if identityStore == nil {
+		identityStore = runtimePlayerIdentityStore
+	}
+	resolver := runtimeBindStatusResolver
+	var prefix strings.Builder
+	var suffix strings.Builder
+	prefix.WriteString(currentPlayerNamePrefix())
+	if c != nil {
+		connUUID := publicConnUUIDValue(publicStore, c.UUID())
+		if runtimePlayerBindPrefixEnabled.Load() {
+			if resolver != nil && resolver.Bound(connUUID) {
+				prefix.WriteString(currentPlayerBoundPrefix())
+			} else {
+				prefix.WriteString(currentPlayerUnboundPrefix())
+			}
+		}
+		if rec, ok := identityStore.Lookup(connUUID); ok {
+			prefix.WriteString(rec.Prefix)
+			if runtimePlayerTitleEnabled.Load() && strings.TrimSpace(rec.Title) != "" {
+				prefix.WriteString(rec.Title)
+			}
+			suffix.WriteString(rec.Suffix)
+		}
+	}
+	if c != nil && runtimePlayerConnIDSuffixEnabled.Load() {
+		suffix.WriteString(applyIDFormat(currentPlayerConnIDSuffixFormat(), publicConnIDValue(publicStore, c.UUID(), c.ConnID())))
+	}
+	suffix.WriteString(currentPlayerNameSuffix())
+	return prefix.String() + name + suffix.String()
 }
 
 func displayPlayerName(c *netserver.Conn) string {
@@ -3469,7 +3845,7 @@ func displayPlayerName(c *netserver.Conn) string {
 	if name == "" {
 		name = fmt.Sprintf("player-%d", c.PlayerID())
 	}
-	name = formatDisplayPlayerNameRaw(name)
+	name = formatDisplayPlayerNameRaw(name, c, nil, nil)
 	if runtimePlayerNameColorEnabled.Load() {
 		return netserver.RenderMindustryTextForTerminal(name)
 	}
@@ -3617,6 +3993,19 @@ func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
 	})
 }
 
+func broadcastEffectReliable(srv *netserver.Server, effectID int16, x, y, rotation float32) {
+	if srv == nil || effectID < 0 {
+		return
+	}
+	srv.Broadcast(&protocol.Remote_NetClient_effectReliable_13{
+		Effect:   protocol.Effect{ID: effectID},
+		X:        x,
+		Y:        y,
+		Rotation: rotation,
+		Color:    protocol.Color{RGBA: -1},
+	})
+}
+
 func broadcastSetTileItems(srv *netserver.Server, itemID int16, amount int32, positions []int32) {
 	if srv == nil || itemID < 0 || len(positions) == 0 {
 		return
@@ -3681,6 +4070,321 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 			})
 		}
 	}
+}
+
+func syncCoreItemsToConn(conn *netserver.Conn, wld *world.World) {
+	if conn == nil || wld == nil {
+		return
+	}
+	for _, snapshot := range wld.TeamCoreItemSnapshots() {
+		positions := wld.TeamItemSyncPositions(snapshot.Team)
+		if len(positions) == 0 {
+			continue
+		}
+		for _, stack := range snapshot.Items {
+			_ = conn.SendAsync(&protocol.Remote_InputHandler_setTileItems_62{
+				Item:      protocol.ItemRef{ItmID: int16(stack.Item)},
+				Amount:    stack.Amount,
+				Positions: append([]int32(nil), positions...),
+			})
+		}
+	}
+}
+
+func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *world.WorldModel) {
+	if conn == nil || wld == nil {
+		return
+	}
+	liveModel := wld.CloneModel()
+	if liveModel == nil {
+		return
+	}
+	if baseModel == nil || baseModel.Width != liveModel.Width || baseModel.Height != liveModel.Height {
+		syncCurrentWorldToConn(conn, wld)
+		syncCoreItemsToConn(conn, wld)
+		return
+	}
+
+	baseStates := buildSyncSnapshotFromModel(baseModel)
+	liveStates := buildSyncSnapshotFromModel(liveModel)
+	baseByPos := make(map[int32]world.BuildSyncState, len(baseStates))
+	liveByPos := make(map[int32]world.BuildSyncState, len(liveStates))
+	posSet := make(map[int32]struct{}, len(baseStates)+len(liveStates))
+	for _, state := range baseStates {
+		baseByPos[state.Pos] = state
+		posSet[state.Pos] = struct{}{}
+	}
+	for _, state := range liveStates {
+		liveByPos[state.Pos] = state
+		posSet[state.Pos] = struct{}{}
+	}
+	if len(posSet) == 0 {
+		syncCoreItemsToConn(conn, wld)
+		return
+	}
+	positions := make([]int32, 0, len(posSet))
+	for pos := range posSet {
+		positions = append(positions, pos)
+	}
+	sort.Slice(positions, func(i, j int) bool { return positions[i] < positions[j] })
+
+	health := make([]int32, 0, 256)
+	for i, pos := range positions {
+		baseState, baseOK := baseByPos[pos]
+		liveState, liveOK := liveByPos[pos]
+		if baseOK && liveOK &&
+			baseState.BlockID == liveState.BlockID &&
+			baseState.Team == liveState.Team &&
+			baseState.Rotation == liveState.Rotation &&
+			sameBuildHealth(baseState.Health, liveState.Health) &&
+			sameTileConfigAtPos(baseModel, liveModel, pos) {
+			continue
+		}
+
+		if !liveOK || liveState.BlockID <= 0 {
+			_ = conn.SendAsync(&protocol.Remote_Tile_setTile_131{
+				Tile:     protocol.TileBox{PosValue: pos},
+				Block:    protocol.BlockRef{BlkID: 0, BlkName: ""},
+				Team:     protocol.Team{ID: 0},
+				Rotation: 0,
+			})
+			blockID := int16(0)
+			if baseOK {
+				blockID = baseState.BlockID
+			}
+			_ = conn.SendAsync(&protocol.Remote_ConstructBlock_deconstructFinish_136{
+				Tile:    protocol.TileBox{PosValue: pos},
+				Block:   protocol.BlockRef{BlkID: blockID, BlkName: ""},
+				Builder: nil,
+			})
+			continue
+		}
+
+		_ = conn.SendAsync(&protocol.Remote_Tile_setTile_131{
+			Tile:     protocol.TileBox{PosValue: pos},
+			Block:    protocol.BlockRef{BlkID: liveState.BlockID, BlkName: ""},
+			Team:     protocol.Team{ID: byte(liveState.Team)},
+			Rotation: int32(liveState.Rotation) & 0x3,
+		})
+
+		if tile, ok := tileAtPacked(liveModel, pos); ok && tile.Build != nil {
+			hp := tile.Build.Health
+			if hp <= 0 {
+				hp = tile.Build.MaxHealth
+			}
+			if hp <= 0 {
+				hp = 1000
+			}
+			health = append(health, pos, int32(math.Float32bits(hp)))
+			if cfgValue, ok := decodeTileConfigValue(tile); ok || !sameTileConfigAtPos(baseModel, liveModel, pos) {
+				_ = conn.SendAsync(&protocol.Remote_InputHandler_tileConfig_127{
+					Player: nil,
+					Build:  protocol.BuildingBox{PosValue: pos},
+					Value:  cfgValue,
+				})
+			}
+		}
+		if len(health) >= 256 {
+			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+				Buildings: protocol.IntSeq{Items: append([]int32(nil), health...)},
+			})
+			health = health[:0]
+		}
+		if i > 0 && i%128 == 0 {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if len(health) > 0 {
+		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+			Buildings: protocol.IntSeq{Items: health},
+		})
+	}
+	syncCoreItemsToConn(conn, wld)
+}
+
+func buildSyncSnapshotFromModel(model *world.WorldModel) []world.BuildSyncState {
+	if model == nil || len(model.Tiles) == 0 {
+		return nil
+	}
+	out := make([]world.BuildSyncState, 0, len(model.Tiles)/4)
+	for i := range model.Tiles {
+		tile := model.Tiles[i]
+		if tile.Block <= 0 {
+			continue
+		}
+		if tile.Team == 0 && tile.Build == nil {
+			continue
+		}
+		hp := float32(1000)
+		if tile.Build != nil && tile.Build.Health > 0 {
+			hp = tile.Build.Health
+		}
+		out = append(out, world.BuildSyncState{
+			Pos:      protocol.PackPoint2(int32(tile.X), int32(tile.Y)),
+			X:        int32(tile.X),
+			Y:        int32(tile.Y),
+			BlockID:  int16(tile.Block),
+			Team:     tile.Team,
+			Rotation: tile.Rotation,
+			Health:   hp,
+		})
+	}
+	return out
+}
+
+func tileAtPacked(model *world.WorldModel, pos int32) (*world.Tile, bool) {
+	if model == nil {
+		return nil, false
+	}
+	pt := protocol.UnpackPoint2(pos)
+	if !model.InBounds(int(pt.X), int(pt.Y)) {
+		return nil, false
+	}
+	tile, err := model.TileAt(int(pt.X), int(pt.Y))
+	if err != nil || tile == nil {
+		return nil, false
+	}
+	return tile, true
+}
+
+func decodeTileConfigValue(tile *world.Tile) (any, bool) {
+	if tile == nil || tile.Build == nil || len(tile.Build.Config) == 0 {
+		return nil, false
+	}
+	value, err := protocol.ReadObject(protocol.NewReader(tile.Build.Config), false, nil)
+	if err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
+func sameTileConfigAtPos(baseModel, liveModel *world.WorldModel, pos int32) bool {
+	baseTile, baseOK := tileAtPacked(baseModel, pos)
+	liveTile, liveOK := tileAtPacked(liveModel, pos)
+	if !baseOK && !liveOK {
+		return true
+	}
+	var baseCfg, liveCfg []byte
+	if baseOK && baseTile != nil && baseTile.Build != nil {
+		baseCfg = baseTile.Build.Config
+	}
+	if liveOK && liveTile != nil && liveTile.Build != nil {
+		liveCfg = liveTile.Build.Config
+	}
+	return bytes.Equal(baseCfg, liveCfg)
+}
+
+func sameBuildHealth(a, b float32) bool {
+	return math.Abs(float64(a-b)) < 0.01
+}
+
+func runtimeRulesTeamID(value string) (int, bool) {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return 0, false
+	}
+	if n, err := strconv.Atoi(value); err == nil && n >= 0 && n <= 255 {
+		return n, true
+	}
+	switch value {
+	case "derelict":
+		return 0, true
+	case "sharded":
+		return 1, true
+	case "crux":
+		return 2, true
+	case "malis":
+		return 3, true
+	case "green":
+		return 4, true
+	case "blue":
+		return 5, true
+	default:
+		return 0, false
+	}
+}
+
+func buildRuntimeRulesRaw(wld *world.World) string {
+	merged := map[string]any{}
+	if wld == nil {
+		return "{}"
+	}
+	if model := wld.Model(); model != nil && model.Tags != nil {
+		if raw := strings.TrimSpace(model.Tags["rules"]); raw != "" {
+			_ = json.Unmarshal([]byte(raw), &merged)
+		}
+	}
+	rulesMgr := wld.GetRulesManager()
+	if rulesMgr == nil {
+		if raw, err := json.Marshal(merged); err == nil && len(raw) > 0 {
+			return string(raw)
+		}
+		return "{}"
+	}
+	rules := rulesMgr.Get()
+	if rules == nil {
+		if raw, err := json.Marshal(merged); err == nil && len(raw) > 0 {
+			return string(raw)
+		}
+		return "{}"
+	}
+
+	merged["allowEditRules"] = rules.AllowEditRules
+	merged["infiniteResources"] = rules.InfiniteResources
+	merged["waves"] = rules.Waves
+	merged["waveTimer"] = rules.WaveTimer
+	merged["waveSpacing"] = rules.WaveSpacing
+	merged["pvp"] = rules.Pvp
+	merged["attackMode"] = rules.AttackMode
+	merged["editor"] = rules.Editor
+	merged["instantBuild"] = rules.InstantBuild
+	merged["buildCostMultiplier"] = rules.BuildCostMultiplier
+	merged["buildSpeedMultiplier"] = rules.BuildSpeedMultiplier
+	merged["unitBuildSpeedMultiplier"] = rules.UnitBuildSpeedMultiplier
+	merged["deconstructRefundMultiplier"] = rules.DeconstructRefundMultiplier
+	merged["enemyCoreBuildRadius"] = rules.EnemyCoreBuildRadius
+	merged["defaultTeam"] = int(resolveConfiguredTeamID(rules.DefaultTeam, world.TeamID(1)))
+	merged["waveTeam"] = int(resolveConfiguredTeamID(rules.WaveTeam, world.TeamID(2)))
+
+	teamsAny, _ := merged["teams"].(map[string]any)
+	if teamsAny == nil {
+		teamsAny = map[string]any{}
+	}
+	for key, tr := range rules.Teams {
+		teamID, ok := runtimeRulesTeamID(key)
+		if !ok {
+			continue
+		}
+		entryKey := strconv.Itoa(teamID)
+		entry, _ := teamsAny[entryKey].(map[string]any)
+		if entry == nil {
+			entry = map[string]any{}
+		}
+		entry["fillItems"] = tr.FillItems
+		entry["infiniteResources"] = tr.InfiniteResources
+		entry["buildSpeedMultiplier"] = tr.BuildSpeedMultiplier
+		entry["unitBuildSpeedMultiplier"] = tr.UnitBuildSpeedMultiplier
+		teamsAny[entryKey] = entry
+	}
+	if len(teamsAny) > 0 {
+		merged["teams"] = teamsAny
+	}
+
+	raw, err := json.Marshal(merged)
+	if err != nil || len(raw) == 0 {
+		return "{}"
+	}
+	return string(raw)
+}
+
+func syncRulesToConn(conn *netserver.Conn, wld *world.World) {
+	if conn == nil || wld == nil {
+		return
+	}
+	raw := buildRuntimeRulesRaw(wld)
+	_ = conn.SendAsync(&protocol.Remote_NetClient_setRules_107{
+		Rules: protocol.Rules{Raw: raw},
+	})
 }
 
 func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte) {
@@ -4405,10 +5109,6 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 	bestDist2 := int(^uint(0) >> 1)
 	bestPos := protocol.Point2{}
 	bestName := ""
-	fallbackRank := -1
-	fallbackDist2 := int(^uint(0) >> 1)
-	fallbackPos := protocol.Point2{}
-	fallbackName := ""
 	for i := range model.Tiles {
 		t := &model.Tiles[i]
 		if t == nil || t.Block <= 0 {
@@ -4422,12 +5122,6 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 		dx := t.X - refX
 		dy := t.Y - refY
 		dist2 := dx*dx + dy*dy
-		if rank > fallbackRank || (rank == fallbackRank && dist2 < fallbackDist2) {
-			fallbackRank = rank
-			fallbackDist2 = dist2
-			fallbackPos = protocol.Point2{X: int32(t.X), Y: int32(t.Y)}
-			fallbackName = blockName
-		}
 		owner := t.Team
 		if owner == 0 && t.Build != nil && t.Build.Team != 0 {
 			owner = t.Build.Team
@@ -4443,30 +5137,116 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 		}
 	}
 	if bestRank < 0 {
-		if fallbackRank >= 0 {
-			return fallbackPos, fallbackName, true
-		}
 		return protocol.Point2{}, "", false
 	}
 	return bestPos, bestName, true
 }
 
 func resolveConnTeam(c *netserver.Conn, wld *world.World) world.TeamID {
-	const defaultTeam = world.TeamID(1)
-	if c == nil || wld == nil {
+	defaultTeam := resolveDefaultPlayerTeam(wld)
+	if c == nil {
+		return defaultTeam
+	}
+	if teamID := c.TeamID(); teamID != 0 {
+		return world.TeamID(teamID)
+	}
+	if wld == nil {
 		return defaultTeam
 	}
 	if unitID := c.UnitID(); unitID != 0 {
-		if ent, ok := wld.GetEntity(unitID); ok && ent.Team == defaultTeam {
+		if ent, ok := wld.GetEntity(unitID); ok && ent.Team != 0 {
 			return ent.Team
 		}
 	}
 	if playerID := c.PlayerID(); playerID != 0 {
-		if ent, ok := wld.GetEntity(playerID); ok && ent.Team == defaultTeam {
+		if ent, ok := wld.GetEntity(playerID); ok && ent.Team != 0 {
 			return ent.Team
 		}
 	}
 	return defaultTeam
+}
+
+func assignConnTeamVanilla(srv *netserver.Server, wld *world.World, c *netserver.Conn) world.TeamID {
+	defaultTeam := resolveDefaultPlayerTeam(wld)
+	if wld == nil {
+		return defaultTeam
+	}
+	rulesMgr := wld.GetRulesManager()
+	if rulesMgr == nil {
+		return defaultTeam
+	}
+	rules := rulesMgr.Get()
+	if rules == nil || !rules.Pvp {
+		return defaultTeam
+	}
+	waveTeam := resolveConfiguredTeamID(rules.WaveTeam, world.TeamID(2))
+	counts := map[byte]int{}
+	if srv != nil {
+		counts = srv.ConnectedTeamCounts()
+	}
+	if c != nil {
+		if current := c.TeamID(); counts[current] > 0 {
+			counts[current]--
+		}
+	}
+	bestTeam := world.TeamID(0)
+	bestCount := int(^uint(0) >> 1)
+	for rawTeam := 1; rawTeam <= 255; rawTeam++ {
+		team := world.TeamID(rawTeam)
+		if team == waveTeam && rules.Waves {
+			continue
+		}
+		if _, ok := resolveTeamCoreTile(wld, team, protocol.Point2{}); !ok {
+			continue
+		}
+		count := counts[byte(team)]
+		if count < bestCount || (count == bestCount && (bestTeam == 0 || team < bestTeam)) {
+			bestTeam = team
+			bestCount = count
+		}
+	}
+	if bestTeam != 0 {
+		return bestTeam
+	}
+	return defaultTeam
+}
+
+func resolveDefaultPlayerTeam(wld *world.World) world.TeamID {
+	const fallback = world.TeamID(1)
+	if wld == nil {
+		return fallback
+	}
+	rulesMgr := wld.GetRulesManager()
+	if rulesMgr == nil {
+		return fallback
+	}
+	rules := rulesMgr.Get()
+	if rules == nil {
+		return fallback
+	}
+	return resolveConfiguredTeamID(rules.DefaultTeam, fallback)
+}
+
+func resolveConfiguredTeamID(value string, fallback world.TeamID) world.TeamID {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "derelict":
+		return world.TeamID(0)
+	case "sharded":
+		return world.TeamID(1)
+	case "crux":
+		return world.TeamID(2)
+	case "malis":
+		return world.TeamID(3)
+	case "green":
+		return world.TeamID(4)
+	case "blue":
+		return world.TeamID(5)
+	default:
+		if n, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && n >= 0 && n <= 255 {
+			return world.TeamID(n)
+		}
+		return fallback
+	}
 }
 
 func resolveBuildOwner(c *netserver.Conn) int32 {
@@ -4502,8 +5282,20 @@ type worldCache struct {
 	path      string
 	modTime   time.Time
 	data      []byte
+	baseModel *world.WorldModel
 	corePos   protocol.Point2
 	corePosOK bool
+}
+
+func (c *worldCache) invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.path = ""
+	c.modTime = time.Time{}
+	c.data = nil
+	c.baseModel = nil
+	c.corePos = protocol.Point2{}
+	c.corePosOK = false
 }
 
 func (c *worldCache) get(path string) ([]byte, error) {
@@ -4525,8 +5317,12 @@ func (c *worldCache) get(path string) ([]byte, error) {
 	c.path = path
 	c.modTime = info.ModTime()
 	c.data = data
+	c.baseModel = nil
 	c.corePosOK = false
 	if strings.HasSuffix(strings.ToLower(path), ".msav") || strings.HasSuffix(strings.ToLower(path), ".msav.msav") {
+		if model, merr := worldstream.LoadWorldModelFromMSAV(path, nil); merr == nil {
+			c.baseModel = model
+		}
 		if pos, ok, err := worldstream.FindCoreTileFromMSAV(path); err == nil {
 			c.corePos = pos
 			c.corePosOK = ok
@@ -4540,6 +5336,18 @@ func (c *worldCache) spawnPos(path string) (protocol.Point2, bool, error) {
 		return protocol.Point2{}, false, err
 	}
 	return c.corePos, c.corePosOK, nil
+}
+
+func (c *worldCache) model(path string) *world.WorldModel {
+	if c == nil {
+		return nil
+	}
+	if _, err := c.get(path); err != nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.baseModel
 }
 
 func loadWorldStream(path string) ([]byte, error) {

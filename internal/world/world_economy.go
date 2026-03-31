@@ -4,7 +4,11 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"mdt-server/internal/protocol"
 )
+
+const unlimitedUnitCap = int32(^uint32(0) >> 1)
 
 type factoryProfile struct {
 	UnitName string
@@ -54,6 +58,15 @@ var factoryByName = map[string]factoryProfile{
 	"naval-factory":  {UnitName: "risso", TimeSec: 12, Cost: []ItemStack{{Item: 0, Amount: 12}, {Item: 1, Amount: 20}}},
 }
 
+var blockUnitCapModifierByName = map[string]int32{
+	"core-shard":      8,
+	"core-foundation": 16,
+	"core-nucleus":    24,
+	"core-bastion":    15,
+	"core-citadel":    15,
+	"core-acropolis":  15,
+}
+
 func (w *World) stepFactoryProduction(delta time.Duration) {
 	if w.model == nil {
 		return
@@ -76,6 +89,12 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 			continue
 		}
 		st := w.factoryStates[pos]
+		payloadState := w.payloadStateLocked(pos)
+		if payloadState.Payload != nil {
+			st.Progress = 0
+			w.factoryStates[pos] = st
+			continue
+		}
 		if st.UnitType <= 0 {
 			if typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(prof.UnitName)); ok {
 				st.UnitType = typeID
@@ -83,7 +102,7 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 				continue
 			}
 		}
-		if st.Progress <= 0 && !w.consumeItemsForTeam(t.Team, prof.Cost) {
+		if st.Progress <= 0 && !w.consumeProductionCost(t.Team, prof.Cost) {
 			continue
 		}
 		rules := w.rulesMgr.Get()
@@ -91,29 +110,192 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 		if rules != nil && rules.UnitBuildSpeedMultiplier > 0 {
 			speedMul = rules.UnitBuildSpeedMultiplier
 		}
+		if rules != nil {
+			if tr, ok := rules.teamRule(t.Team); ok && tr.UnitBuildSpeedMultiplier > 0 {
+				speedMul *= tr.UnitBuildSpeedMultiplier
+			}
+		}
 		st.Progress += dt * speedMul
 		if st.Progress >= prof.TimeSec {
-			st.Progress -= prof.TimeSec
-			ent := RawEntity{
-				TypeID:      st.UnitType,
-				X:           float32(t.X*8 + 4),
-				Y:           float32(t.Y*8 + 4),
-				Team:        t.Team,
-				Health:      100,
-				MaxHealth:   100,
-				Shield:      25,
-				ShieldMax:   25,
-				ShieldRegen: 4.5,
-				Armor:       1.5,
-				SlowMul:     1,
-				RuntimeInit: true,
-			}
-			w.applyUnitTypeDef(&ent)
-			w.applyWeaponProfile(&ent)
-			w.model.AddEntity(ent)
+			st.Progress = 0
+			payload := w.newFactoryUnitPayloadLocked(t, st.UnitType)
+			payloadState.Payload = payload
+			payloadState.Move = 0
+			payloadState.Work = 0
+			payloadState.Exporting = false
+			w.syncPayloadTileLocked(t, payload)
 		}
 		w.factoryStates[pos] = st
 	}
+}
+
+func (w *World) newFactoryUnitPayloadLocked(tile *Tile, typeID int16) *payloadData {
+	if tile == nil || tile.Build == nil || typeID <= 0 {
+		return nil
+	}
+	unit := w.newProducedUnitEntityLocked(typeID, tile.Build.Team, float32(tile.X*8+4), float32(tile.Y*8+4), float32(tile.Rotation)*90)
+	sync := &protocol.UnitEntitySync{
+		Controller:     nil,
+		Health:         unit.Health,
+		Rotation:       unit.Rotation,
+		Shield:         unit.Shield,
+		SpawnedByCore:  false,
+		TeamID:         byte(unit.Team),
+		TypeID:         unit.TypeID,
+		UpdateBuilding: false,
+		Vel:            protocol.Vec2{X: unit.VelX, Y: unit.VelY},
+		X:              unit.X,
+		Y:              unit.Y,
+	}
+	writer := protocol.NewWriter()
+	_ = protocol.WritePayload(writer, protocol.UnitPayload{
+		ClassID: sync.ClassID(),
+		Entity:  sync,
+	})
+	return &payloadData{
+		Kind:       payloadKindUnit,
+		UnitTypeID: typeID,
+		Serialized: append([]byte(nil), writer.Bytes()...),
+	}
+}
+
+func (w *World) newProducedUnitEntityLocked(typeID int16, team TeamID, x, y, rotation float32) RawEntity {
+	ent := RawEntity{
+		TypeID:      typeID,
+		X:           x,
+		Y:           y,
+		Rotation:    rotation,
+		Team:        team,
+		Health:      100,
+		MaxHealth:   100,
+		Shield:      25,
+		ShieldMax:   25,
+		ShieldRegen: 4.5,
+		Armor:       1.5,
+		SlowMul:     1,
+		RuntimeInit: true,
+	}
+	w.applyUnitTypeDef(&ent)
+	w.applyWeaponProfile(&ent)
+	return ent
+}
+
+func (w *World) teamUnitCountsByTypeLocked() map[TeamID]map[int16]int32 {
+	out := make(map[TeamID]map[int16]int32)
+	if w.model == nil {
+		return out
+	}
+	for _, e := range w.model.Entities {
+		if e.Team == 0 || e.TypeID <= 0 {
+			continue
+		}
+		if _, ok := out[e.Team]; !ok {
+			out[e.Team] = map[int16]int32{}
+		}
+		out[e.Team][e.TypeID]++
+	}
+	return out
+}
+
+func (w *World) canCreateUnitLocked(team TeamID, typeID int16, rules *Rules, teamCaps map[TeamID]int32, unitCounts map[TeamID]map[int16]int32) bool {
+	if team == 0 || typeID <= 0 {
+		return false
+	}
+	if !w.unitTypeUsesCapLocked(typeID) {
+		return true
+	}
+	cap, ok := teamCaps[team]
+	if !ok {
+		cap = w.teamUnitCapLocked(team, rules)
+	}
+	if cap >= unlimitedUnitCap {
+		return true
+	}
+	return unitCounts[team][typeID] < cap
+}
+
+func (w *World) teamUnitCountByTypeLocked(team TeamID, typeID int16) int32 {
+	if w.model == nil || team == 0 || typeID <= 0 {
+		return 0
+	}
+	var count int32
+	for _, e := range w.model.Entities {
+		if e.Team == team && e.TypeID == typeID {
+			count++
+		}
+	}
+	return count
+}
+
+func (w *World) unitTypeUsesCapLocked(typeID int16) bool {
+	name := normalizeUnitName(w.unitNamesByID[typeID])
+	switch name {
+	case "", "block":
+		return name != "block"
+	default:
+		return true
+	}
+}
+
+func (w *World) teamUnitCapsLocked(rules *Rules) map[TeamID]int32 {
+	out := make(map[TeamID]int32, len(w.teamBuildingTiles))
+	for team := range w.teamBuildingTiles {
+		out[team] = w.teamUnitCapLocked(team, rules)
+	}
+	return out
+}
+
+func (w *World) teamUnitCapLocked(team TeamID, rules *Rules) int32 {
+	if team == 0 {
+		return 0
+	}
+	if rules != nil {
+		if waveTeam, ok := parseTeamKey(rules.WaveTeam); ok && waveTeam == team && !rules.Pvp {
+			return unlimitedUnitCap
+		}
+		if rules.DisableUnitCap {
+			return unlimitedUnitCap
+		}
+	}
+	modifier := int32(0)
+	for _, pos := range w.teamBuildingTiles[team] {
+		if pos < 0 || w.model == nil || int(pos) >= len(w.model.Tiles) {
+			continue
+		}
+		tile := &w.model.Tiles[pos]
+		if tile.Build == nil || tile.Block == 0 {
+			continue
+		}
+		modifier += blockUnitCapModifierByName[w.blockNameByID(int16(tile.Block))]
+	}
+	base := int32(0)
+	if rules != nil {
+		base = rules.UnitCap
+		if rules.UnitCapVariable {
+			base += modifier
+		}
+	}
+	if base < 0 {
+		return 0
+	}
+	return base
+}
+
+func (w *World) consumeProductionCost(team TeamID, cost []ItemStack) bool {
+	if team == 0 || len(cost) == 0 {
+		return true
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return true
+	}
+	if w.consumeItemsFromTeamCoresLocked(team, cost) {
+		return true
+	}
+	if !w.syntheticTeamInventoryEnabledLocked(team) {
+		return false
+	}
+	return w.consumeItemsForTeam(team, cost)
 }
 
 func (w *World) blockNameByID(blockID int16) string {
@@ -130,15 +312,17 @@ func (w *World) ensureTeamInventory(team TeamID) {
 	if _, ok := w.teamItems[team]; ok {
 		return
 	}
-	inv := map[ItemID]int32{
-		0: 3000, // copper
-		1: 2000, // lead
-		2: 1000, // graphite
-		3: 500,  // silicon
+	inv := map[ItemID]int32{}
+	seed := int32(0)
+	if rules := w.rulesMgr.Get(); rules != nil && rules.teamFillItems(team) {
+		// Vanilla fillItems writes full stacks into real cores every logic update.
+		// The synthetic inventory exists only as a no-core fallback, so a large seed
+		// is sufficient here without leaking fake stock into normal player cores.
+		seed = 1_000_000
 	}
-	seed := int32(3000)
-	if rules := w.rulesMgr.Get(); rules != nil && rules.FillItems > 0 {
-		seed = rules.FillItems
+	if seed <= 0 {
+		w.teamItems[team] = inv
+		return
 	}
 	addItemSeed := func(item ItemID) {
 		if item < 0 {
@@ -164,6 +348,17 @@ func (w *World) ensureTeamInventory(team TeamID) {
 		}
 	}
 	w.teamItems[team] = inv
+}
+
+func (w *World) syntheticTeamInventoryEnabledLocked(team TeamID) bool {
+	if team == 0 {
+		return false
+	}
+	if inv, ok := w.teamItems[team]; ok && len(inv) > 0 {
+		return true
+	}
+	rules := w.rulesMgr.Get()
+	return rules != nil && rules.teamFillItems(team)
 }
 
 func (w *World) teamCoreBuildsLocked(team TeamID) []*Building {
@@ -306,14 +501,14 @@ func (w *World) consumeBuildCost(team TeamID, blockID int16) bool {
 		return true
 	}
 	rules := w.rulesMgr.Get()
-	if rules != nil && rules.InfiniteResources {
+	if rules != nil && rules.teamInfiniteResources(team) {
 		return true
 	}
 	scaled := w.scaleBuildCost(cost, rules)
 	if w.consumeItemsFromTeamCoresLocked(team, scaled) {
 		return true
 	}
-	if w.teamHasCoreLocked(team) {
+	if w.teamHasCoreLocked(team) || !w.syntheticTeamInventoryEnabledLocked(team) {
 		return false
 	}
 	return w.consumeItemsForTeam(team, scaled)
@@ -365,9 +560,10 @@ func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *R
 	if builderSpeed > 0 {
 		base /= builderSpeed
 	}
-	// Avoid same-tick place+finish for ultra-cheap blocks; keep visible progression.
-	if base < 0.35 {
-		base = 0.35
+	// Vanilla allows very cheap blocks like conveyors to complete in ~1 tick.
+	// Keep only a one-tick minimum to avoid divide-by-zero / same-packet corruption.
+	if base < float32(1.0/60.0) {
+		base = float32(1.0 / 60.0)
 	}
 	return base
 }
@@ -383,15 +579,15 @@ func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
 	}
 	refundMul := float32(0.5)
 	rules := w.rulesMgr.Get()
-	if rules != nil && rules.InfiniteResources {
+	team := tile.Team
+	if team == 0 {
+		team = fallbackTeam
+	}
+	if rules != nil && rules.teamInfiniteResources(team) {
 		return
 	}
 	if rules != nil && rules.DeconstructRefundMultiplier > 0 {
 		refundMul = rules.DeconstructRefundMultiplier
-	}
-	team := tile.Team
-	if team == 0 {
-		team = fallbackTeam
 	}
 	refundStacks := make([]ItemStack, 0, len(cost))
 	for _, s := range cost {
@@ -405,6 +601,9 @@ func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
 		refundStacks = append(refundStacks, ItemStack{Item: s.Item, Amount: refund})
 	}
 	if w.addItemsToTeamCoresLocked(team, refundStacks) {
+		return
+	}
+	if !w.syntheticTeamInventoryEnabledLocked(team) {
 		return
 	}
 	w.ensureTeamInventory(team)
@@ -423,7 +622,7 @@ func (w *World) refundBuildCost(team TeamID, blockID int16, mul float32) {
 		return
 	}
 	rules := w.rulesMgr.Get()
-	if rules != nil && rules.InfiniteResources {
+	if rules != nil && rules.teamInfiniteResources(team) {
 		return
 	}
 	refundStacks := make([]ItemStack, 0, len(cost))
@@ -438,6 +637,9 @@ func (w *World) refundBuildCost(team TeamID, blockID int16, mul float32) {
 		refundStacks = append(refundStacks, ItemStack{Item: s.Item, Amount: add})
 	}
 	if w.addItemsToTeamCoresLocked(team, refundStacks) {
+		return
+	}
+	if !w.syntheticTeamInventoryEnabledLocked(team) {
 		return
 	}
 	w.ensureTeamInventory(team)
@@ -465,8 +667,11 @@ func (w *World) consumeItemsForTeam(team TeamID, cost []ItemStack) bool {
 		return true
 	}
 	rules := w.rulesMgr.Get()
-	if rules != nil && rules.InfiniteResources {
+	if rules != nil && rules.teamInfiniteResources(team) {
 		return true
+	}
+	if !w.syntheticTeamInventoryEnabledLocked(team) {
+		return false
 	}
 	w.ensureTeamInventory(team)
 	inv := w.teamItems[team]

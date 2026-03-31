@@ -25,6 +25,10 @@ type UnitProfile struct {
 	TargetPriority  string  `json:"target_priority"`
 	HitBuildings    bool    `json:"hit_buildings"`
 	PreferBuildings bool    `json:"prefer_buildings"`
+	ShootEffect     string  `json:"shoot_effect,omitempty"`
+	SmokeEffect     string  `json:"smoke_effect,omitempty"`
+	HitEffect       string  `json:"hit_effect,omitempty"`
+	DespawnEffect   string  `json:"despawn_effect,omitempty"`
 }
 
 type TurretProfile struct {
@@ -41,6 +45,10 @@ type TurretProfile struct {
 	TargetGround   bool    `json:"target_ground"`
 	TargetPriority string  `json:"target_priority"`
 	HitBuildings   bool    `json:"hit_buildings"`
+	ShootEffect    string  `json:"shoot_effect,omitempty"`
+	SmokeEffect    string  `json:"smoke_effect,omitempty"`
+	HitEffect      string  `json:"hit_effect,omitempty"`
+	DespawnEffect  string  `json:"despawn_effect,omitempty"`
 }
 
 type BlockRequirementProfile struct {
@@ -134,6 +142,8 @@ var (
 	reBuildTime    = regexp.MustCompile(`(?m)\bbuildTime\s*=\s*([^;]+);`)
 	reReqWith      = regexp.MustCompile(`(?s)requirements\s*\([^;]*?\bwith\s*\((.*?)\)\s*\)\s*;`)
 	reReqItemPair  = regexp.MustCompile(`Items\.(\w+)\s*,\s*([^,\)]+)`)
+	reEffectAssign = regexp.MustCompile(`(?m)\b(shootEffect|smokeEffect|hitEffect|despawnEffect)\s*=\s*(?:[A-Za-z0-9_$.]+\.)?([A-Za-z0-9_]+)\s*;`)
+	reEffectChain  = regexp.MustCompile(`(?m)\b(shootEffect|smokeEffect|hitEffect|despawnEffect)\s*=\s*(shootEffect|smokeEffect|hitEffect|despawnEffect)\s*=\s*(?:[A-Za-z0-9_$.]+\.)?([A-Za-z0-9_]+)\s*;`)
 )
 
 type itemMeta struct {
@@ -281,6 +291,10 @@ func extractUnits(src string) []UnitProfile {
 			TargetPriority:  "nearest",
 			HitBuildings:    p.targetGround,
 			PreferBuildings: false,
+			ShootEffect:     p.shootEffect,
+			SmokeEffect:     p.smokeEffect,
+			HitEffect:       p.hitEffect,
+			DespawnEffect:   p.despawnEffect,
 		})
 	}
 	return out
@@ -366,6 +380,18 @@ func mergeParsedProfiles(a, b parsedProfile) parsedProfile {
 	if b.fireMode == "beam" {
 		a.fireMode = "beam"
 	}
+	if strings.TrimSpace(b.shootEffect) != "" {
+		a.shootEffect = b.shootEffect
+	}
+	if strings.TrimSpace(b.smokeEffect) != "" {
+		a.smokeEffect = b.smokeEffect
+	}
+	if strings.TrimSpace(b.hitEffect) != "" {
+		a.hitEffect = b.hitEffect
+	}
+	if strings.TrimSpace(b.despawnEffect) != "" {
+		a.despawnEffect = b.despawnEffect
+	}
 	return a
 }
 
@@ -401,21 +427,29 @@ func extractTurrets(src string) []TurretProfile {
 			TargetGround:   p.targetGround,
 			TargetPriority: "nearest",
 			HitBuildings:   p.targetGround,
+			ShootEffect:    p.shootEffect,
+			SmokeEffect:    p.smokeEffect,
+			HitEffect:      p.hitEffect,
+			DespawnEffect:  p.despawnEffect,
 		})
 	}
 	return out
 }
 
 type parsedProfile struct {
-	fireMode     string
-	rangeV       float32
-	damage       float32
-	interval     float32
-	bulletSpeed  float32
-	splashRadius float32
-	pierce       int32
-	targetAir    bool
-	targetGround bool
+	fireMode      string
+	rangeV        float32
+	damage        float32
+	interval      float32
+	bulletSpeed   float32
+	splashRadius  float32
+	pierce        int32
+	targetAir     bool
+	targetGround  bool
+	shootEffect   string
+	smokeEffect   string
+	hitEffect     string
+	despawnEffect string
 }
 
 func parseCommonProfile(body string) parsedProfile {
@@ -474,7 +508,47 @@ func parseCommonProfile(body string) parsedProfile {
 	if m := reTargetGround.FindAllStringSubmatch(body, -1); len(m) > 0 {
 		p.targetGround = strings.EqualFold(m[len(m)-1][1], "true")
 	}
+	parseEffectNames(body, &p)
 	return p
+}
+
+func parseEffectNames(body string, p *parsedProfile) {
+	if p == nil || strings.TrimSpace(body) == "" {
+		return
+	}
+	for _, m := range reEffectChain.FindAllStringSubmatch(body, -1) {
+		if len(m) < 4 {
+			continue
+		}
+		assignEffectName(p, m[1], m[3])
+		assignEffectName(p, m[2], m[3])
+	}
+	for _, m := range reEffectAssign.FindAllStringSubmatch(body, -1) {
+		if len(m) < 3 {
+			continue
+		}
+		assignEffectName(p, m[1], m[2])
+	}
+}
+
+func assignEffectName(p *parsedProfile, key, name string) {
+	if p == nil {
+		return
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" || name == "none" {
+		return
+	}
+	switch strings.TrimSpace(key) {
+	case "shootEffect":
+		p.shootEffect = name
+	case "smokeEffect":
+		p.smokeEffect = name
+	case "hitEffect":
+		p.hitEffect = name
+	case "despawnEffect":
+		p.despawnEffect = name
+	}
 }
 
 func maxCtorSpeedDamage(body string) (float32, float32, bool) {

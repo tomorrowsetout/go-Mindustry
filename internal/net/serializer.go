@@ -73,6 +73,14 @@ func compatPacketID(p protocol.Packet) (byte, bool) {
 		return 137, true
 	case *protocol.Remote_Tile_removeTile_130:
 		return 130, true
+	case *protocol.Remote_Menus_infoPopup_50:
+		return 53, true
+	case *protocol.Remote_Menus_infoPopup_49:
+		return 54, true
+	case *protocol.Remote_Menus_infoPopupReliable_52:
+		return 55, true
+	case *protocol.Remote_Menus_infoPopupReliable_51:
+		return 56, true
 	case *protocol.Remote_InputHandler_unitClear_91:
 		return 133, true
 	}
@@ -87,6 +95,16 @@ var reRemoteSuffixID = regexp.MustCompile(`_(\d+)$`)
 func officialPacketID(p protocol.Packet) (byte, bool) {
 	if p == nil {
 		return 0, false
+	}
+	switch p.(type) {
+	case *protocol.Remote_Menus_infoPopup_50:
+		return 53, true
+	case *protocol.Remote_Menus_infoPopup_49:
+		return 54, true
+	case *protocol.Remote_Menus_infoPopupReliable_52:
+		return 55, true
+	case *protocol.Remote_Menus_infoPopupReliable_51:
+		return 56, true
 	}
 	t := reflect.TypeOf(p)
 	if t.Kind() == reflect.Ptr {

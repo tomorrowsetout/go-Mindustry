@@ -8,6 +8,8 @@ import (
 )
 
 type TeamRule struct {
+	FillItems                bool    `json:"fillItems"`
+	InfiniteResources        bool    `json:"infiniteResources"`
 	BuildSpeedMultiplier     float32 `json:"buildSpeedMultiplier"`
 	UnitBuildSpeedMultiplier float32 `json:"unitBuildSpeedMultiplier"`
 }
@@ -245,6 +247,42 @@ func (r *Rules) teamRule(team TeamID) (TeamRule, bool) {
 	return TeamRule{}, false
 }
 
+func (r *Rules) setTeamRule(team TeamID, tr TeamRule) {
+	if r == nil || team == 0 {
+		return
+	}
+	if r.Teams == nil {
+		r.Teams = map[string]TeamRule{}
+	}
+	r.Teams[strconv.Itoa(int(team))] = tr
+}
+
+func (r *Rules) teamFillItems(team TeamID) bool {
+	if r == nil || team == 0 {
+		return false
+	}
+	if tr, ok := r.teamRule(team); ok {
+		return tr.FillItems
+	}
+	return false
+}
+
+func (r *Rules) teamInfiniteResources(team TeamID) bool {
+	if r == nil {
+		return false
+	}
+	if r.InfiniteResources {
+		return true
+	}
+	if team == 0 {
+		return false
+	}
+	if tr, ok := r.teamRule(team); ok {
+		return tr.InfiniteResources
+	}
+	return false
+}
+
 func parseTeamKey(v string) (TeamID, bool) {
 	v = strings.TrimSpace(strings.ToLower(v))
 	if v == "" {
@@ -268,6 +306,127 @@ func parseTeamKey(v string) (TeamID, bool) {
 		return TeamID(5), true
 	}
 	return 0, false
+}
+
+func normalizeGamemodeName(v string) string {
+	v = strings.TrimSpace(strings.ToLower(v))
+	switch v {
+	case "survival", "sandbox", "attack", "pvp", "editor":
+		return v
+	case "生存":
+		return "survival"
+	case "沙盒":
+		return "sandbox"
+	case "进攻":
+		return "attack"
+	case "编辑", "编辑器":
+		return "editor"
+	}
+	return ""
+}
+
+func applyGamemodeDefaults(dst *Rules, mode string) {
+	if dst == nil {
+		return
+	}
+	switch normalizeGamemodeName(mode) {
+	case "sandbox":
+		dst.InfiniteResources = true
+		dst.AllowEditRules = true
+		dst.Waves = true
+		dst.WaveTimer = false
+	case "attack":
+		dst.AttackMode = true
+		dst.WaveTimer = true
+		dst.WaveSpacing = 120.0
+		waveTeam, ok := parseTeamKey(dst.WaveTeam)
+		if !ok {
+			waveTeam = TeamID(2)
+		}
+		tr, _ := dst.teamRule(waveTeam)
+		tr.InfiniteResources = true
+		dst.setTeamRule(waveTeam, tr)
+	case "pvp":
+		dst.Pvp = true
+		dst.EnemyCoreBuildRadius = 600.0
+		dst.BuildCostMultiplier = 1.0
+		dst.BuildSpeedMultiplier = 1.0
+		dst.UnitBuildSpeedMultiplier = 2.0
+		dst.AttackMode = true
+	case "editor":
+		dst.InfiniteResources = true
+		dst.InstantBuild = true
+		dst.Editor = true
+		dst.Waves = false
+		dst.WaveTimer = false
+	}
+}
+
+func inferGamemodeFromModel(m *WorldModel, overlay *Rules) string {
+	if overlay != nil {
+		if mode := normalizeGamemodeName(overlay.ModeName); mode != "" {
+			return mode
+		}
+		if overlay.Editor {
+			return "editor"
+		}
+		if overlay.Pvp {
+			return "pvp"
+		}
+		if overlay.AttackMode {
+			return "attack"
+		}
+		if overlay.InfiniteResources || overlay.AllowEditRules {
+			if overlay.InstantBuild {
+				return "editor"
+			}
+			return "sandbox"
+		}
+	}
+	if m != nil && m.Tags != nil {
+		for _, key := range []string{"gamemode", "mode", "modeName"} {
+			if mode := normalizeGamemodeName(m.Tags[key]); mode != "" {
+				return mode
+			}
+		}
+	}
+	if mapHasMultipleCoreTeams(m) {
+		return "attack"
+	}
+	return "survival"
+}
+
+func mapHasMultipleCoreTeams(m *WorldModel) bool {
+	if m == nil || len(m.Tiles) == 0 {
+		return false
+	}
+	teams := map[TeamID]struct{}{}
+	for i := range m.Tiles {
+		tile := &m.Tiles[i]
+		if tile.Team == 0 || tile.Block <= 0 {
+			continue
+		}
+		if !isCoreBlockForModel(m, tile.Block) {
+			continue
+		}
+		teams[tile.Team] = struct{}{}
+		if len(teams) > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func isCoreBlockForModel(m *WorldModel, block BlockID) bool {
+	switch block {
+	case 339, 340, 341, 342, 343, 344:
+		return true
+	}
+	if m == nil || len(m.BlockNames) == 0 {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(m.BlockNames[int16(block)]))
+	return strings.HasPrefix(name, "core-")
 }
 
 // DefaultRules 默认规则（原版等价）
@@ -505,11 +664,14 @@ func (rm *RulesManager) Clone() *Rules {
 
 // 来自 JSON 字符串解析
 func (rm *RulesManager) FromJSON(data []byte) error {
-	var rules Rules
-	if err := json.Unmarshal(data, &rules); err != nil {
+	base := DefaultRules()
+	if base == nil {
+		base = &Rules{}
+	}
+	if err := json.Unmarshal(data, base); err != nil {
 		return err
 	}
-	rm.Set(&rules)
+	rm.Set(base)
 	return nil
 }
 

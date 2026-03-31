@@ -1,5 +1,0 @@
-{"timestamp":"2026-03-29T13:56:34.9824046Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":2078058543,"uuid":"VT5IjAs8Vu0AAAAA34/WtA==","ip":"120.206.173.232","name":"AlnSheimer"}
-{"timestamp":"2026-03-29T13:56:34.996885Z","kind":"world_handshake_sent","conn_id":2078058543,"uuid":"VT5IjAs8Vu0AAAAA34/WtA==","ip":"120.206.173.232","name":"AlnSheimer"}
-{"timestamp":"2026-03-29T13:56:36.3224861Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":2078058543,"uuid":"VT5IjAs8Vu0AAAAA34/WtA==","ip":"120.206.173.232","name":"AlnSheimer"}
-{"timestamp":"2026-03-29T13:57:30.4897013Z","kind":"tcp_closed","detail":"EOF","conn_id":2078058543,"uuid":"VT5IjAs8Vu0AAAAA34/WtA==","ip":"120.206.173.232","name":"AlnSheimer"}
-{"timestamp":"2026-03-29T13:57:30.4944969Z","kind":"connection_close","trigger":13,"conn_id":2078058543,"uuid":"VT5IjAs8Vu0AAAAA34/WtA==","ip":"120.206.173.232:32971","name":"AlnSheimer"}

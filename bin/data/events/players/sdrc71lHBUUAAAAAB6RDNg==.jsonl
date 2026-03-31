@@ -1,0 +1,5 @@
+{"timestamp":"2026-03-30T09:57:14.001006Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":1335671310,"uuid":"sdrc71lHBUUAAAAAB6RDNg==","ip":"2.79.6.119"}
+{"timestamp":"2026-03-30T09:57:14.0269789Z","kind":"world_handshake_sent","conn_id":1335671310,"uuid":"sdrc71lHBUUAAAAAB6RDNg==","ip":"2.79.6.119","name":"[scarlet]（未绑定）[]Veltrix ♕[gray]47427[]"}
+{"timestamp":"2026-03-30T09:57:16.9238028Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":1335671310,"uuid":"sdrc71lHBUUAAAAAB6RDNg==","ip":"2.79.6.119","name":"[scarlet]（未绑定）[]Veltrix ♕[gray]47427[]"}
+{"timestamp":"2026-03-30T09:57:44.0818814Z","kind":"tcp_closed","detail":"EOF","conn_id":1335671310,"uuid":"sdrc71lHBUUAAAAAB6RDNg==","ip":"2.79.6.119","name":"[scarlet]（未绑定）[]Veltrix ♕[gray]47427[]"}
+{"timestamp":"2026-03-30T09:57:44.0861818Z","kind":"connection_close","trigger":13,"conn_id":1335671310,"uuid":"sdrc71lHBUUAAAAAB6RDNg==","ip":"2.79.6.119:33926","name":"[scarlet]（未绑定）[]Veltrix ♕[gray]47427[]"}

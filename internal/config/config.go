@@ -105,11 +105,13 @@ type SundriesConfig struct {
 }
 
 type ControlConfig struct {
-	ReloadIntervalSec        int
-	ReloadLogEnabled         bool
-	TranslatedConnLogEnabled bool
-	PublicConnUUIDEnabled    bool
-	PublicConnUUIDFile       string
+	ReloadIntervalSec               int
+	ReloadLogEnabled                bool
+	TranslatedConnLogEnabled        bool
+	PublicConnUUIDEnabled           bool
+	PublicConnUUIDFile              string
+	ConnUUIDAutoCreateEnabled       bool
+	PlayerIdentityAutoCreateEnabled bool
 }
 
 type DevelopmentConfig struct {
@@ -117,6 +119,7 @@ type DevelopmentConfig struct {
 	PacketRecvEventsEnabled    bool
 	PacketSendEventsEnabled    bool
 	TerminalPlayerLogsEnabled  bool
+	TerminalPlayerUUIDEnabled  bool
 	RespawnCoreLogsEnabled     bool
 	RespawnUnitLogsEnabled     bool
 	RespawnPacketLogsEnabled   bool
@@ -144,6 +147,49 @@ type PersonalizationConfig struct {
 	PlayerNameColorEnabled        bool
 	PlayerNamePrefix              string
 	PlayerNameSuffix              string
+	PlayerBindPrefixEnabled       bool
+	PlayerBoundPrefix             string
+	PlayerUnboundPrefix           string
+	PlayerTitleEnabled            bool
+	PlayerIdentityFile            string
+	PlayerBindSource              string
+	PlayerBindAPIURL              string
+	PlayerBindAPITimeoutMs        int
+	PlayerBindAPICacheSec         int
+	PlayerConnIDSuffixEnabled     bool
+	PlayerConnIDSuffixFormat      string
+}
+
+type StatusBarConfig struct {
+	Enabled              bool
+	RefreshIntervalSec   int
+	PopupDurationMs      int
+	Align                string
+	Top                  int
+	Left                 int
+	Bottom               int
+	Right                int
+	PopupID              string
+	HeaderEnabled        bool
+	HeaderText           string
+	ServerNameEnabled    bool
+	ServerNameFormat     string
+	PerformanceEnabled   bool
+	PerformanceFormat    string
+	CurrentMapEnabled    bool
+	CurrentMapFormat     string
+	GameTimeEnabled      bool
+	GameTimeFormat       string
+	PlayerCountEnabled   bool
+	PlayerCountFormat    string
+	WelcomeEnabled       bool
+	WelcomeFormat        string
+	QQGroupEnabled       bool
+	QQGroupText          string
+	QQGroupFormat        string
+	CustomMessageEnabled bool
+	CustomMessageText    string
+	CustomMessageFormat  string
 }
 
 type BuildingLogConfig struct {
@@ -156,6 +202,7 @@ type Config struct {
 	Control         ControlConfig
 	Development     DevelopmentConfig
 	Personalization PersonalizationConfig
+	StatusBar       StatusBarConfig
 	Building        BuildingLogConfig
 	Sundries        SundriesConfig
 	Runtime         RuntimeConfig
@@ -239,11 +286,9 @@ func parseINI(path string) (iniData, error) {
 			section = strings.ToLower(strings.TrimSpace(s[1:i]))
 			continue
 		}
-		if i := strings.IndexAny(s, ";#"); i >= 0 {
-			s = strings.TrimSpace(s[:i])
-			if s == "" {
-				continue
-			}
+		s = stripINIComment(s)
+		if s == "" {
+			continue
 		}
 		eq := strings.Index(s, "=")
 		if eq <= 0 {
@@ -254,6 +299,30 @@ func parseINI(path string) (iniData, error) {
 		out.set(section, key, val)
 	}
 	return out, nil
+}
+
+func stripINIComment(s string) string {
+	inBracket := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '[':
+			inBracket = true
+		case ']':
+			inBracket = false
+		case ';', '#':
+			if inBracket {
+				continue
+			}
+			if i == 0 {
+				return ""
+			}
+			prev := s[i-1]
+			if prev == ' ' || prev == '\t' {
+				return strings.TrimSpace(s[:i])
+			}
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 func boolToIni(v bool) string {
@@ -316,6 +385,12 @@ func applyINI(cfg *Config, d iniData) {
 	if v, ok := d.get("config", "public_conn_uuid_file"); ok && strings.TrimSpace(v) != "" {
 		cfg.Control.PublicConnUUIDFile = strings.TrimSpace(v)
 	}
+	if v, ok := d.get("config", "conn_uuid_auto_create"); ok {
+		cfg.Control.ConnUUIDAutoCreateEnabled = asBool(v, cfg.Control.ConnUUIDAutoCreateEnabled)
+	}
+	if v, ok := d.get("config", "player_identity_auto_create"); ok {
+		cfg.Control.PlayerIdentityAutoCreateEnabled = asBool(v, cfg.Control.PlayerIdentityAutoCreateEnabled)
+	}
 	if v, ok := d.get("development", "packet_events_enabled"); ok {
 		enabled := asBool(v, cfg.Development.PacketEventsEnabled)
 		cfg.Development.PacketEventsEnabled = enabled
@@ -330,6 +405,9 @@ func applyINI(cfg *Config, d iniData) {
 	}
 	if v, ok := d.get("development", "terminal_player_logs_enabled"); ok {
 		cfg.Development.TerminalPlayerLogsEnabled = asBool(v, cfg.Development.TerminalPlayerLogsEnabled)
+	}
+	if v, ok := d.get("development", "terminal_player_uuid_enabled"); ok {
+		cfg.Development.TerminalPlayerUUIDEnabled = asBool(v, cfg.Development.TerminalPlayerUUIDEnabled)
 	}
 	if v, ok := d.get("development", "respawn_core_logs_enabled"); ok {
 		cfg.Development.RespawnCoreLogsEnabled = asBool(v, cfg.Development.RespawnCoreLogsEnabled)
@@ -402,6 +480,126 @@ func applyINI(cfg *Config, d iniData) {
 	}
 	if v, ok := d.get("personalization", "player_name_suffix"); ok {
 		cfg.Personalization.PlayerNameSuffix = v
+	}
+	if v, ok := d.get("personalization", "player_bind_prefix_enabled"); ok {
+		cfg.Personalization.PlayerBindPrefixEnabled = asBool(v, cfg.Personalization.PlayerBindPrefixEnabled)
+	}
+	if v, ok := d.get("personalization", "player_bound_prefix"); ok {
+		cfg.Personalization.PlayerBoundPrefix = v
+	}
+	if v, ok := d.get("personalization", "player_unbound_prefix"); ok {
+		cfg.Personalization.PlayerUnboundPrefix = v
+	}
+	if v, ok := d.get("personalization", "player_title_enabled"); ok {
+		cfg.Personalization.PlayerTitleEnabled = asBool(v, cfg.Personalization.PlayerTitleEnabled)
+	}
+	if v, ok := d.get("personalization", "player_identity_file"); ok && strings.TrimSpace(v) != "" {
+		cfg.Personalization.PlayerIdentityFile = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("personalization", "player_bind_source"); ok && strings.TrimSpace(v) != "" {
+		cfg.Personalization.PlayerBindSource = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("personalization", "player_bind_api_url"); ok {
+		cfg.Personalization.PlayerBindAPIURL = v
+	}
+	if v, ok := d.get("personalization", "player_bind_api_timeout_ms"); ok {
+		cfg.Personalization.PlayerBindAPITimeoutMs = asInt(v, cfg.Personalization.PlayerBindAPITimeoutMs)
+	}
+	if v, ok := d.get("personalization", "player_bind_api_cache_sec"); ok {
+		cfg.Personalization.PlayerBindAPICacheSec = asInt(v, cfg.Personalization.PlayerBindAPICacheSec)
+	}
+	if v, ok := d.get("personalization", "player_conn_id_suffix_enabled"); ok {
+		cfg.Personalization.PlayerConnIDSuffixEnabled = asBool(v, cfg.Personalization.PlayerConnIDSuffixEnabled)
+	}
+	if v, ok := d.get("personalization", "player_conn_id_suffix_format"); ok {
+		cfg.Personalization.PlayerConnIDSuffixFormat = v
+	}
+	if v, ok := d.get("status_bar", "enabled"); ok {
+		cfg.StatusBar.Enabled = asBool(v, cfg.StatusBar.Enabled)
+	}
+	if v, ok := d.get("status_bar", "refresh_interval_sec"); ok {
+		cfg.StatusBar.RefreshIntervalSec = asInt(v, cfg.StatusBar.RefreshIntervalSec)
+	}
+	if v, ok := d.get("status_bar", "popup_duration_ms"); ok {
+		cfg.StatusBar.PopupDurationMs = asInt(v, cfg.StatusBar.PopupDurationMs)
+	}
+	if v, ok := d.get("status_bar", "align"); ok && strings.TrimSpace(v) != "" {
+		cfg.StatusBar.Align = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("status_bar", "top"); ok {
+		cfg.StatusBar.Top = asInt(v, cfg.StatusBar.Top)
+	}
+	if v, ok := d.get("status_bar", "left"); ok {
+		cfg.StatusBar.Left = asInt(v, cfg.StatusBar.Left)
+	}
+	if v, ok := d.get("status_bar", "bottom"); ok {
+		cfg.StatusBar.Bottom = asInt(v, cfg.StatusBar.Bottom)
+	}
+	if v, ok := d.get("status_bar", "right"); ok {
+		cfg.StatusBar.Right = asInt(v, cfg.StatusBar.Right)
+	}
+	if v, ok := d.get("status_bar", "popup_id"); ok {
+		cfg.StatusBar.PopupID = v
+	}
+	if v, ok := d.get("status_bar", "header_enabled"); ok {
+		cfg.StatusBar.HeaderEnabled = asBool(v, cfg.StatusBar.HeaderEnabled)
+	}
+	if v, ok := d.get("status_bar", "header_text"); ok {
+		cfg.StatusBar.HeaderText = v
+	}
+	if v, ok := d.get("status_bar", "server_name_enabled"); ok {
+		cfg.StatusBar.ServerNameEnabled = asBool(v, cfg.StatusBar.ServerNameEnabled)
+	}
+	if v, ok := d.get("status_bar", "server_name_format"); ok {
+		cfg.StatusBar.ServerNameFormat = v
+	}
+	if v, ok := d.get("status_bar", "performance_enabled"); ok {
+		cfg.StatusBar.PerformanceEnabled = asBool(v, cfg.StatusBar.PerformanceEnabled)
+	}
+	if v, ok := d.get("status_bar", "performance_format"); ok {
+		cfg.StatusBar.PerformanceFormat = v
+	}
+	if v, ok := d.get("status_bar", "current_map_enabled"); ok {
+		cfg.StatusBar.CurrentMapEnabled = asBool(v, cfg.StatusBar.CurrentMapEnabled)
+	}
+	if v, ok := d.get("status_bar", "current_map_format"); ok {
+		cfg.StatusBar.CurrentMapFormat = v
+	}
+	if v, ok := d.get("status_bar", "game_time_enabled"); ok {
+		cfg.StatusBar.GameTimeEnabled = asBool(v, cfg.StatusBar.GameTimeEnabled)
+	}
+	if v, ok := d.get("status_bar", "game_time_format"); ok {
+		cfg.StatusBar.GameTimeFormat = v
+	}
+	if v, ok := d.get("status_bar", "player_count_enabled"); ok {
+		cfg.StatusBar.PlayerCountEnabled = asBool(v, cfg.StatusBar.PlayerCountEnabled)
+	}
+	if v, ok := d.get("status_bar", "player_count_format"); ok {
+		cfg.StatusBar.PlayerCountFormat = v
+	}
+	if v, ok := d.get("status_bar", "welcome_enabled"); ok {
+		cfg.StatusBar.WelcomeEnabled = asBool(v, cfg.StatusBar.WelcomeEnabled)
+	}
+	if v, ok := d.get("status_bar", "welcome_format"); ok {
+		cfg.StatusBar.WelcomeFormat = v
+	}
+	if v, ok := d.get("status_bar", "qq_group_enabled"); ok {
+		cfg.StatusBar.QQGroupEnabled = asBool(v, cfg.StatusBar.QQGroupEnabled)
+	}
+	if v, ok := d.get("status_bar", "qq_group_text"); ok {
+		cfg.StatusBar.QQGroupText = v
+	}
+	if v, ok := d.get("status_bar", "qq_group_format"); ok {
+		cfg.StatusBar.QQGroupFormat = v
+	}
+	if v, ok := d.get("status_bar", "custom_message_enabled"); ok {
+		cfg.StatusBar.CustomMessageEnabled = asBool(v, cfg.StatusBar.CustomMessageEnabled)
+	}
+	if v, ok := d.get("status_bar", "custom_message_text"); ok {
+		cfg.StatusBar.CustomMessageText = v
+	}
+	if v, ok := d.get("status_bar", "custom_message_format"); ok {
+		cfg.StatusBar.CustomMessageFormat = v
 	}
 	if v, ok := d.get("config", "api_file"); ok && strings.TrimSpace(v) != "" {
 		cfg.API.ConfigFile = strings.TrimSpace(v)
@@ -599,11 +797,14 @@ func makeINI(cfg Config) iniData {
 	d.set("config", "translated_conn_log_enabled", boolToIni(cfg.Control.TranslatedConnLogEnabled))
 	d.set("config", "public_conn_uuid_enabled", boolToIni(cfg.Control.PublicConnUUIDEnabled))
 	d.set("config", "public_conn_uuid_file", cfg.Control.PublicConnUUIDFile)
+	d.set("config", "conn_uuid_auto_create", boolToIni(cfg.Control.ConnUUIDAutoCreateEnabled))
+	d.set("config", "player_identity_auto_create", boolToIni(cfg.Control.PlayerIdentityAutoCreateEnabled))
 	d.set("config", "api_file", cfg.API.ConfigFile)
 	d.set("development", "packet_events_enabled", boolToIni(cfg.Development.PacketEventsEnabled))
 	d.set("development", "packet_recv_events_enabled", boolToIni(cfg.Development.PacketRecvEventsEnabled))
 	d.set("development", "packet_send_events_enabled", boolToIni(cfg.Development.PacketSendEventsEnabled))
 	d.set("development", "terminal_player_logs_enabled", boolToIni(cfg.Development.TerminalPlayerLogsEnabled))
+	d.set("development", "terminal_player_uuid_enabled", boolToIni(cfg.Development.TerminalPlayerUUIDEnabled))
 	d.set("development", "respawn_core_logs_enabled", boolToIni(cfg.Development.RespawnCoreLogsEnabled))
 	d.set("development", "respawn_unit_logs_enabled", boolToIni(cfg.Development.RespawnUnitLogsEnabled))
 	d.set("development", "respawn_packet_logs_enabled", boolToIni(cfg.Development.RespawnPacketLogsEnabled))
@@ -628,6 +829,46 @@ func makeINI(cfg Config) iniData {
 	d.set("personalization", "player_name_color_enabled", boolToIni(cfg.Personalization.PlayerNameColorEnabled))
 	d.set("personalization", "player_name_prefix", cfg.Personalization.PlayerNamePrefix)
 	d.set("personalization", "player_name_suffix", cfg.Personalization.PlayerNameSuffix)
+	d.set("personalization", "player_bind_prefix_enabled", boolToIni(cfg.Personalization.PlayerBindPrefixEnabled))
+	d.set("personalization", "player_bound_prefix", cfg.Personalization.PlayerBoundPrefix)
+	d.set("personalization", "player_unbound_prefix", cfg.Personalization.PlayerUnboundPrefix)
+	d.set("personalization", "player_title_enabled", boolToIni(cfg.Personalization.PlayerTitleEnabled))
+	d.set("personalization", "player_identity_file", cfg.Personalization.PlayerIdentityFile)
+	d.set("personalization", "player_bind_source", cfg.Personalization.PlayerBindSource)
+	d.set("personalization", "player_bind_api_url", cfg.Personalization.PlayerBindAPIURL)
+	d.set("personalization", "player_bind_api_timeout_ms", strconv.Itoa(cfg.Personalization.PlayerBindAPITimeoutMs))
+	d.set("personalization", "player_bind_api_cache_sec", strconv.Itoa(cfg.Personalization.PlayerBindAPICacheSec))
+	d.set("personalization", "player_conn_id_suffix_enabled", boolToIni(cfg.Personalization.PlayerConnIDSuffixEnabled))
+	d.set("personalization", "player_conn_id_suffix_format", cfg.Personalization.PlayerConnIDSuffixFormat)
+	d.set("status_bar", "enabled", boolToIni(cfg.StatusBar.Enabled))
+	d.set("status_bar", "refresh_interval_sec", strconv.Itoa(cfg.StatusBar.RefreshIntervalSec))
+	d.set("status_bar", "popup_duration_ms", strconv.Itoa(cfg.StatusBar.PopupDurationMs))
+	d.set("status_bar", "align", cfg.StatusBar.Align)
+	d.set("status_bar", "top", strconv.Itoa(cfg.StatusBar.Top))
+	d.set("status_bar", "left", strconv.Itoa(cfg.StatusBar.Left))
+	d.set("status_bar", "bottom", strconv.Itoa(cfg.StatusBar.Bottom))
+	d.set("status_bar", "right", strconv.Itoa(cfg.StatusBar.Right))
+	d.set("status_bar", "popup_id", cfg.StatusBar.PopupID)
+	d.set("status_bar", "header_enabled", boolToIni(cfg.StatusBar.HeaderEnabled))
+	d.set("status_bar", "header_text", cfg.StatusBar.HeaderText)
+	d.set("status_bar", "server_name_enabled", boolToIni(cfg.StatusBar.ServerNameEnabled))
+	d.set("status_bar", "server_name_format", cfg.StatusBar.ServerNameFormat)
+	d.set("status_bar", "performance_enabled", boolToIni(cfg.StatusBar.PerformanceEnabled))
+	d.set("status_bar", "performance_format", cfg.StatusBar.PerformanceFormat)
+	d.set("status_bar", "current_map_enabled", boolToIni(cfg.StatusBar.CurrentMapEnabled))
+	d.set("status_bar", "current_map_format", cfg.StatusBar.CurrentMapFormat)
+	d.set("status_bar", "game_time_enabled", boolToIni(cfg.StatusBar.GameTimeEnabled))
+	d.set("status_bar", "game_time_format", cfg.StatusBar.GameTimeFormat)
+	d.set("status_bar", "player_count_enabled", boolToIni(cfg.StatusBar.PlayerCountEnabled))
+	d.set("status_bar", "player_count_format", cfg.StatusBar.PlayerCountFormat)
+	d.set("status_bar", "welcome_enabled", boolToIni(cfg.StatusBar.WelcomeEnabled))
+	d.set("status_bar", "welcome_format", cfg.StatusBar.WelcomeFormat)
+	d.set("status_bar", "qq_group_enabled", boolToIni(cfg.StatusBar.QQGroupEnabled))
+	d.set("status_bar", "qq_group_text", cfg.StatusBar.QQGroupText)
+	d.set("status_bar", "qq_group_format", cfg.StatusBar.QQGroupFormat)
+	d.set("status_bar", "custom_message_enabled", boolToIni(cfg.StatusBar.CustomMessageEnabled))
+	d.set("status_bar", "custom_message_text", cfg.StatusBar.CustomMessageText)
+	d.set("status_bar", "custom_message_format", cfg.StatusBar.CustomMessageFormat)
 	d.set("building", "log_enabled", boolToIni(cfg.Building.Enabled))
 	d.set("building", "translated_enabled", boolToIni(cfg.Building.Translated))
 	d.set("sundries", "detailed_log_max_mb", strconv.Itoa(cfg.Sundries.DetailedLogMaxMB))
@@ -762,6 +1003,7 @@ func writeDevelopmentINI(path string, cfg Config) error {
 	fmt.Fprintf(&buf, "packet_recv_events_enabled = %s ; 记录 packet_recv 事件\n", boolToIni(cfg.Development.PacketRecvEventsEnabled))
 	fmt.Fprintf(&buf, "packet_send_events_enabled = %s ; 记录 packet_send 事件\n", boolToIni(cfg.Development.PacketSendEventsEnabled))
 	fmt.Fprintf(&buf, "terminal_player_logs_enabled = %s ; 控制终端中的 [终端] 玩家进入/退出游戏日志\n", boolToIni(cfg.Development.TerminalPlayerLogsEnabled))
+	fmt.Fprintf(&buf, "terminal_player_uuid_enabled = %s ; 控制终端中的 [终端] 玩家进入/退出游戏日志是否显示真实 UUID\n", boolToIni(cfg.Development.TerminalPlayerUUIDEnabled))
 	fmt.Fprintf(&buf, "respawn_core_logs_enabled = %s ; 控制终端中的 [重生] 核心、出生点、未找到核心日志\n", boolToIni(cfg.Development.RespawnCoreLogsEnabled))
 	fmt.Fprintf(&buf, "respawn_unit_logs_enabled = %s ; 控制终端中的 [重生] 出生单位、建造速度日志\n", boolToIni(cfg.Development.RespawnUnitLogsEnabled))
 	fmt.Fprintf(&buf, "respawn_packet_logs_enabled = %s ; 控制终端中的 [重生] 玩家出生包发送日志\n", boolToIni(cfg.Development.RespawnPacketLogsEnabled))
@@ -819,6 +1061,59 @@ func writePersonalizationINI(path string, cfg Config) error {
 	fmt.Fprintf(&buf, "player_name_color_enabled = %s ; 控制终端中玩家名称是否保留颜色显示\n", boolToIni(cfg.Personalization.PlayerNameColorEnabled))
 	fmt.Fprintf(&buf, "player_name_prefix = %s ; 玩家显示名前缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerNamePrefix)
 	fmt.Fprintf(&buf, "player_name_suffix = %s ; 玩家显示名后缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerNameSuffix)
+	fmt.Fprintf(&buf, "player_bind_prefix_enabled = %s ; 控制是否在玩家名前显示 已绑定/未绑定 前缀\n", boolToIni(cfg.Personalization.PlayerBindPrefixEnabled))
+	fmt.Fprintf(&buf, "player_bound_prefix = %s ; 已绑定玩家名前缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerBoundPrefix)
+	fmt.Fprintf(&buf, "player_unbound_prefix = %s ; 未绑定玩家名前缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerUnboundPrefix)
+	fmt.Fprintf(&buf, "player_title_enabled = %s ; 控制是否读取 json/player_identity.json 中的自定义头衔\n", boolToIni(cfg.Personalization.PlayerTitleEnabled))
+	fmt.Fprintf(&buf, "player_identity_file = %s ; 玩家身份配置文件，只读，按 conn_uuid 识别，位于 configs 目录内\n", cfg.Personalization.PlayerIdentityFile)
+	fmt.Fprintf(&buf, "player_bind_source = %s ; 玩家绑定识别来源：internal=读取身份文件，api=通过接口查询 yes/no\n", cfg.Personalization.PlayerBindSource)
+	fmt.Fprintf(&buf, "player_bind_api_url = %s ; 绑定查询接口地址，使用 {id} 代替 conn_uuid\n", cfg.Personalization.PlayerBindAPIURL)
+	fmt.Fprintf(&buf, "player_bind_api_timeout_ms = %d ; 绑定查询接口超时（毫秒）\n", cfg.Personalization.PlayerBindAPITimeoutMs)
+	fmt.Fprintf(&buf, "player_bind_api_cache_sec = %d ; 绑定查询接口缓存秒数，避免频繁请求\n", cfg.Personalization.PlayerBindAPICacheSec)
+	fmt.Fprintf(&buf, "player_conn_id_suffix_enabled = %s ; 控制是否在玩家名后显示 connID/conn_uuid 后缀\n", boolToIni(cfg.Personalization.PlayerConnIDSuffixEnabled))
+	fmt.Fprintf(&buf, "player_conn_id_suffix_format = %s ; 玩家名后缀格式，使用 {id} 代表 connID 或 conn_uuid\n", cfg.Personalization.PlayerConnIDSuffixFormat)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
+}
+
+func writeStatusBarINI(path string, cfg Config) error {
+	var buf bytes.Buffer
+	buf.WriteString("; 服务器状态栏配置\n")
+	buf.WriteString("; 使用 infoPopup 在左上区域持续刷新显示，可贴近下一波下方\n")
+	buf.WriteString("; 1 = 开启，0 = 关闭\n")
+	buf.WriteString("; 可用占位符: {server_name} {cpu_percent} {memory_mb} {players} {qq_group} {message} {uptime} {current_map} {game_time} {player_name}\n\n")
+	buf.WriteString("[status_bar]\n")
+	fmt.Fprintf(&buf, "enabled = %s ; 状态栏总开关\n", boolToIni(cfg.StatusBar.Enabled))
+	fmt.Fprintf(&buf, "refresh_interval_sec = %d ; 刷新周期（秒）\n", cfg.StatusBar.RefreshIntervalSec)
+	fmt.Fprintf(&buf, "popup_duration_ms = %d ; 单次显示持续时间（毫秒），建议略大于刷新周期\n", cfg.StatusBar.PopupDurationMs)
+	fmt.Fprintf(&buf, "align = %s ; 对齐方式：top_left / top / center / bottom_right 等\n", cfg.StatusBar.Align)
+	fmt.Fprintf(&buf, "top = %d ; 顶部偏移，156 常见状态栏位置\n", cfg.StatusBar.Top)
+	fmt.Fprintf(&buf, "left = %d ; 左侧偏移\n", cfg.StatusBar.Left)
+	fmt.Fprintf(&buf, "bottom = %d ; 底部偏移\n", cfg.StatusBar.Bottom)
+	fmt.Fprintf(&buf, "right = %d ; 右侧偏移\n", cfg.StatusBar.Right)
+	fmt.Fprintf(&buf, "popup_id = %s ; 保留字段，当前使用无 ID popup 包\n", cfg.StatusBar.PopupID)
+	fmt.Fprintf(&buf, "header_enabled = %s ; 标题行开关\n", boolToIni(cfg.StatusBar.HeaderEnabled))
+	fmt.Fprintf(&buf, "header_text = %s ; 标题行内容\n", cfg.StatusBar.HeaderText)
+	fmt.Fprintf(&buf, "server_name_enabled = %s ; 服务器名称行开关\n", boolToIni(cfg.StatusBar.ServerNameEnabled))
+	fmt.Fprintf(&buf, "server_name_format = %s ; 服务器名称行模板\n", cfg.StatusBar.ServerNameFormat)
+	fmt.Fprintf(&buf, "performance_enabled = %s ; CPU/内存行开关\n", boolToIni(cfg.StatusBar.PerformanceEnabled))
+	fmt.Fprintf(&buf, "performance_format = %s ; CPU/进程内存行模板\n", cfg.StatusBar.PerformanceFormat)
+	fmt.Fprintf(&buf, "current_map_enabled = %s ; 当前地图行开关\n", boolToIni(cfg.StatusBar.CurrentMapEnabled))
+	fmt.Fprintf(&buf, "current_map_format = %s ; 当前地图行模板\n", cfg.StatusBar.CurrentMapFormat)
+	fmt.Fprintf(&buf, "game_time_enabled = %s ; 本局游戏时间行开关\n", boolToIni(cfg.StatusBar.GameTimeEnabled))
+	fmt.Fprintf(&buf, "game_time_format = %s ; 本局游戏时间行模板\n", cfg.StatusBar.GameTimeFormat)
+	fmt.Fprintf(&buf, "player_count_enabled = %s ; 在线人数行开关\n", boolToIni(cfg.StatusBar.PlayerCountEnabled))
+	fmt.Fprintf(&buf, "player_count_format = %s ; 在线人数行模板\n", cfg.StatusBar.PlayerCountFormat)
+	fmt.Fprintf(&buf, "welcome_enabled = %s ; 欢迎语行开关\n", boolToIni(cfg.StatusBar.WelcomeEnabled))
+	fmt.Fprintf(&buf, "welcome_format = %s ; 欢迎语行模板\n", cfg.StatusBar.WelcomeFormat)
+	fmt.Fprintf(&buf, "qq_group_enabled = %s ; QQ群行开关\n", boolToIni(cfg.StatusBar.QQGroupEnabled))
+	fmt.Fprintf(&buf, "qq_group_text = %s ; QQ群号码或说明\n", cfg.StatusBar.QQGroupText)
+	fmt.Fprintf(&buf, "qq_group_format = %s ; QQ群行模板\n", cfg.StatusBar.QQGroupFormat)
+	fmt.Fprintf(&buf, "custom_message_enabled = %s ; 自定义文案行开关\n", boolToIni(cfg.StatusBar.CustomMessageEnabled))
+	fmt.Fprintf(&buf, "custom_message_text = %s ; 自定义文案内容\n", cfg.StatusBar.CustomMessageText)
+	fmt.Fprintf(&buf, "custom_message_format = %s ; 自定义文案行模板\n", cfg.StatusBar.CustomMessageFormat)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -860,12 +1155,96 @@ func normalize(cfg *Config) {
 	if strings.TrimSpace(cfg.Control.PublicConnUUIDFile) == "" {
 		cfg.Control.PublicConnUUIDFile = filepath.Join("json", "conn_uuid.json")
 	}
+	if strings.TrimSpace(cfg.Personalization.PlayerIdentityFile) == "" {
+		cfg.Personalization.PlayerIdentityFile = filepath.Join("json", "player_identity.json")
+	}
+	if strings.TrimSpace(cfg.Personalization.PlayerBindSource) == "" {
+		cfg.Personalization.PlayerBindSource = "internal"
+	}
+	cfg.Personalization.PlayerBindSource = strings.ToLower(strings.TrimSpace(cfg.Personalization.PlayerBindSource))
+	if cfg.Personalization.PlayerBindSource != "api" {
+		cfg.Personalization.PlayerBindSource = "internal"
+	}
+	if cfg.Personalization.PlayerBindAPITimeoutMs <= 0 {
+		cfg.Personalization.PlayerBindAPITimeoutMs = 1500
+	}
+	if cfg.Personalization.PlayerBindAPICacheSec <= 0 {
+		cfg.Personalization.PlayerBindAPICacheSec = 30
+	}
+	if strings.TrimSpace(cfg.Personalization.PlayerConnIDSuffixFormat) == "" {
+		cfg.Personalization.PlayerConnIDSuffixFormat = " [gray]{id}[]"
+	}
+	cfg.Personalization.PlayerBoundPrefix = normalizeWrappedMindustryLiteral(cfg.Personalization.PlayerBoundPrefix)
+	cfg.Personalization.PlayerUnboundPrefix = normalizeWrappedMindustryLiteral(cfg.Personalization.PlayerUnboundPrefix)
+	if cfg.StatusBar.RefreshIntervalSec <= 0 {
+		cfg.StatusBar.RefreshIntervalSec = 2
+	}
+	if cfg.StatusBar.PopupDurationMs <= 0 {
+		cfg.StatusBar.PopupDurationMs = 2200
+	}
+	if strings.TrimSpace(cfg.StatusBar.Align) == "" {
+		cfg.StatusBar.Align = "top_left"
+	}
+	if strings.TrimSpace(cfg.StatusBar.PopupID) == "" {
+		cfg.StatusBar.PopupID = "server-status-bar"
+	}
+	if strings.TrimSpace(cfg.StatusBar.HeaderText) == "" {
+		cfg.StatusBar.HeaderText = "[accent]服务器状态[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.ServerNameFormat) == "" {
+		cfg.StatusBar.ServerNameFormat = "[green]服务器: [white]{server_name}[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.PerformanceFormat) == "" {
+		cfg.StatusBar.PerformanceFormat = "[green]性能: [white]CPU {cpu_percent}%[] [white]进程内存 {memory_mb} MB[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.CurrentMapFormat) == "" {
+		cfg.StatusBar.CurrentMapFormat = "[green]当前地图: [white]{current_map}[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.GameTimeFormat) == "" {
+		cfg.StatusBar.GameTimeFormat = "[green]本局时间: [white]{game_time}[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.PlayerCountFormat) == "" {
+		cfg.StatusBar.PlayerCountFormat = "[green]在线人数: [white]{players}[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.WelcomeFormat) == "" {
+		cfg.StatusBar.WelcomeFormat = "[gold]欢迎玩家 {player_name} 来到镜像物语[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.QQGroupFormat) == "" {
+		cfg.StatusBar.QQGroupFormat = "[green]QQ群: [white]{qq_group}[]"
+	}
+	if strings.TrimSpace(cfg.StatusBar.CustomMessageFormat) == "" {
+		cfg.StatusBar.CustomMessageFormat = "[gold]{message}[]"
+	}
 	if cfg.Sundries.DetailedLogMaxMB <= 0 {
 		cfg.Sundries.DetailedLogMaxMB = 2
 	}
 	if cfg.Sundries.DetailedLogMaxFiles <= 0 {
 		cfg.Sundries.DetailedLogMaxFiles = 100
 	}
+}
+
+func normalizeWrappedMindustryLiteral(v string) string {
+	v = strings.TrimSpace(v)
+	if !strings.HasPrefix(v, "[") || !strings.Contains(v, "][") || !strings.HasSuffix(v, "[]") {
+		return v
+	}
+	firstEnd := strings.Index(v, "]")
+	if firstEnd <= 0 || firstEnd >= len(v)-3 {
+		return v
+	}
+	colorTag := v[:firstEnd+1]
+	body := strings.TrimSpace(v[firstEnd+1:])
+	if strings.HasPrefix(body, "[") && strings.HasSuffix(body, "[]") {
+		secondEnd := strings.Index(body, "]")
+		if secondEnd > 0 && secondEnd < len(body)-2 {
+			text := body[1:secondEnd]
+			rest := body[secondEnd+1:]
+			if rest == "[]" {
+				return colorTag + text + "[]"
+			}
+		}
+	}
+	return v
 }
 
 func sidecarPaths(cfgPath string, cfg Config) map[string]string {
@@ -885,6 +1264,7 @@ func sidecarPaths(cfgPath string, cfg Config) map[string]string {
 		"sundries":        filepath.Join(dir, "Sundries.ini"),
 		"development":     filepath.Join(dir, "Development mode.ini"),
 		"personalization": filepath.Join(dir, "Personalization.ini"),
+		"status_bar":      filepath.Join(dir, "Status bar.ini"),
 		"data":            filepath.Join(dir, "data.ini"),  // backward compatibility
 		"paths":           filepath.Join(dir, "paths.ini"), // backward compatibility
 		"api":             apiPath,
@@ -911,7 +1291,7 @@ func loadSidecars(cfgPath string, cfg *Config) error {
 		applyINI(cfg, d)
 		return nil
 	}
-	for _, key := range []string{"core", "server", "sync", "misc", "sundries", "development", "personalization", "data", "paths", "api"} {
+	for _, key := range []string{"core", "server", "sync", "misc", "sundries", "development", "personalization", "status_bar", "data", "paths", "api"} {
 		if err := loadOne(paths[key]); err != nil {
 			return err
 		}
@@ -942,6 +1322,9 @@ func saveSidecars(cfgPath string, cfg Config, d iniData) error {
 	if err := writePersonalizationINI(paths["personalization"], cfg); err != nil {
 		return err
 	}
+	if err := writeStatusBarINI(paths["status_bar"], cfg); err != nil {
+		return err
+	}
 	if err := writeINI(paths["api"], []string{"api"}, d, "api settings"); err != nil {
 		return err
 	}
@@ -951,17 +1334,20 @@ func saveSidecars(cfgPath string, cfg Config, d iniData) error {
 func Default() Config {
 	return Config{
 		Control: ControlConfig{
-			ReloadIntervalSec:        5,
-			ReloadLogEnabled:         false,
-			TranslatedConnLogEnabled: true,
-			PublicConnUUIDEnabled:    true,
-			PublicConnUUIDFile:       filepath.Join("json", "conn_uuid.json"),
+			ReloadIntervalSec:               5,
+			ReloadLogEnabled:                false,
+			TranslatedConnLogEnabled:        true,
+			PublicConnUUIDEnabled:           true,
+			PublicConnUUIDFile:              filepath.Join("json", "conn_uuid.json"),
+			ConnUUIDAutoCreateEnabled:       true,
+			PlayerIdentityAutoCreateEnabled: true,
 		},
 		Development: DevelopmentConfig{
 			PacketEventsEnabled:        false,
 			PacketRecvEventsEnabled:    false,
 			PacketSendEventsEnabled:    false,
 			TerminalPlayerLogsEnabled:  true,
+			TerminalPlayerUUIDEnabled:  false,
 			RespawnCoreLogsEnabled:     true,
 			RespawnUnitLogsEnabled:     true,
 			RespawnPacketLogsEnabled:   true,
@@ -988,6 +1374,48 @@ func Default() Config {
 			PlayerNameColorEnabled:        true,
 			PlayerNamePrefix:              "",
 			PlayerNameSuffix:              "",
+			PlayerBindPrefixEnabled:       true,
+			PlayerBoundPrefix:             "[green]（已绑定）[]",
+			PlayerUnboundPrefix:           "[scarlet]（未绑定）[]",
+			PlayerTitleEnabled:            true,
+			PlayerIdentityFile:            filepath.Join("json", "player_identity.json"),
+			PlayerBindSource:              "internal",
+			PlayerBindAPIURL:              "",
+			PlayerBindAPITimeoutMs:        1500,
+			PlayerBindAPICacheSec:         30,
+			PlayerConnIDSuffixEnabled:     true,
+			PlayerConnIDSuffixFormat:      " [gray]{id}[]",
+		},
+		StatusBar: StatusBarConfig{
+			Enabled:              true,
+			RefreshIntervalSec:   2,
+			PopupDurationMs:      2200,
+			Align:                "top_left",
+			Top:                  155,
+			Left:                 0,
+			Bottom:               0,
+			Right:                0,
+			PopupID:              "server-status-bar",
+			HeaderEnabled:        true,
+			HeaderText:           "[accent]服务器状态[]",
+			ServerNameEnabled:    true,
+			ServerNameFormat:     "[green]服务器: [white]{server_name}[]",
+			PerformanceEnabled:   true,
+			PerformanceFormat:    "[green]性能: [white]CPU {cpu_percent}%[] [white]进程内存 {memory_mb} MB[]",
+			CurrentMapEnabled:    true,
+			CurrentMapFormat:     "[green]当前地图: [white]{current_map}[]",
+			GameTimeEnabled:      true,
+			GameTimeFormat:       "[green]本局时间: [white]{game_time}[]",
+			PlayerCountEnabled:   true,
+			PlayerCountFormat:    "[green]在线人数: [white]{players}[]",
+			WelcomeEnabled:       true,
+			WelcomeFormat:        "[gold]欢迎玩家 {player_name} 来到镜像物语[]",
+			QQGroupEnabled:       true,
+			QQGroupText:          "请在这里填写QQ群",
+			QQGroupFormat:        "[green]QQ群: [white]{qq_group}[]",
+			CustomMessageEnabled: true,
+			CustomMessageText:    "请在这里填写服务器公告",
+			CustomMessageFormat:  "[gold]{message}[]",
 		},
 		Building: BuildingLogConfig{
 			Enabled:    true,

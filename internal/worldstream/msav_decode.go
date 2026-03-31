@@ -117,8 +117,14 @@ func decodeMapChunk(chunk []byte) (*world.WorldModel, error) {
 				if chunkLen < 0 {
 					return nil, ErrInvalidMSAV
 				}
-				if err := r.Skip(int(chunkLen)); err != nil {
+				chunk, err := r.ReadBytes(int(chunkLen))
+				if err != nil {
 					return nil, err
+				}
+				if build, ok := decodeInlineBuildingChunk(chunk, t, blockID); ok {
+					t.Build = build
+					t.Team = build.Team
+					t.Rotation = build.Rotation
 				}
 			}
 		} else if hadDataOld || hadDataNew {
@@ -147,6 +153,245 @@ func decodeMapChunk(chunk []byte) (*world.WorldModel, error) {
 		}
 	}
 	return model, nil
+}
+
+func decodeInlineBuildingChunk(chunk []byte, tile *world.Tile, blockID int16) (*world.Building, bool) {
+	if tile == nil || len(chunk) < 7 {
+		return nil, false
+	}
+	r := newJavaReader(chunk)
+	revision, err := r.ReadByte()
+	if err != nil {
+		return nil, false
+	}
+	_ = revision
+	health, err := r.ReadFloat32()
+	if err != nil {
+		return nil, false
+	}
+	rotRaw, err := r.ReadByte()
+	if err != nil {
+		return nil, false
+	}
+	teamRaw, err := r.ReadByte()
+	if err != nil {
+		return nil, false
+	}
+
+	rotation := int8(rotRaw & 0x7f)
+	version := byte(0)
+	moduleBits := byte(0)
+	legacy := true
+
+	if (rotRaw & 0x80) != 0 {
+		version, err = r.ReadByte()
+		if err != nil {
+			return nil, false
+		}
+		if version >= 1 {
+			if _, err := r.ReadByte(); err != nil { // enabled
+				return nil, false
+			}
+		}
+		if version >= 2 {
+			moduleBits, err = r.ReadByte()
+			if err != nil {
+				return nil, false
+			}
+		}
+		legacy = false
+	}
+
+	build := &world.Building{
+		Block:    world.BlockID(blockID),
+		Team:     world.TeamID(teamRaw),
+		Rotation: rotation,
+		X:        tile.X,
+		Y:        tile.Y,
+		Health:   health,
+	}
+	if build.Health <= 0 {
+		build.Health = 1000
+	}
+	build.MaxHealth = build.Health
+
+	if (moduleBits & 1) != 0 {
+		items, ok := decodeInlineItemModule(r, legacy)
+		if !ok {
+			return build, true
+		}
+		build.Items = items
+	}
+	if (moduleBits & (1 << 1)) != 0 {
+		if !skipInlinePowerModule(r) {
+			return build, true
+		}
+	}
+	if (moduleBits & (1 << 2)) != 0 {
+		liquids, ok := decodeInlineLiquidModule(r, legacy)
+		if !ok {
+			return build, true
+		}
+		build.Liquids = liquids
+	}
+	if (moduleBits & (1 << 4)) != 0 {
+		if _, err := r.ReadFloat32(); err != nil {
+			return build, true
+		}
+		if _, err := r.ReadFloat32(); err != nil {
+			return build, true
+		}
+	}
+	if (moduleBits & (1 << 5)) != 0 {
+		if _, err := r.ReadInt32(); err != nil {
+			return build, true
+		}
+	}
+	if version <= 2 {
+		if _, err := r.ReadByte(); err != nil {
+			return build, true
+		}
+	}
+	if version >= 3 {
+		if _, err := r.ReadByte(); err != nil {
+			return build, true
+		}
+		if _, err := r.ReadByte(); err != nil {
+			return build, true
+		}
+	}
+	if version == 4 {
+		if _, err := r.ReadInt64(); err != nil {
+			return build, true
+		}
+	}
+
+	return build, true
+}
+
+func decodeInlineItemModule(r *javaReader, legacy bool) ([]world.ItemStack, bool) {
+	if legacy {
+		countRaw, err := r.ReadByte()
+		if err != nil {
+			return nil, false
+		}
+		count := int(countRaw)
+		if count < 0 || count > 4096 {
+			return nil, false
+		}
+		items := make([]world.ItemStack, 0, count)
+		for i := 0; i < count; i++ {
+			itemIDRaw, err := r.ReadByte()
+			if err != nil {
+				return nil, false
+			}
+			amount, err := r.ReadInt32()
+			if err != nil {
+				return nil, false
+			}
+			if amount <= 0 {
+				continue
+			}
+			items = append(items, world.ItemStack{Item: world.ItemID(itemIDRaw), Amount: amount})
+		}
+		return items, true
+	}
+	countRaw, err := r.ReadInt16()
+	if err != nil {
+		return nil, false
+	}
+	count := int(countRaw)
+	if count < 0 || count > 4096 {
+		return nil, false
+	}
+	items := make([]world.ItemStack, 0, count)
+	for i := 0; i < count; i++ {
+		itemIDRaw, err := r.ReadInt16()
+		if err != nil {
+			return nil, false
+		}
+		amount, err := r.ReadInt32()
+		if err != nil {
+			return nil, false
+		}
+		if amount <= 0 || itemIDRaw < 0 {
+			continue
+		}
+		items = append(items, world.ItemStack{Item: world.ItemID(itemIDRaw), Amount: amount})
+	}
+	return items, true
+}
+
+func decodeInlineLiquidModule(r *javaReader, legacy bool) ([]world.LiquidStack, bool) {
+	if legacy {
+		countRaw, err := r.ReadByte()
+		if err != nil {
+			return nil, false
+		}
+		count := int(countRaw)
+		if count < 0 || count > 4096 {
+			return nil, false
+		}
+		liquids := make([]world.LiquidStack, 0, count)
+		for i := 0; i < count; i++ {
+			liqIDRaw, err := r.ReadByte()
+			if err != nil {
+				return nil, false
+			}
+			amount, err := r.ReadFloat32()
+			if err != nil {
+				return nil, false
+			}
+			if amount <= 0 {
+				continue
+			}
+			liquids = append(liquids, world.LiquidStack{Liquid: world.LiquidID(liqIDRaw), Amount: amount})
+		}
+		return liquids, true
+	}
+	countRaw, err := r.ReadInt16()
+	if err != nil {
+		return nil, false
+	}
+	count := int(countRaw)
+	if count < 0 || count > 4096 {
+		return nil, false
+	}
+	liquids := make([]world.LiquidStack, 0, count)
+	for i := 0; i < count; i++ {
+		liqIDRaw, err := r.ReadInt16()
+		if err != nil {
+			return nil, false
+		}
+		amount, err := r.ReadFloat32()
+		if err != nil {
+			return nil, false
+		}
+		if amount <= 0 || liqIDRaw < 0 {
+			continue
+		}
+		liquids = append(liquids, world.LiquidStack{Liquid: world.LiquidID(liqIDRaw), Amount: amount})
+	}
+	return liquids, true
+}
+
+func skipInlinePowerModule(r *javaReader) bool {
+	count, err := r.ReadInt16()
+	if err != nil {
+		return false
+	}
+	if count < 0 || count > 4096 {
+		return false
+	}
+	for i := 0; i < int(count); i++ {
+		if _, err := r.ReadInt32(); err != nil {
+			return false
+		}
+	}
+	if _, err := r.ReadFloat32(); err != nil {
+		return false
+	}
+	return true
 }
 
 func decodeEntitiesChunk(chunk []byte, model *world.WorldModel) error {

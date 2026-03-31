@@ -30,7 +30,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmallflame",
+      "hit_effect": "hitflamesmall"
     },
     {
       "name": "fortress",
@@ -46,7 +48,8 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "blastexplosion"
     },
     {
       "name": "scepter",
@@ -62,7 +65,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootbig",
+      "hit_effect": "hitlancerlow"
     },
     {
       "name": "reign",
@@ -78,7 +83,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootbig",
+      "hit_effect": "flakexplosion"
     },
     {
       "name": "nova",
@@ -110,7 +117,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootheal",
+      "hit_effect": "hitlancer"
     },
     {
       "name": "quasar",
@@ -142,7 +151,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "hitmeltheal",
+      "despawn_effect": "smokecloud"
     },
     {
       "name": "corvus",
@@ -174,7 +185,8 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "pulverize"
     },
     {
       "name": "atrax",
@@ -190,7 +202,8 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmall"
     },
     {
       "name": "spiroct",
@@ -206,7 +219,8 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmall"
     },
     {
       "name": "arkyid",
@@ -222,7 +236,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmall",
+      "smoke_effect": "shootbigsmoke2",
+      "hit_effect": "sapexplosion"
     },
     {
       "name": "toxopid",
@@ -238,7 +255,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "sparkshoot",
+      "smoke_effect": "sparkshoot",
+      "hit_effect": "sapexplosion"
     },
     {
       "name": "flare",
@@ -254,7 +274,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmall",
+      "smoke_effect": "shootsmallsmoke"
     },
     {
       "name": "horizon",
@@ -270,7 +292,8 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "flakexplosion"
     },
     {
       "name": "zenith",
@@ -286,7 +309,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "blastexplosion",
+      "despawn_effect": "blastexplosion"
     },
     {
       "name": "antumbra",
@@ -302,7 +327,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootbig",
+      "hit_effect": "blastexplosion",
+      "despawn_effect": "blastexplosion"
     },
     {
       "name": "eclipse",
@@ -318,7 +346,8 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shockwave"
     },
     {
       "name": "poly",
@@ -334,7 +363,11 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootheal",
+      "smoke_effect": "hitlaser",
+      "hit_effect": "hitlaser",
+      "despawn_effect": "hitlaser"
     },
     {
       "name": "mega",
@@ -366,7 +399,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "massiveexplosion",
+      "despawn_effect": "greenbomb"
     },
     {
       "name": "risso",
@@ -382,7 +417,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "hit_effect": "blastexplosion",
+      "despawn_effect": "blastexplosion"
     },
     {
       "name": "minke",
@@ -398,7 +435,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmall",
+      "hit_effect": "flakexplosion"
     },
     {
       "name": "bryde",
@@ -414,7 +453,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootbig2",
+      "hit_effect": "massiveexplosion",
+      "despawn_effect": "blastexplosion"
     },
     {
       "name": "sei",
@@ -430,7 +472,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootbig",
+      "hit_effect": "blastexplosion",
+      "despawn_effect": "blastexplosion"
     },
     {
       "name": "omura",
@@ -446,7 +491,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "railshoot",
+      "smoke_effect": "shootbig2",
+      "hit_effect": "massiveexplosion"
     },
     {
       "name": "retusa",
@@ -478,7 +526,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "sparkshoot",
+      "hit_effect": "hitflameplasma"
     },
     {
       "name": "cyerce",
@@ -494,7 +544,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootheal",
+      "smoke_effect": "hitlaser"
     },
     {
       "name": "aegires",
@@ -510,7 +562,9 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "sparkshoot",
+      "hit_effect": "pointhit"
     },
     {
       "name": "navanax",
@@ -526,7 +580,10 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "hitempspark",
+      "smoke_effect": "shootbigsmoke2",
+      "hit_effect": "hitmeltheal"
     },
     {
       "name": "alpha",
@@ -542,7 +599,11 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmallcolor",
+      "smoke_effect": "hitlasercolor",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "beta",
@@ -558,7 +619,11 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmallcolor",
+      "smoke_effect": "hitlasercolor",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "gamma",
@@ -574,7 +639,11 @@
       "target_ground": true,
       "target_priority": "nearest",
       "hit_buildings": true,
-      "prefer_buildings": false
+      "prefer_buildings": false,
+      "shoot_effect": "shootsmallcolor",
+      "smoke_effect": "hitlasercolor",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     }
   ],
   "turrets": [
@@ -591,7 +660,9 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "scatter",
@@ -606,7 +677,10 @@
       "target_air": true,
       "target_ground": false,
       "target_priority": "nearest",
-      "hit_buildings": false
+      "hit_buildings": false,
+      "shoot_effect": "shootsmall",
+      "hit_effect": "flakexplosion",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "scorch",
@@ -621,7 +695,9 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootpyraflame",
+      "hit_effect": "hitflamesmall"
     },
     {
       "name": "hail",
@@ -636,7 +712,9 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "hit_effect": "blastexplosion",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "wave",
@@ -651,7 +729,8 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootliquid"
     },
     {
       "name": "lancer",
@@ -666,7 +745,9 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "lancerlasershoot",
+      "hit_effect": "hitlancer"
     },
     {
       "name": "arc",
@@ -681,7 +762,9 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "lightningshoot",
+      "hit_effect": "hitlancer"
     },
     {
       "name": "swarmer",
@@ -696,7 +779,9 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "hit_effect": "blastexplosion",
+      "despawn_effect": "blastexplosion"
     },
     {
       "name": "salvo",
@@ -711,7 +796,11 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootbig",
+      "smoke_effect": "shootbigsmoke",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "tsunami",
@@ -726,7 +815,8 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootliquid"
     },
     {
       "name": "fuse",
@@ -741,7 +831,9 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "thoriumshoot",
+      "smoke_effect": "thoriumshoot"
     },
     {
       "name": "ripple",
@@ -756,7 +848,8 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "cyclone",
@@ -771,7 +864,10 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootbig",
+      "hit_effect": "plasticexplosion",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "foreshadow",
@@ -786,7 +882,11 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "instshoot",
+      "smoke_effect": "smokecloud",
+      "hit_effect": "insthit",
+      "despawn_effect": "instbomb"
     },
     {
       "name": "spectre",
@@ -801,7 +901,10 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootbig",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "meltdown",
@@ -816,7 +919,9 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootbigsmoke2",
+      "hit_effect": "hitmeltdown"
     },
     {
       "name": "breach",
@@ -831,7 +936,11 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "sfe",
+      "smoke_effect": "shootbigsmoke",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "diffuse",
@@ -846,7 +955,11 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootbigcolor",
+      "smoke_effect": "shootsmokesquaresparse",
+      "hit_effect": "hitsquarescolor",
+      "despawn_effect": "hitsquarescolor"
     },
     {
       "name": "titan",
@@ -861,7 +974,10 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shoottitan",
+      "smoke_effect": "shootsmoketitan",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "disperse",
@@ -876,7 +992,11 @@
       "target_air": true,
       "target_ground": false,
       "target_priority": "nearest",
-      "hit_buildings": false
+      "hit_buildings": false,
+      "shoot_effect": "shootbig2",
+      "smoke_effect": "shootsmokedisperse",
+      "hit_effect": "hitbulletcolor",
+      "despawn_effect": "hitbulletcolor"
     },
     {
       "name": "afflict",
@@ -891,7 +1011,8 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "smoke_effect": "shootsmoketitan"
     },
     {
       "name": "scathe",
@@ -906,7 +1027,11 @@
       "target_air": false,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootbig",
+      "smoke_effect": "shootsmokemissilecolor",
+      "hit_effect": "massiveexplosion",
+      "despawn_effect": "scatheslash"
     },
     {
       "name": "smite",
@@ -921,7 +1046,9 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "smoke_effect": "shootsmokesmite",
+      "hit_effect": "hitlancer"
     },
     {
       "name": "malign",
@@ -936,7 +1063,11 @@
       "target_air": true,
       "target_ground": true,
       "target_priority": "nearest",
-      "hit_buildings": true
+      "hit_buildings": true,
+      "shoot_effect": "shootsmokesquarebig",
+      "smoke_effect": "shootsmokedisperse",
+      "hit_effect": "hitsquarescolor",
+      "despawn_effect": "hitbulletcolor"
     }
   ],
   "blocks": [
@@ -6632,6 +6763,31 @@
           "item": "beryllium",
           "item_id": 16,
           "amount": 10,
+          "cost": 1.2
+        }
+      ]
+    },
+    {
+      "name": "large-canvas",
+      "build_cost_multiplier": 1,
+      "build_time_sec": 0.6,
+      "requirements": [
+        {
+          "item": "silicon",
+          "item_id": 9,
+          "amount": 15,
+          "cost": 0.8
+        },
+        {
+          "item": "beryllium",
+          "item_id": 16,
+          "amount": 15,
+          "cost": 1.2
+        },
+        {
+          "item": "surge-alloy",
+          "item_id": 12,
+          "amount": 5,
           "cost": 1.2
         }
       ]

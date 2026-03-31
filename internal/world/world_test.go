@@ -1,6 +1,7 @@
 package world
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -69,7 +70,14 @@ func TestWorldSnapshot(t *testing.T) {
 
 func TestApplyBuildPlansIsAsync(t *testing.T) {
 	w := New(Config{TPS: 60})
-	w.SetModel(NewWorldModel(8, 8))
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 100)
 
 	ops := []BuildPlanOp{{
 		Breaking: false,
@@ -109,11 +117,114 @@ func TestApplyBuildPlansIsAsync(t *testing.T) {
 	}
 }
 
+func TestSetModelResetsRulesBetweenMaps(t *testing.T) {
+	w := New(Config{TPS: 60})
+
+	first := NewWorldModel(8, 8)
+	first.Tags = map[string]string{
+		"rules": `{"attackMode":true,"enemyCoreBuildRadius":123,"defaultTeam":"blue"}`,
+	}
+	w.SetModel(first)
+
+	rules := w.GetRulesManager().Get()
+	if !rules.AttackMode || rules.EnemyCoreBuildRadius != 123 || rules.DefaultTeam != "blue" {
+		t.Fatalf("expected first map rules to apply, got attack=%v radius=%v defaultTeam=%q", rules.AttackMode, rules.EnemyCoreBuildRadius, rules.DefaultTeam)
+	}
+
+	second := NewWorldModel(8, 8)
+	w.SetModel(second)
+
+	rules = w.GetRulesManager().Get()
+	if rules.AttackMode {
+		t.Fatalf("expected attack mode reset to default false")
+	}
+	if rules.EnemyCoreBuildRadius != 400 {
+		t.Fatalf("expected enemy core build radius reset to default 400, got %v", rules.EnemyCoreBuildRadius)
+	}
+	if rules.DefaultTeam != "sharded" {
+		t.Fatalf("expected default team reset to sharded, got %q", rules.DefaultTeam)
+	}
+}
+
+func TestSetModelInfersAttackGamemodeFromMultipleCoreTeams(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		339: "core-shard",
+	}
+	tileA, _ := model.TileAt(1, 1)
+	tileA.Block = 339
+	tileA.Team = 1
+	tileB, _ := model.TileAt(6, 6)
+	tileB.Block = 339
+	tileB.Team = 2
+
+	w.SetModel(model)
+
+	rules := w.GetRulesManager().Get()
+	if !rules.AttackMode {
+		t.Fatalf("expected attack mode inferred from multi-team cores")
+	}
+	if rules.WaveSpacing != 120.0 {
+		t.Fatalf("expected attack mode wave spacing=120, got %v", rules.WaveSpacing)
+	}
+	if rules.InfiniteResources {
+		t.Fatalf("expected attack mode not to enable global infinite resources")
+	}
+	if !rules.teamInfiniteResources(2) {
+		t.Fatalf("expected attack mode to grant infinite resources to wave team")
+	}
+}
+
+func TestSetModelAppliesSandboxDefaultsBeforeRuleOverlay(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.Tags = map[string]string{
+		"rules": `{"infiniteResources":true}`,
+	}
+
+	w.SetModel(model)
+
+	rules := w.GetRulesManager().Get()
+	if !rules.InfiniteResources {
+		t.Fatalf("expected sandbox infinite resources")
+	}
+	if !rules.AllowEditRules {
+		t.Fatalf("expected sandbox allowEditRules default to be applied")
+	}
+	if rules.WaveTimer {
+		t.Fatalf("expected sandbox waveTimer=false")
+	}
+}
+
+func TestSetModelAppliesEditorDefaultsBeforeRuleOverlay(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.Tags = map[string]string{
+		"rules": `{"editor":true}`,
+	}
+
+	w.SetModel(model)
+
+	rules := w.GetRulesManager().Get()
+	if !rules.Editor || !rules.InstantBuild || !rules.InfiniteResources {
+		t.Fatalf("expected editor defaults, got editor=%v instant=%v infinite=%v", rules.Editor, rules.InstantBuild, rules.InfiniteResources)
+	}
+	if rules.Waves || rules.WaveTimer {
+		t.Fatalf("expected editor to disable waves and timer, got waves=%v timer=%v", rules.Waves, rules.WaveTimer)
+	}
+}
+
 func TestDeconstructRefund(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(8, 8)
-	model.BlockNames = map[int16]string{45: "duo"}
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
 	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 100)
 
 	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
 		X: 2, Y: 2, BlockID: 45,
@@ -137,9 +248,16 @@ func TestDeconstructRefund(t *testing.T) {
 func TestFactoryProductionSpawnsUnit(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(8, 8)
-	model.BlockNames = map[int16]string{100: "ground-factory"}
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+		339: "core-shard",
+	}
 	model.UnitNames = map[int16]string{7: "dagger"}
 	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 200)
+	core.Build.AddItem(1, 200)
+	core.Build.AddItem(2, 200)
 
 	ops := []BuildPlanOp{{
 		X: 3, Y: 3, BlockID: 100, Rotation: 0,
@@ -153,20 +271,119 @@ func TestFactoryProductionSpawnsUnit(t *testing.T) {
 	if len(w.Model().Entities) == 0 {
 		t.Fatalf("expected produced unit, got=%d", len(w.Model().Entities))
 	}
+	factoryPos := int32(3 + 3*model.Width)
+	if got := w.payloadStateLocked(factoryPos).Payload; got != nil {
+		t.Fatalf("expected factory payload to dump after spawning, got=%+v", got)
+	}
+}
+
+func TestFactoryProductionOutputsUnitPayloadToPayloadConveyor(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+		339: "core-shard",
+		700: "payload-conveyor",
+	}
+	model.UnitNames = map[int16]string{7: "dagger"}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 2000)
+	core.Build.AddItem(1, 2000)
+	core.Build.AddItem(2, 2000)
+	placeTestBuilding(t, w, 5, 3, 700, 1, 0)
+
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 3, Y: 3, BlockID: 100, Rotation: 0,
+	}})
+	w.Step(3 * time.Second)
+	w.Step(11 * time.Second)
+
+	if got := len(w.Model().Entities); got != 0 {
+		t.Fatalf("expected unit to stay as payload when conveyor is in front, got entities=%d", got)
+	}
+	conveyorPos := int32(5 + 3*model.Width)
+	payload := w.payloadStateLocked(conveyorPos).Payload
+	if payload == nil || payload.Kind != payloadKindUnit || payload.UnitTypeID != 7 {
+		t.Fatalf("expected conveyor to receive dagger unit payload, got=%+v", payload)
+	}
+}
+
+func TestFactoryProductionHonorsCoreUnitCap(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+		339: "core-shard",
+	}
+	model.UnitNames = map[int16]string{7: "dagger"}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 2000)
+	core.Build.AddItem(1, 2000)
+	core.Build.AddItem(2, 2000)
+
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 3, Y: 3, BlockID: 100, Rotation: 0,
+	}})
+	w.Step(3 * time.Second)
+
+	countUnits := func() int {
+		total := 0
+		for _, e := range w.Model().Entities {
+			if e.Team == 1 && e.TypeID == 7 {
+				total++
+			}
+		}
+		return total
+	}
+
+	for i := 0; i < 8; i++ {
+		w.Step(11 * time.Second)
+	}
+	if got := countUnits(); got != 8 {
+		t.Fatalf("expected shard cap to allow 8 dumped daggers, got=%d", got)
+	}
+
+	w.Step(11 * time.Second)
+	if got := countUnits(); got != 8 {
+		t.Fatalf("expected 9th unit to remain blocked by cap, got=%d", got)
+	}
+	factoryPos := int32(3 + 3*model.Width)
+	if payload := w.payloadStateLocked(factoryPos).Payload; payload == nil || payload.Kind != payloadKindUnit {
+		t.Fatalf("expected capped factory to hold a unit payload, got=%+v", payload)
+	}
+
+	removedID := w.Model().Entities[0].ID
+	if _, ok := w.model.RemoveEntity(removedID); !ok {
+		t.Fatalf("expected to remove one capped unit id=%d", removedID)
+	}
+	w.Step(time.Second / 60)
+	if got := countUnits(); got != 8 {
+		t.Fatalf("expected held payload to dump after cap freed, got=%d", got)
+	}
+	if payload := w.payloadStateLocked(factoryPos).Payload; payload != nil {
+		t.Fatalf("expected held payload to clear after dump, got=%+v", payload)
+	}
 }
 
 func TestBuildPlanSnapshotClearsOnlyCurrentOwner(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(8, 8)
 	model.BlockNames = map[int16]string{
-		45: "duo",
-		46: "duo",
+		45:  "duo",
+		46:  "duo",
+		339: "core-shard",
 	}
 	w.SetModel(model)
+	core := placeTestBuilding(t, w, 0, 0, 339, 1, 0)
+	core.Build.AddItem(0, 100)
 
 	ownerA := int32(101)
 	ownerB := int32(202)
 	team := TeamID(1)
+	w.UpdateBuilderState(ownerA, team, 9001, float32(1*8+4), float32(1*8+4), true, 220)
+	w.UpdateBuilderState(ownerB, team, 9002, float32(2*8+4), float32(2*8+4), true, 220)
 
 	w.ApplyBuildPlanSnapshotForOwner(ownerA, team, []BuildPlanOp{{
 		X: 1, Y: 1, BlockID: 45,
@@ -202,14 +419,19 @@ func TestCancelBuildAtForOwnerDoesNotTouchOtherOwner(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(8, 8)
 	model.BlockNames = map[int16]string{
-		45: "duo",
-		46: "duo",
+		45:  "duo",
+		46:  "duo",
+		339: "core-shard",
 	}
 	w.SetModel(model)
+	core := placeTestBuilding(t, w, 0, 0, 339, 1, 0)
+	core.Build.AddItem(0, 100)
 
 	ownerA := int32(101)
 	ownerB := int32(202)
 	team := TeamID(1)
+	w.UpdateBuilderState(ownerA, team, 9001, float32(1*8+4), float32(1*8+4), true, 220)
+	w.UpdateBuilderState(ownerB, team, 9002, float32(2*8+4), float32(2*8+4), true, 220)
 
 	w.ApplyBuildPlansForOwner(ownerA, team, []BuildPlanOp{{
 		X: 1, Y: 1, BlockID: 45,
@@ -231,6 +453,203 @@ func TestCancelBuildAtForOwnerDoesNotTouchOtherOwner(t *testing.T) {
 	tileB, _ := w.Model().TileAt(2, 2)
 	if tileB.Block != 46 || tileB.Build == nil {
 		t.Fatalf("owner B tile should still build successfully, got block=%d build=%v", tileB.Block, tileB.Build != nil)
+	}
+}
+
+func TestBuildSnapshotWaitsForActiveBuilderInRange(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 0, 0, 339, 1, 0)
+	core.Build.AddItem(0, 100)
+
+	owner := int32(101)
+	team := TeamID(1)
+	w.ApplyBuildPlanSnapshotForOwner(owner, team, []BuildPlanOp{{
+		X: 4, Y: 4, BlockID: 45,
+	}})
+
+	// Queue alone must not start build visuals or progress until the builder is
+	// both active and inside Vars.buildingRange, mirroring BuilderComp.
+	w.UpdateBuilderState(owner, team, 9001, 0, 0, false, 220)
+	for i := 0; i < 10; i++ {
+		w.Step(200 * time.Millisecond)
+	}
+	for _, ev := range w.DrainEntityEvents() {
+		if ev.Kind == EntityEventBuildPlaced || ev.Kind == EntityEventBuildConstructed {
+			t.Fatalf("unexpected build progress while builder inactive: %+v", ev)
+		}
+	}
+	tile, _ := w.Model().TileAt(4, 4)
+	if tile.Block != 0 || tile.Build != nil {
+		t.Fatalf("expected queued plan to stay unbuilt while inactive, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+
+	w.UpdateBuilderState(owner, team, 9001, float32(4*8+4), float32(4*8+4), true, 220)
+	built := false
+	for i := 0; i < 20; i++ {
+		w.Step(200 * time.Millisecond)
+		tile, _ = w.Model().TileAt(4, 4)
+		if tile.Block == 45 && tile.Build != nil {
+			built = true
+			break
+		}
+	}
+	if !built {
+		tile, _ = w.Model().TileAt(4, 4)
+		t.Fatalf("expected build to finish once builder became active and in range, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+}
+
+func TestSnapshotCancelEmitsBuildCancelledNotDestroyed(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 0, 0, 339, 1, 0)
+	core.Build.AddItem(0, 100)
+
+	owner := int32(101)
+	team := TeamID(1)
+	w.UpdateBuilderState(owner, team, 9001, float32(1*8+4), float32(1*8+4), true, 220)
+	w.ApplyBuildPlanSnapshotForOwner(owner, team, []BuildPlanOp{{
+		X: 1, Y: 1, BlockID: 45,
+	}})
+	w.Step(200 * time.Millisecond)
+	_ = w.DrainEntityEvents()
+
+	w.ApplyBuildPlanSnapshotForOwner(owner, team, nil)
+	evs := w.DrainEntityEvents()
+	cancelled := false
+	for _, ev := range evs {
+		if ev.Kind == EntityEventBuildDestroyed {
+			t.Fatalf("expected queue cancel to avoid build_destroyed, got %+v", ev)
+		}
+		if ev.Kind == EntityEventBuildCancelled {
+			cancelled = true
+		}
+	}
+	if !cancelled {
+		t.Fatalf("expected build_cancelled event after authoritative queue clear")
+	}
+	tile, _ := w.Model().TileAt(1, 1)
+	if tile.Block != 0 || tile.Build != nil {
+		t.Fatalf("expected cancelled tile to remain empty, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+}
+
+func TestPlayerEntityOutOfBoundsIsClampedNotRemoved(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	w.SetModel(model)
+
+	if _, err := w.AddEntityWithID(35, 1234, -16, 12, 1); err != nil {
+		t.Fatalf("add entity: %v", err)
+	}
+	if _, ok := w.SetEntityPlayerController(1234, 77); !ok {
+		t.Fatalf("expected player controller to be set")
+	}
+
+	w.Step(time.Second / 60)
+
+	ent, ok := w.GetEntity(1234)
+	if !ok {
+		t.Fatalf("expected player-controlled entity to survive out-of-bounds correction")
+	}
+	if ent.X < 0 || ent.Y < 0 {
+		t.Fatalf("expected clamped position, got (%f,%f)", ent.X, ent.Y)
+	}
+}
+
+func TestReserveEntityIDPreventsWorldAllocationCollision(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	w.SetModel(model)
+
+	reserved := w.ReserveEntityID()
+	if reserved == 0 {
+		t.Fatalf("expected reserved entity id")
+	}
+	if _, err := w.AddEntityWithID(35, reserved, 8, 8, 1); err != nil {
+		t.Fatalf("add reserved entity: %v", err)
+	}
+	ent, err := w.AddEntity(35, 16, 16, 2)
+	if err != nil {
+		t.Fatalf("add next entity: %v", err)
+	}
+	if ent.ID == reserved {
+		t.Fatalf("expected next entity id to differ from reserved id %d", reserved)
+	}
+}
+
+func TestAddEntityWithIDRejectsDuplicateID(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	w.SetModel(model)
+
+	if _, err := w.AddEntityWithID(35, 4321, 8, 8, 1); err != nil {
+		t.Fatalf("add entity: %v", err)
+	}
+	if _, err := w.AddEntityWithID(35, 4321, 16, 16, 1); !errors.Is(err, ErrEntityExists) {
+		t.Fatalf("expected ErrEntityExists, got %v", err)
+	}
+}
+
+func TestCustomCombatDoesNotDamagePlayerControlledUnit(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(32, 32)
+	w.SetModel(model)
+
+	enemy := RawEntity{
+		ID:                 1,
+		TypeID:             56,
+		Team:               2,
+		X:                  100,
+		Y:                  100,
+		Health:             100,
+		MaxHealth:          100,
+		AttackDamage:       40,
+		AttackInterval:     0.05,
+		AttackRange:        160,
+		AttackFireMode:     "beam",
+		AttackTargetAir:    true,
+		AttackTargetGround: true,
+		SlowMul:            1,
+		RuntimeInit:        true,
+	}
+	player := RawEntity{
+		ID:          2,
+		PlayerID:    77,
+		TypeID:      37,
+		Team:        1,
+		X:           120,
+		Y:           100,
+		Health:      220,
+		MaxHealth:   220,
+		Shield:      0,
+		ShieldMax:   0,
+		SlowMul:     1,
+		RuntimeInit: true,
+	}
+	model.Entities = append(model.Entities, enemy, player)
+
+	for i := 0; i < 20; i++ {
+		w.Step(time.Second / 60)
+	}
+
+	ent, ok := w.GetEntity(2)
+	if !ok {
+		t.Fatalf("expected player-controlled entity to remain present")
+	}
+	if ent.Health != 220 {
+		t.Fatalf("expected custom combat to ignore player-controlled unit health, got=%f", ent.Health)
 	}
 }
 
@@ -376,6 +795,7 @@ func TestPendingBuildAppliesConfigOnCompletion(t *testing.T) {
 	w.SetModel(model)
 
 	pos := int32(3*model.Width + 2)
+	w.UpdateBuilderState(1, 1, 9001, float32(2*8+4), float32(3*8+4), true, 220)
 	w.ApplyBuildPlansForOwner(1, 1, []BuildPlanOp{{
 		X:       2,
 		Y:       3,
@@ -1023,6 +1443,66 @@ func TestTeamCoreItemSnapshotsUseRealCoreInventory(t *testing.T) {
 	}
 	if snapshots[0].Items[1].Item != 5 || snapshots[0].Items[1].Amount != 3 {
 		t.Fatalf("expected sand amount 3, got item=%d amount=%d", snapshots[0].Items[1].Item, snapshots[0].Items[1].Amount)
+	}
+}
+
+func TestTeamCoreItemSnapshotsDoNotFallbackToTeamInventoryWhenCoreEmpty(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		343: "core-citadel",
+	}
+	w.SetModel(model)
+
+	placeTestBuilding(t, w, 5, 5, 343, 1, 0)
+	w.teamItems[1] = map[ItemID]int32{
+		0: 120,
+		4: 45,
+	}
+
+	snapshots := w.TeamCoreItemSnapshots()
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 core snapshot, got %d", len(snapshots))
+	}
+	if snapshots[0].Team != 1 {
+		t.Fatalf("expected team 1 snapshot, got team %d", snapshots[0].Team)
+	}
+	if len(snapshots[0].Items) != 0 {
+		t.Fatalf("expected empty real core inventory, got %d items", len(snapshots[0].Items))
+	}
+}
+
+func TestTeamCoreItemSnapshotsFallbackToTeamInventoryForFillItemsTeam(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		343: "core-citadel",
+	}
+	w.SetModel(model)
+
+	placeTestBuilding(t, w, 5, 5, 343, 1, 0)
+	rules := w.GetRulesManager().Get()
+	rules.setTeamRule(1, TeamRule{FillItems: true})
+	w.teamItems[1] = map[ItemID]int32{
+		0: 120,
+		4: 45,
+	}
+
+	snapshots := w.TeamCoreItemSnapshots()
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 core snapshot, got %d", len(snapshots))
+	}
+	if snapshots[0].Team != 1 {
+		t.Fatalf("expected team 1 snapshot, got team %d", snapshots[0].Team)
+	}
+	if len(snapshots[0].Items) != 2 {
+		t.Fatalf("expected fallback team inventory to be exposed, got %d items", len(snapshots[0].Items))
+	}
+	if snapshots[0].Items[0].Item != 0 || snapshots[0].Items[0].Amount != 120 {
+		t.Fatalf("expected copper amount 120, got item=%d amount=%d", snapshots[0].Items[0].Item, snapshots[0].Items[0].Amount)
+	}
+	if snapshots[0].Items[1].Item != 4 || snapshots[0].Items[1].Amount != 45 {
+		t.Fatalf("expected titanium amount 45, got item=%d amount=%d", snapshots[0].Items[1].Item, snapshots[0].Items[1].Amount)
 	}
 }
 
