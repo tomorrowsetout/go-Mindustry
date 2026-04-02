@@ -8,38 +8,33 @@ on:
 
 jobs:
   test:
-    name: 🐹 Go 测试与构建
-    runs-on: ubuntu-latest
+    name: 🐹 Go 测试与构建 (Windows)
+    runs-on: windows-latest   # 改为 Windows 环境
     steps:
       - uses: actions/checkout@v4
 
-      # 设置 Go 环境
       - name: 配置 Go 环境 ⚙️
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'  # 指定 Go 版本，可根据需要修改
-          cache: true         # 自动缓存 go mod 依赖
+          go-version: '1.26'   # 与本地版本一致
+          cache: true
 
-      # 下载依赖（可选，因为 go build 会自动拉取，但显式下载有助于缓存）
       - name: 下载依赖 📦
         run: go mod download
 
-      # 构建项目（根据你的命令生成可执行文件）
       - name: 构建二进制文件 🏗️
-        run: go build -o bin/mdt-server ./cmd/mdt-server
-        # 如果你需要在 Linux 环境下生成 .exe，请使用 GOOS=windows GOARCH=amd64 go build ...
+        run: go build -o bin/mdt-server.exe ./cmd/mdt-server
 
-      # 运行单元测试
       - name: 执行测试 ✅
         run: go test -v ./...
 
-      # 可选：生成测试覆盖率报告
       - name: 生成覆盖率报告 📊
-        run: go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+        run: |
+          go test -coverprofile=coverage.out ./...
+          go tool cover -html=coverage.out -o coverage.html
 
-      # 可选：上传测试报告或构建产物
       - name: 归档构建产物 📁
         uses: actions/upload-artifact@v4
         with:
-          name: mdt-server
-          path: bin/mdt-server   # 如果是 .exe 则改为 bin/mdt-server.exe
+          name: mdt-server-windows
+          path: bin/mdt-server.exe
