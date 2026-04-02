@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "by_conn_uuid": {
+    "12153": {
+      "bound": false
+    },
+    "16934": {
+      "bound": false
+    },
+    "19297": {
+      "bound": false
+    },
+    "2380196": {
+      "bound": true
+    },
+    "25040": {
+      "bound": false
+    },
+    "27938": {
+      "bound": false
+    },
+    "51428": {
+      "bound": false
+    },
+    "53404": {
+      "bound": false
+    },
+    "59225": {
+      "bound": false
+    },
+    "61078": {
+      "bound": false
+    },
+    "61915": {
+      "bound": false
+    },
+    "68645": {
+      "bound": false
+    },
+    "69931": {
+      "bound": false
+    },
+    "84907": {
+      "bound": false
+    }
+  }
+}

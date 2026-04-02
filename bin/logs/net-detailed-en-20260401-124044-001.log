@@ -1,0 +1,19 @@
+2026-04-01T04:41:00.548893Z [NET] kind=tcp_accept packet= conn_id=1660245444 uuid= ip=10.147.17.101 name="" detail=
+2026-04-01T04:41:00.5615983Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-04-01T04:41:00.6976461Z [NET] kind=world_handshake_sent packet= conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=
+2026-04-01T04:41:01.2359338Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=
+2026-04-01T12:41:01.3069302+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=408 core_y=213 spawn_x=408 spawn_y=213
+2026-04-01T12:41:01.338012+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=408 spawn_y=213
+2026-04-01T12:41:05.0553061+08:00 [BUILD] action=placed x=428 y=239 block_id=328 block=爆破钻头 team=1 rot=0
+2026-04-01T12:41:08.6283897+08:00 [BUILD] action=constructed x=428 y=239 block_id=328 block=爆破钻头 team=1 rot=0
+2026-04-01T12:41:10.4911226+08:00 [BUILD] action=placed x=430 y=226 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:10.5964917+08:00 [BUILD] action=constructed x=430 y=226 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:12.674247+08:00 [BUILD] action=placed x=426 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:12.7788273+08:00 [BUILD] action=constructed x=426 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:12.7900151+08:00 [BUILD] action=placed x=428 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:12.8953054+08:00 [BUILD] action=constructed x=428 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:12.9069209+08:00 [BUILD] action=placed x=430 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:13.0113865+08:00 [BUILD] action=constructed x=430 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:13.0236602+08:00 [BUILD] action=placed x=432 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T12:41:13.1313455+08:00 [BUILD] action=constructed x=432 y=224 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-01T04:42:05.573618Z [NET] kind=tcp_closed packet= conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=EOF

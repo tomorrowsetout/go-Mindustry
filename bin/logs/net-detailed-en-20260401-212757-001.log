@@ -1,0 +1,16 @@
+2026-04-01T13:28:03.7446074Z [NET] kind=tcp_accept packet= conn_id=744216687 uuid= ip=192.168.0.101 name="" detail=
+2026-04-01T13:28:03.7602423Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="" detail=version=156 type=official mods=0
+2026-04-01T13:28:03.9288269Z [NET] kind=world_handshake_sent packet= conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]12153[]" detail=
+2026-04-01T13:28:04.4717808Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]12153[]" detail=
+2026-04-01T21:28:04.5685649+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-nucleus core_x=408 core_y=213 spawn_x=408 spawn_y=213
+2026-04-01T21:28:04.6222768+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=408 spawn_y=213
+2026-04-01T21:28:05.3302342+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-nucleus core_x=408 core_y=213 spawn_x=408 spawn_y=213
+2026-04-01T21:28:05.3706079+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=408 spawn_y=213
+2026-04-01T21:28:09.7615452+08:00 [BUILD] action=placed x=416 y=202 block_id=313 block=太阳能板 team=1 rot=0
+2026-04-01T21:28:10.0972131+08:00 [BUILD] action=constructed x=416 y=202 block_id=313 block=太阳能板 team=1 rot=0
+2026-04-01T21:28:10.1421061+08:00 [BUILD] action=placed x=415 y=202 block_id=313 block=太阳能板 team=1 rot=0
+2026-04-01T21:28:10.547718+08:00 [BUILD] action=constructed x=415 y=202 block_id=313 block=太阳能板 team=1 rot=0
+2026-04-01T21:28:10.5924247+08:00 [BUILD] action=placed x=414 y=202 block_id=313 block=太阳能板 team=1 rot=0
+2026-04-01T21:28:10.9260599+08:00 [BUILD] action=constructed x=414 y=202 block_id=313 block=太阳能板 team=1 rot=0
+2026-04-01T21:28:11.6644813+08:00 [BUILD] action=placed x=422 y=203 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-01T13:28:23.1527334Z [NET] kind=tcp_closed packet= conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]12153[]" detail=EOF

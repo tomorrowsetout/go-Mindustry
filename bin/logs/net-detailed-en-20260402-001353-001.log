@@ -1,0 +1,565 @@
+2026-04-01T16:14:05.0875512Z [NET] kind=tcp_accept packet= conn_id=1178330486 uuid= ip=127.0.0.1 name="" detail=
+2026-04-01T16:14:05.08998Z [NET] kind=tcp_closed packet= conn_id=1178330486 uuid= ip=127.0.0.1 name="" detail=EOF
+2026-04-02T00:14:13.7485996+08:00 [BUILD] action=destroyed x=187 y=243 block_id=223 block=大型钍墙 team=2
+2026-04-02T00:14:13.7648259+08:00 [BUILD] action=destroyed x=189 y=243 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7845289+08:00 [BUILD] action=destroyed x=190 y=243 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7845289+08:00 [BUILD] action=destroyed x=191 y=243 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7845289+08:00 [BUILD] action=destroyed x=192 y=243 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7845289+08:00 [BUILD] action=destroyed x=193 y=243 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7845289+08:00 [BUILD] action=destroyed x=184 y=244 block_id=228 block=门 team=2
+2026-04-02T00:14:13.785035+08:00 [BUILD] action=destroyed x=189 y=244 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.785035+08:00 [BUILD] action=destroyed x=190 y=244 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.785035+08:00 [BUILD] action=destroyed x=191 y=244 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.785035+08:00 [BUILD] action=destroyed x=195 y=244 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=183 y=245 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=184 y=245 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=186 y=245 block_id=228 block=门 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=187 y=245 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=188 y=245 block_id=290 block=流体容器 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=190 y=245 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=191 y=245 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=193 y=245 block_id=362 block=浪涌 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=182 y=246 block_id=197 block=煤炭离心机 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=186 y=246 block_id=326 block=气动钻头 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=190 y=246 block_id=289 block=流体路由器 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=191 y=246 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=184 y=247 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=188 y=247 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=189 y=247 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=190 y=247 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=191 y=247 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=192 y=247 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=179 y=248 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=180 y=248 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=181 y=248 block_id=306 block=电池 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=182 y=248 block_id=306 block=电池 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=183 y=248 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=186 y=248 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=190 y=248 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7851116+08:00 [BUILD] action=destroyed x=191 y=248 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=179 y=249 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=180 y=249 block_id=183 block=硅冶炼厂 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=182 y=249 block_id=197 block=煤炭离心机 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=184 y=249 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=186 y=249 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=188 y=249 block_id=331 block=石油钻井 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=190 y=249 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=194 y=249 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=179 y=250 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=186 y=250 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=190 y=250 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=192 y=250 block_id=362 block=浪涌 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=179 y=251 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=180 y=251 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=182 y=251 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=184 y=251 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=186 y=251 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=188 y=251 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=189 y=251 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=190 y=251 block_id=259 block=塑钢传送带 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=194 y=251 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=176 y=252 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=178 y=252 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=179 y=252 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=188 y=252 block_id=290 block=流体容器 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=190 y=252 block_id=259 block=塑钢传送带 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=191 y=252 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7856178+08:00 [BUILD] action=destroyed x=192 y=252 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=193 y=252 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=194 y=252 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=178 y=253 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=180 y=253 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=182 y=253 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=184 y=253 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=185 y=253 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=186 y=253 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=187 y=253 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=193 y=253 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=188 y=254 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=189 y=254 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=191 y=254 block_id=363 block=气旋 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=193 y=254 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=175 y=255 block_id=365 block=幽灵 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=178 y=255 block_id=246 block=修理投影 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=180 y=255 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=182 y=255 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=185 y=255 block_id=328 block=爆破钻头 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=188 y=255 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=189 y=255 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=193 y=255 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=209 y=255 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=210 y=255 block_id=261 block=交叉器 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=188 y=256 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7861731+08:00 [BUILD] action=destroyed x=189 y=256 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=190 y=256 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=191 y=256 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=208 y=256 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=210 y=256 block_id=266 block=路由器 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=178 y=257 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=180 y=257 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=182 y=257 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=188 y=257 block_id=189 block=冷冻液混合器 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=190 y=257 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=207 y=257 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=210 y=257 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=174 y=258 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=175 y=258 block_id=245 block=修理器 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=176 y=258 block_id=245 block=修理器 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=177 y=258 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=184 y=258 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=185 y=258 block_id=326 block=气动钻头 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=187 y=258 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=190 y=258 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=192 y=258 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=194 y=258 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=195 y=258 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=206 y=258 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=208 y=258 block_id=304 block=巨浪电力塔 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=210 y=258 block_id=183 block=硅冶炼厂 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=175 y=259 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=179 y=259 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=180 y=259 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=181 y=259 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7866876+08:00 [BUILD] action=destroyed x=183 y=259 block_id=228 block=门 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=184 y=259 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=187 y=259 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=188 y=259 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=189 y=259 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=194 y=259 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=196 y=259 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=205 y=259 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=175 y=260 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=177 y=260 block_id=377 block=陆军工厂 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=179 y=260 block_id=228 block=门 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=180 y=260 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=183 y=260 block_id=228 block=门 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=184 y=260 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=185 y=260 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=186 y=260 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=187 y=260 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=188 y=260 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=189 y=260 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=190 y=260 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=196 y=260 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=197 y=260 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=207 y=260 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=208 y=260 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=210 y=260 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=175 y=261 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=179 y=261 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=180 y=261 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=181 y=261 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7872348+08:00 [BUILD] action=destroyed x=183 y=261 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=184 y=261 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=185 y=261 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=187 y=261 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=188 y=261 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=189 y=261 block_id=290 block=流体容器 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=192 y=261 block_id=315 block=钍反应堆 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=194 y=261 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=196 y=261 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=211 y=261 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=175 y=262 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=179 y=262 block_id=245 block=修理器 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=180 y=262 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=183 y=262 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=184 y=262 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=187 y=262 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=188 y=262 block_id=289 block=流体路由器 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=198 y=262 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=199 y=262 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=200 y=262 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=208 y=262 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=209 y=262 block_id=358 block=齐射 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=175 y=263 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=177 y=263 block_id=377 block=陆军工厂 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=179 y=263 block_id=228 block=门 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=180 y=263 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=181 y=263 block_id=229 block=大门 team=2
+2026-04-02T00:14:13.7877762+08:00 [BUILD] action=destroyed x=183 y=263 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=184 y=263 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=186 y=263 block_id=247 block=超速投影 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=188 y=263 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=192 y=263 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=196 y=263 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=198 y=263 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=200 y=263 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=208 y=263 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=174 y=264 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=175 y=264 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=179 y=264 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=180 y=264 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=183 y=264 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=188 y=264 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=190 y=264 block_id=315 block=钍反应堆 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=192 y=264 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=194 y=264 block_id=315 block=钍反应堆 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=200 y=264 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=201 y=264 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=207 y=264 block_id=222 block=钍墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=208 y=264 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=209 y=264 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=210 y=264 block_id=352 block=冰雹 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=174 y=265 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=175 y=265 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=176 y=265 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=178 y=265 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7882959+08:00 [BUILD] action=destroyed x=180 y=265 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=182 y=265 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=184 y=265 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=186 y=265 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=187 y=265 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=188 y=265 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=192 y=265 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=196 y=265 block_id=247 block=超速投影 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=198 y=265 block_id=246 block=修理投影 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=200 y=265 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=201 y=265 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=205 y=265 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=206 y=265 block_id=223 block=大型钍墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=208 y=265 block_id=352 block=冰雹 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=209 y=265 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=210 y=265 block_id=270 block=装卸器 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=174 y=266 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=175 y=266 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=186 y=266 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=187 y=266 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=188 y=266 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=189 y=266 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=190 y=266 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=191 y=266 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=192 y=266 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=193 y=266 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=194 y=266 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=195 y=266 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=200 y=266 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=204 y=266 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=174 y=267 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:14:13.7888145+08:00 [BUILD] action=destroyed x=175 y=267 block_id=358 block=齐射 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=180 y=267 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=181 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=182 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=183 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=184 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=185 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=186 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=187 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=188 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=189 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=190 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=191 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=192 y=267 block_id=269 block=反向溢流门 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=193 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=194 y=267 block_id=269 block=反向溢流门 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=195 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=196 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=197 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=198 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=199 y=267 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=206 y=267 block_id=223 block=大型钍墙 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=209 y=267 block_id=426 block=发射台 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=178 y=268 block_id=314 block=大型太阳能板 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=180 y=268 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=181 y=268 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=189 y=268 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=191 y=268 block_id=293 block=导管桥 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=192 y=268 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7893694+08:00 [BUILD] action=destroyed x=199 y=268 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=201 y=268 block_id=365 block=幽灵 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=204 y=268 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=175 y=269 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=176 y=269 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=180 y=269 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=181 y=269 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=183 y=269 block_id=314 block=大型太阳能板 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=186 y=269 block_id=314 block=大型太阳能板 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=191 y=269 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=192 y=269 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=194 y=269 block_id=315 block=钍反应堆 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=197 y=269 block_id=249 block=力墙投影 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=199 y=269 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=206 y=269 block_id=223 block=大型钍墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=177 y=270 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=179 y=270 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=180 y=270 block_id=269 block=反向溢流门 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=181 y=270 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=190 y=270 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=191 y=270 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=204 y=270 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=208 y=270 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=179 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=180 y=271 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=181 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=182 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=183 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=184 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7899106+08:00 [BUILD] action=destroyed x=185 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=186 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=187 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=190 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=193 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=194 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=195 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=196 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=197 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=200 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=201 y=271 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=202 y=271 block_id=246 block=修理投影 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=206 y=271 block_id=223 block=大型钍墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=208 y=271 block_id=288 block=电镀导管 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=181 y=272 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=182 y=272 block_id=219 block=大型钛墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=184 y=272 block_id=218 block=钛墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=194 y=272 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=204 y=272 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=178 y=273 block_id=218 block=钛墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=192 y=273 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=194 y=273 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=195 y=273 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=203 y=273 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=206 y=273 block_id=223 block=大型钍墙 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=179 y=274 block_id=266 block=路由器 team=2
+2026-04-02T00:14:13.790429+08:00 [BUILD] action=destroyed x=180 y=274 block_id=262 block=传送带桥 team=2
+2026-04-02T00:14:13.790946+08:00 [BUILD] action=destroyed x=181 y=274 block_id=266 block=路由器 team=2
+2026-04-02T00:14:13.790946+08:00 [BUILD] action=destroyed x=182 y=274 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.790946+08:00 [BUILD] action=destroyed x=183 y=274 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=184 y=274 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=185 y=274 block_id=358 block=齐射 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=190 y=274 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=192 y=274 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=200 y=274 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=202 y=274 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=204 y=274 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=180 y=275 block_id=266 block=路由器 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=181 y=275 block_id=258 block=钛传送带 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=182 y=275 block_id=329 block=抽水机 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=184 y=275 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=190 y=275 block_id=349 block=双管 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=191 y=275 block_id=325 block=机械钻头 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=198 y=275 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=181 y=276 block_id=302 block=电力节点 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=188 y=276 block_id=218 block=钛墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=200 y=276 block_id=221 block=大型塑钢墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=202 y=276 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=203 y=276 block_id=220 block=塑钢墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=183 y=277 block_id=287 block=脉冲导管 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=188 y=277 block_id=218 block=钛墙 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=195 y=277 block_id=257 block=传送带 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=196 y=277 block_id=349 block=双管 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=199 y=277 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=186 y=278 block_id=358 block=齐射 team=2
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=190 y=279 block_id=230 block=废墙 team=0
+2026-04-02T00:14:13.7910178+08:00 [BUILD] action=destroyed x=193 y=279 block_id=325 block=机械钻头 team=0
+2026-04-01T16:14:14.6723078Z [NET] kind=tcp_accept packet= conn_id=2057450763 uuid= ip=123.55.0.107 name="" detail=
+2026-04-01T16:14:14.6841157Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=123.55.0.107 name="" detail=version=156 type=official mods=0
+2026-04-01T16:14:14.7904437Z [NET] kind=world_handshake_sent packet= conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=123.55.0.107 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=
+2026-04-01T16:14:15.0349632Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=123.55.0.107 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=
+2026-04-02T00:14:15.103674+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-foundation core_x=164 core_y=79 spawn_x=164 spawn_y=79
+2026-04-02T00:14:15.1224344+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=164 spawn_y=79
+2026-04-02T00:14:30.6423931+08:00 [BUILD] action=destroyed x=166 y=266 block_id=266 block=路由器 team=2
+2026-04-02T00:14:31.0703319+08:00 [BUILD] action=destroyed x=167 y=267 block_id=269 block=反向溢流门 team=2
+2026-04-02T00:14:31.4708063+08:00 [BUILD] action=destroyed x=164 y=267 block_id=269 block=反向溢流门 team=2
+2026-04-02T00:15:14.0197755+08:00 [BUILD] action=deconstructing x=182 y=107 block_id=363 block=气旋 team=1
+2026-04-02T00:15:16.4435459+08:00 [BUILD] action=deconstructing x=182 y=107 block_id=363 block=气旋 team=1
+2026-04-02T00:15:27.5491167+08:00 [BUILD] action=destroyed x=168 y=266 block_id=269 block=反向溢流门 team=2
+2026-04-02T00:15:27.7655493+08:00 [BUILD] action=destroyed x=182 y=107 block_id=363 block=气旋 team=1
+2026-04-02T00:15:28.4569073+08:00 [BUILD] action=destroyed x=165 y=266 block_id=260 block=装甲传送带 team=2
+2026-04-02T00:15:33.5851896+08:00 [BUILD] action=destroyed x=166 y=264 block_id=378 block=空军工厂 team=2
+2026-04-02T00:15:34.148727+08:00 [BUILD] action=placed x=172 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:34.3708333+08:00 [BUILD] action=constructed x=172 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:34.4083764+08:00 [BUILD] action=placed x=174 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:34.6083793+08:00 [BUILD] action=constructed x=174 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:34.6730522+08:00 [BUILD] action=placed x=176 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:34.8204661+08:00 [BUILD] action=constructed x=176 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:35.4552729+08:00 [BUILD] action=placed x=178 y=84 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:35.6228752+08:00 [BUILD] action=constructed x=178 y=84 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:37.7604377+08:00 [BUILD] action=placed x=177 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.7604377+08:00 [BUILD] action=constructed x=177 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.7604377+08:00 [BUILD] action=placed x=176 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.7609519+08:00 [BUILD] action=constructed x=176 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.7933506+08:00 [BUILD] action=placed x=175 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.8351823+08:00 [BUILD] action=constructed x=175 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.8588851+08:00 [BUILD] action=placed x=174 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.8588851+08:00 [BUILD] action=constructed x=174 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.8953341+08:00 [BUILD] action=placed x=173 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.9167966+08:00 [BUILD] action=constructed x=173 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.9539648+08:00 [BUILD] action=placed x=172 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:37.9539648+08:00 [BUILD] action=constructed x=172 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.0062146+08:00 [BUILD] action=placed x=171 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.0077458+08:00 [BUILD] action=constructed x=171 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.0463089+08:00 [BUILD] action=placed x=170 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.0478142+08:00 [BUILD] action=constructed x=170 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.1008754+08:00 [BUILD] action=placed x=169 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.1008754+08:00 [BUILD] action=constructed x=169 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.1367843+08:00 [BUILD] action=placed x=168 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.1367843+08:00 [BUILD] action=constructed x=168 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.1933581+08:00 [BUILD] action=placed x=167 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.2321828+08:00 [BUILD] action=constructed x=167 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.2321828+08:00 [BUILD] action=placed x=166 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.2321828+08:00 [BUILD] action=constructed x=166 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.268218+08:00 [BUILD] action=placed x=165 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.306516+08:00 [BUILD] action=constructed x=165 y=84 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:38.3959444+08:00 [BUILD] action=placed x=166 y=84 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:15:38.3969438+08:00 [BUILD] action=constructed x=166 y=84 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:15:38.4161956+08:00 [BUILD] action=placed x=166 y=83 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:15:38.4161956+08:00 [BUILD] action=constructed x=166 y=83 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:15:38.4738713+08:00 [BUILD] action=placed x=166 y=82 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:15:38.4738713+08:00 [BUILD] action=constructed x=166 y=82 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:15:39.1073939+08:00 [BUILD] action=deconstructing x=165 y=84 block_id=257 block=传送带 team=1
+2026-04-02T00:15:39.125003+08:00 [BUILD] action=destroyed x=165 y=84 block_id=257 block=传送带 team=1
+2026-04-02T00:15:45.2545152+08:00 [BUILD] action=placed x=190 y=59 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:45.4365187+08:00 [BUILD] action=constructed x=190 y=59 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:46.6343626+08:00 [BUILD] action=placed x=190 y=57 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:46.8131223+08:00 [BUILD] action=constructed x=190 y=57 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:47.1530682+08:00 [BUILD] action=placed x=188 y=57 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:47.3504027+08:00 [BUILD] action=constructed x=188 y=57 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:48.1882742+08:00 [BUILD] action=placed x=186 y=57 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:48.3667183+08:00 [BUILD] action=constructed x=186 y=57 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:15:49.731736+08:00 [BUILD] action=placed x=189 y=59 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:49.731736+08:00 [BUILD] action=constructed x=189 y=59 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:49.7673567+08:00 [BUILD] action=placed x=188 y=59 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:49.7673567+08:00 [BUILD] action=constructed x=188 y=59 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:49.8025807+08:00 [BUILD] action=placed x=187 y=59 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:49.8566307+08:00 [BUILD] action=constructed x=187 y=59 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:50.2683313+08:00 [BUILD] action=placed x=187 y=59 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.2683313+08:00 [BUILD] action=constructed x=187 y=59 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.3050678+08:00 [BUILD] action=placed x=187 y=60 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.3059782+08:00 [BUILD] action=constructed x=187 y=60 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.3620851+08:00 [BUILD] action=placed x=187 y=61 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.3620851+08:00 [BUILD] action=constructed x=187 y=61 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.3995603+08:00 [BUILD] action=placed x=187 y=62 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.4010686+08:00 [BUILD] action=constructed x=187 y=62 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.4565531+08:00 [BUILD] action=placed x=187 y=63 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.4565531+08:00 [BUILD] action=constructed x=187 y=63 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.494387+08:00 [BUILD] action=placed x=187 y=64 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.494387+08:00 [BUILD] action=constructed x=187 y=64 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.5512514+08:00 [BUILD] action=placed x=187 y=65 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.5512514+08:00 [BUILD] action=constructed x=187 y=65 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.5935023+08:00 [BUILD] action=placed x=187 y=66 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.5935023+08:00 [BUILD] action=constructed x=187 y=66 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.6247594+08:00 [BUILD] action=placed x=187 y=67 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.6630456+08:00 [BUILD] action=constructed x=187 y=67 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.6815188+08:00 [BUILD] action=placed x=187 y=68 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.6994373+08:00 [BUILD] action=constructed x=187 y=68 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.7009495+08:00 [BUILD] action=placed x=187 y=69 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:50.7583293+08:00 [BUILD] action=constructed x=187 y=69 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.1575474+08:00 [BUILD] action=placed x=192 y=58 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.1575474+08:00 [BUILD] action=constructed x=192 y=58 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.2138232+08:00 [BUILD] action=placed x=192 y=59 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.2138232+08:00 [BUILD] action=constructed x=192 y=59 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.2488407+08:00 [BUILD] action=placed x=192 y=60 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.2488407+08:00 [BUILD] action=constructed x=192 y=60 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.2844226+08:00 [BUILD] action=placed x=192 y=61 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.3381007+08:00 [BUILD] action=constructed x=192 y=61 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:15:51.9050603+08:00 [BUILD] action=placed x=192 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:51.9664978+08:00 [BUILD] action=constructed x=192 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:51.9664978+08:00 [BUILD] action=placed x=191 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:51.9664978+08:00 [BUILD] action=constructed x=191 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:52.0193456+08:00 [BUILD] action=placed x=190 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:52.0193456+08:00 [BUILD] action=constructed x=190 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:52.0559853+08:00 [BUILD] action=placed x=189 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:52.0559853+08:00 [BUILD] action=constructed x=189 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:52.0907498+08:00 [BUILD] action=placed x=188 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:52.1106832+08:00 [BUILD] action=constructed x=188 y=61 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:15:59.1429184+08:00 [BUILD] action=deconstructing x=164 y=111 block_id=186 block=塑钢压缩机 team=1
+2026-04-02T00:16:07.6330311+08:00 [BUILD] action=destroyed x=164 y=111 block_id=186 block=塑钢压缩机 team=1
+2026-04-02T00:16:16.1634371+08:00 [BUILD] action=placed x=153 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:16.3493841+08:00 [BUILD] action=constructed x=153 y=85 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:16.8440807+08:00 [BUILD] action=placed x=153 y=83 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:17.0343477+08:00 [BUILD] action=constructed x=153 y=83 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:20.5573517+08:00 [BUILD] action=placed x=155 y=85 block_id=308 block=火力发电机 team=1 rot=0
+2026-04-02T00:16:21.1947666+08:00 [BUILD] action=constructed x=155 y=85 block_id=308 block=火力发电机 team=1 rot=0
+2026-04-02T00:16:23.4490111+08:00 [BUILD] action=placed x=155 y=84 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:23.4490111+08:00 [BUILD] action=constructed x=155 y=84 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:24.8927086+08:00 [BUILD] action=placed x=152 y=81 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:25.0766679+08:00 [BUILD] action=constructed x=152 y=81 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:25.7139024+08:00 [BUILD] action=placed x=150 y=79 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:25.8971793+08:00 [BUILD] action=constructed x=150 y=79 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:27.4516359+08:00 [BUILD] action=placed x=159 y=74 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:27.6322695+08:00 [BUILD] action=constructed x=159 y=74 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:27.649472+08:00 [BUILD] action=placed x=159 y=72 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:27.8083456+08:00 [BUILD] action=constructed x=159 y=72 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:27.8446802+08:00 [BUILD] action=placed x=159 y=70 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:28.0265224+08:00 [BUILD] action=constructed x=159 y=70 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:28.1807434+08:00 [BUILD] action=placed x=156 y=70 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:28.3789154+08:00 [BUILD] action=constructed x=156 y=70 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:28.431916+08:00 [BUILD] action=placed x=156 y=72 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:28.6016024+08:00 [BUILD] action=constructed x=156 y=72 block_id=325 block=机械钻头 team=1 rot=0
+2026-04-02T00:16:30.8620282+08:00 [BUILD] action=placed x=156 y=74 block_id=183 block=硅冶炼厂 team=1 rot=0
+2026-04-02T00:16:31.8268929+08:00 [BUILD] action=constructed x=156 y=74 block_id=183 block=硅冶炼厂 team=1 rot=0
+2026-04-02T00:16:32.666462+08:00 [BUILD] action=placed x=158 y=71 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:32.666462+08:00 [BUILD] action=constructed x=158 y=71 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:32.7027709+08:00 [BUILD] action=placed x=158 y=72 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:32.7415978+08:00 [BUILD] action=constructed x=158 y=72 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:33.1162028+08:00 [BUILD] action=placed x=158 y=73 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:33.168423+08:00 [BUILD] action=constructed x=158 y=73 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:33.6148887+08:00 [BUILD] action=placed x=158 y=74 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:16:33.6761421+08:00 [BUILD] action=constructed x=158 y=74 block_id=257 block=传送带 team=1 rot=2
+2026-04-02T00:16:34.4232572+08:00 [BUILD] action=placed x=152 y=80 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.4632397+08:00 [BUILD] action=constructed x=152 y=80 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.5257943+08:00 [BUILD] action=placed x=152 y=79 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.5257943+08:00 [BUILD] action=constructed x=152 y=79 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.7984127+08:00 [BUILD] action=placed x=152 y=78 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.7984127+08:00 [BUILD] action=constructed x=152 y=78 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.8529221+08:00 [BUILD] action=placed x=152 y=77 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.8908173+08:00 [BUILD] action=constructed x=152 y=77 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.8908173+08:00 [BUILD] action=placed x=152 y=76 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:34.8908173+08:00 [BUILD] action=constructed x=152 y=76 block_id=257 block=传送带 team=1 rot=3
+2026-04-02T00:16:35.3830438+08:00 [BUILD] action=placed x=152 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.3830438+08:00 [BUILD] action=constructed x=152 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.422507+08:00 [BUILD] action=placed x=153 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.422507+08:00 [BUILD] action=constructed x=153 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.4567783+08:00 [BUILD] action=placed x=154 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.4745645+08:00 [BUILD] action=constructed x=154 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.5131018+08:00 [BUILD] action=placed x=155 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.5131018+08:00 [BUILD] action=constructed x=155 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.5493901+08:00 [BUILD] action=placed x=156 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.5716734+08:00 [BUILD] action=constructed x=156 y=76 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:35.8906891+08:00 [BUILD] action=placed x=156 y=76 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:35.8912693+08:00 [BUILD] action=constructed x=156 y=76 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:35.9466197+08:00 [BUILD] action=placed x=156 y=77 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:35.9466197+08:00 [BUILD] action=constructed x=156 y=77 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:35.9854017+08:00 [BUILD] action=placed x=156 y=78 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:35.9864023+08:00 [BUILD] action=constructed x=156 y=78 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:36.0682148+08:00 [BUILD] action=placed x=156 y=79 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:36.0682148+08:00 [BUILD] action=constructed x=156 y=79 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:36.2696254+08:00 [BUILD] action=placed x=156 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.309922+08:00 [BUILD] action=constructed x=156 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.3683993+08:00 [BUILD] action=placed x=157 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.3683993+08:00 [BUILD] action=constructed x=157 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.3694077+08:00 [BUILD] action=placed x=158 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.4058199+08:00 [BUILD] action=constructed x=158 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.4241761+08:00 [BUILD] action=placed x=159 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.4436448+08:00 [BUILD] action=constructed x=159 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.4612568+08:00 [BUILD] action=placed x=160 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.5182335+08:00 [BUILD] action=constructed x=160 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.5597272+08:00 [BUILD] action=placed x=161 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.5597272+08:00 [BUILD] action=constructed x=161 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.5606288+08:00 [BUILD] action=placed x=162 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:36.598035+08:00 [BUILD] action=constructed x=162 y=79 block_id=257 block=传送带 team=1 rot=0
+2026-04-02T00:16:37.9239808+08:00 [BUILD] action=placed x=156 y=76 block_id=269 block=反向溢流门 team=1 rot=0
+2026-04-02T00:16:38.2494611+08:00 [BUILD] action=constructed x=156 y=76 block_id=269 block=反向溢流门 team=1 rot=0
+2026-04-02T00:16:42.218225+08:00 [BUILD] action=placed x=157 y=76 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:42.218225+08:00 [BUILD] action=constructed x=157 y=76 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:42.2884261+08:00 [BUILD] action=placed x=157 y=77 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:42.2884261+08:00 [BUILD] action=constructed x=157 y=77 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:42.3109945+08:00 [BUILD] action=placed x=157 y=78 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:42.3120205+08:00 [BUILD] action=constructed x=157 y=78 block_id=257 block=传送带 team=1 rot=1
+2026-04-02T00:16:43.2126261+08:00 [BUILD] action=deconstructing x=156 y=77 block_id=257 block=传送带 team=1
+2026-04-02T00:16:43.249667+08:00 [BUILD] action=destroyed x=156 y=77 block_id=257 block=传送带 team=1
+2026-04-02T00:16:43.249667+08:00 [BUILD] action=deconstructing x=156 y=78 block_id=257 block=传送带 team=1
+2026-04-02T00:16:43.249667+08:00 [BUILD] action=destroyed x=156 y=78 block_id=257 block=传送带 team=1
+2026-04-02T00:16:43.2895369+08:00 [BUILD] action=deconstructing x=156 y=79 block_id=257 block=传送带 team=1
+2026-04-02T00:16:43.3273397+08:00 [BUILD] action=destroyed x=156 y=79 block_id=257 block=传送带 team=1
+2026-04-02T00:16:47.611079+08:00 [BUILD] action=placed x=157 y=76 block_id=268 block=溢流门 team=1 rot=0
+2026-04-02T00:16:47.8827378+08:00 [BUILD] action=constructed x=157 y=76 block_id=268 block=溢流门 team=1 rot=0
+2026-04-02T00:16:51.0484949+08:00 [BUILD] action=placed x=158 y=76 block_id=308 block=火力发电机 team=1 rot=0
+2026-04-02T00:16:51.6918395+08:00 [BUILD] action=constructed x=158 y=76 block_id=308 block=火力发电机 team=1 rot=0
+2026-04-02T00:16:52.4826012+08:00 [BUILD] action=placed x=158 y=75 block_id=306 block=电池 team=1 rot=0
+2026-04-02T00:16:52.9293286+08:00 [BUILD] action=constructed x=158 y=75 block_id=306 block=电池 team=1 rot=0
+2026-04-01T16:17:00.2367835Z [NET] kind=tcp_accept packet= conn_id=269659135 uuid= ip=192.168.0.101 name="" detail=
+2026-04-01T16:17:00.2644431Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="" detail=version=156 type=official mods=0
+2026-04-01T16:17:00.3113767Z [NET] kind=world_handshake_sent packet= conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]12153[]" detail=
+2026-04-01T16:17:01.4061782Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=12153 uuid=bRea8YRoGToAAAAAPO9P1Q== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be[gray]12153[]" detail=
+2026-04-02T00:17:01.5293482+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 core=core-foundation core_x=164 core_y=79 spawn_x=164 spawn_y=79
+2026-04-02T00:17:01.596947+08:00 [RESPAWN] player="[#00ffffff]月[#8982edff]子[#87ceebff]芳 \uf7a9\uf7be" team=1 unit=36 build_speed=0.75 spawn_x=164 spawn_y=79

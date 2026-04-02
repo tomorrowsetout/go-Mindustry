@@ -104,6 +104,18 @@ type World struct {
 	pendingBreaks       map[int32]pendingBreakState
 	builderStates       map[int32]builderRuntimeState
 	factoryStates       map[int32]factoryState
+	drillStates         map[int32]drillRuntimeState
+	pumpStates          map[int32]pumpRuntimeState
+	crafterStates       map[int32]crafterRuntimeState
+	heatStates          map[int32]float32
+	incineratorStates   map[int32]float32
+	teamPowerStates     map[TeamID]*teamPowerState
+	teamPowerBudget     map[TeamID]float32
+	powerNetStates      map[int32]*powerNetState
+	powerNetByPos       map[int32]int32
+	powerNetDirty       bool
+	powerStorageState   map[int32]float32
+	powerGeneratorState map[int32]*powerGeneratorState
 	unitMountCDs        map[int32][]float32
 	unitTargets         map[int32]targetTrackState
 	teamItems           map[TeamID]map[ItemID]int32
@@ -113,6 +125,7 @@ type World struct {
 	sorterCfg           map[int32]ItemID
 	unloaderCfg         map[int32]ItemID
 	payloadRouterCfg    map[int32]protocol.Content
+	powerNodeLinks      map[int32][]int32
 	bridgeLinks         map[int32]int32
 	massDriverLinks     map[int32]int32
 	payloadDriverLinks  map[int32]int32
@@ -218,8 +231,27 @@ type factoryState struct {
 	UnitType int16
 }
 
+type drillRuntimeState struct {
+	Progress float32
+	Warmup   float32
+}
+
+type pumpRuntimeState struct {
+	Warmup      float32
+	Progress    float32
+	Accumulator float32
+}
+
+type crafterRuntimeState struct {
+	Progress      float32
+	Warmup        float32
+	TotalProgress float32
+	Seed          uint32
+}
+
 type nuclearReactorState struct {
 	Heat         float32
+	HeatProgress float32
 	FuelProgress float32
 }
 
@@ -330,6 +362,7 @@ const (
 	EntityEventRemoved             EntityEventKind = "removed"
 	EntityEventBuildPlaced         EntityEventKind = "build_placed"
 	EntityEventBuildConstructed    EntityEventKind = "build_constructed"
+	EntityEventBuildConfig         EntityEventKind = "build_config"
 	EntityEventBuildDeconstructing EntityEventKind = "build_deconstructing"
 	EntityEventBuildCancelled      EntityEventKind = "build_cancelled"
 	EntityEventBuildDestroyed      EntityEventKind = "build_destroyed"
@@ -357,6 +390,54 @@ type EntityEvent struct {
 	EffectX     float32
 	EffectY     float32
 	EffectRot   float32
+}
+
+func (w *World) appendBuildConfigEventLocked(pos int32) {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return
+	}
+	tile := &w.model.Tiles[pos]
+	if tile.Build == nil || tile.Block == 0 {
+		return
+	}
+	cfg, ok := w.normalizedBuildingConfigLocked(pos)
+	if !ok {
+		if tile.Build == nil || len(tile.Build.Config) == 0 {
+			return
+		}
+		var decoded any
+		decoded, ok = decodeStoredBuildingConfig(tile.Build.Config)
+		if !ok {
+			return
+		}
+		cfg = decoded
+	}
+	w.entityEvents = append(w.entityEvents, EntityEvent{
+		Kind:        EntityEventBuildConfig,
+		BuildPos:    packTilePos(tile.X, tile.Y),
+		BuildTeam:   tile.Build.Team,
+		BuildBlock:  int16(tile.Block),
+		BuildRot:    tile.Rotation,
+		BuildConfig: cfg,
+	})
+}
+
+func (w *World) appendBuildConfigValueEventLocked(pos int32, value any) {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return
+	}
+	tile := &w.model.Tiles[pos]
+	if tile.Build == nil || tile.Block == 0 {
+		return
+	}
+	w.entityEvents = append(w.entityEvents, EntityEvent{
+		Kind:        EntityEventBuildConfig,
+		BuildPos:    packTilePos(tile.X, tile.Y),
+		BuildTeam:   tile.Build.Team,
+		BuildBlock:  int16(tile.Block),
+		BuildRot:    tile.Rotation,
+		BuildConfig: value,
+	})
 }
 
 func packTilePos(x, y int) int32 {
@@ -726,6 +807,18 @@ func New(cfg Config) *World {
 		pendingBreaks:          map[int32]pendingBreakState{},
 		builderStates:          map[int32]builderRuntimeState{},
 		factoryStates:          map[int32]factoryState{},
+		drillStates:            map[int32]drillRuntimeState{},
+		pumpStates:             map[int32]pumpRuntimeState{},
+		crafterStates:          map[int32]crafterRuntimeState{},
+		heatStates:             map[int32]float32{},
+		incineratorStates:      map[int32]float32{},
+		teamPowerStates:        map[TeamID]*teamPowerState{},
+		teamPowerBudget:        map[TeamID]float32{},
+		powerNetStates:         map[int32]*powerNetState{},
+		powerNetByPos:          map[int32]int32{},
+		powerNetDirty:          true,
+		powerStorageState:      map[int32]float32{},
+		powerGeneratorState:    map[int32]*powerGeneratorState{},
 		unitMountCDs:           map[int32][]float32{},
 		unitTargets:            map[int32]targetTrackState{},
 		teamItems:              map[TeamID]map[ItemID]int32{},
@@ -735,6 +828,7 @@ func New(cfg Config) *World {
 		sorterCfg:              map[int32]ItemID{},
 		unloaderCfg:            map[int32]ItemID{},
 		payloadRouterCfg:       map[int32]protocol.Content{},
+		powerNodeLinks:         map[int32][]int32{},
 		bridgeLinks:            map[int32]int32{},
 		massDriverLinks:        map[int32]int32{},
 		payloadDriverLinks:     map[int32]int32{},
@@ -820,10 +914,6 @@ func (w *World) Step(delta time.Duration) {
 	w.stepPendingBreaks(delta)
 	pendingBreakDur := time.Since(pendingBreakStartedAt)
 
-	factoryStartedAt := time.Now()
-	w.stepFactoryProduction(delta)
-	factoryDur := time.Since(factoryStartedAt)
-
 	sandboxStartedAt := time.Now()
 	w.stepSandboxSources(delta)
 	sandboxDur := time.Since(sandboxStartedAt)
@@ -831,6 +921,20 @@ func (w *World) Step(delta time.Duration) {
 	liquidStartedAt := time.Now()
 	w.stepLiquidLogistics(delta)
 	liquidDur := time.Since(liquidStartedAt)
+
+	reactorStartedAt := time.Now()
+	w.stepNuclearReactors(delta)
+	reactorDur := time.Since(reactorStartedAt)
+
+	w.beginTeamPowerStep(delta)
+	factoryStartedAt := time.Now()
+	w.stepFactoryProduction(delta)
+	w.stepDrillProduction(delta)
+	w.stepPumpProduction(delta)
+	w.stepCrafterProduction(delta)
+	w.stepHeatConductorsLocked()
+	w.stepIncinerators(delta)
+	factoryDur := time.Since(factoryStartedAt)
 
 	itemStartedAt := time.Now()
 	itemPerf := w.stepItemLogistics(delta)
@@ -840,13 +944,10 @@ func (w *World) Step(delta time.Duration) {
 	w.stepPayloadLogistics(delta)
 	payloadDur := time.Since(payloadStartedAt)
 
-	reactorStartedAt := time.Now()
-	w.stepNuclearReactors(delta)
-	reactorDur := time.Since(reactorStartedAt)
-
 	entitiesStartedAt := time.Now()
 	entityMovementDur, entityCombatDur, buildingCombatDur, bulletDur := w.stepEntities(delta)
 	entitiesDur := time.Since(entitiesStartedAt)
+	w.endTeamPowerStep()
 
 	totalDur := time.Since(stepStartedAt)
 	if w.shouldLogPerfLocked(totalDur) {
@@ -1058,14 +1159,29 @@ func (w *World) clearBuildingRuntimeLocked(pos int32) {
 	delete(w.transportAccum, pos)
 	delete(w.junctionQueues, pos)
 	delete(w.reactorStates, pos)
+	delete(w.drillStates, pos)
+	delete(w.pumpStates, pos)
+	delete(w.crafterStates, pos)
+	delete(w.heatStates, pos)
+	delete(w.incineratorStates, pos)
+	delete(w.powerStorageState, pos)
+	delete(w.powerGeneratorState, pos)
 }
 
 func (w *World) clearConfiguredStateLocked(pos int32) {
+	powerTopologyChanged := false
+	if w.model != nil && pos >= 0 && int(pos) < len(w.model.Tiles) {
+		switch w.blockNameByID(int16(w.model.Tiles[pos].Block)) {
+		case "power-node", "power-node-large", "surge-tower", "beam-link", "power-source":
+			powerTopologyChanged = len(w.powerNodeLinks[pos]) > 0
+		}
+	}
 	delete(w.itemSourceCfg, pos)
 	delete(w.liquidSourceCfg, pos)
 	delete(w.sorterCfg, pos)
 	delete(w.unloaderCfg, pos)
 	delete(w.payloadRouterCfg, pos)
+	delete(w.powerNodeLinks, pos)
 	delete(w.bridgeLinks, pos)
 	delete(w.massDriverLinks, pos)
 	delete(w.payloadDriverLinks, pos)
@@ -1073,6 +1189,9 @@ func (w *World) clearConfiguredStateLocked(pos int32) {
 		if tile := &w.model.Tiles[pos]; tile.Build != nil {
 			tile.Build.Config = nil
 		}
+	}
+	if powerTopologyChanged {
+		w.invalidatePowerNetsLocked()
 	}
 }
 
@@ -1120,6 +1239,8 @@ func (w *World) applyBuildingConfigLocked(pos int32, value any, persist bool) {
 		}
 	case protocol.Point2:
 		applied = w.configurePointConfigLocked(pos, v)
+	case []protocol.Point2:
+		applied = w.configurePointSeqConfigLocked(pos, v)
 	case int32:
 		if w.itemConfigBlockAtLocked(pos) {
 			w.configureItemContentLocked(pos, ItemID(v))
@@ -1158,6 +1279,13 @@ func (w *World) configurePointConfigLocked(pos int32, p protocol.Point2) bool {
 	}
 	tile := &w.model.Tiles[pos]
 	switch w.blockNameByID(int16(tile.Block)) {
+	case "power-node", "power-node-large", "surge-tower", "beam-link", "power-source":
+		targetX := tile.X + int(p.X)
+		targetY := tile.Y + int(p.Y)
+		if !w.model.InBounds(targetX, targetY) {
+			return false
+		}
+		return w.configureAbsoluteLinkLocked(pos, int32(targetY*w.model.Width+targetX))
 	case "bridge-conveyor", "phase-conveyor", "bridge-conduit", "phase-conduit", "mass-driver", "payload-mass-driver", "large-payload-mass-driver":
 		targetX := tile.X + int(p.X)
 		targetY := tile.Y + int(p.Y)
@@ -1170,6 +1298,28 @@ func (w *World) configurePointConfigLocked(pos int32, p protocol.Point2) bool {
 	}
 }
 
+func (w *World) configurePointSeqConfigLocked(pos int32, points []protocol.Point2) bool {
+	if w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return false
+	}
+	tile := &w.model.Tiles[pos]
+	switch w.blockNameByID(int16(tile.Block)) {
+	case "power-node", "power-node-large", "surge-tower", "beam-link", "power-source":
+		targets := make([]int32, 0, len(points))
+		for _, p := range points {
+			targetX := tile.X + int(p.X)
+			targetY := tile.Y + int(p.Y)
+			if !w.model.InBounds(targetX, targetY) {
+				continue
+			}
+			targets = append(targets, int32(targetY*w.model.Width+targetX))
+		}
+		return w.configurePowerNodeLinksLocked(pos, targets)
+	default:
+		return false
+	}
+}
+
 func (w *World) configureAbsoluteLinkLocked(pos, target int32) bool {
 	if w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
 		return false
@@ -1177,6 +1327,9 @@ func (w *World) configureAbsoluteLinkLocked(pos, target int32) bool {
 	if target < 0 {
 		if w.model != nil && pos >= 0 && int(pos) < len(w.model.Tiles) {
 			switch w.blockNameByID(int16(w.model.Tiles[pos].Block)) {
+			case "power-node", "power-node-large", "surge-tower", "beam-link", "power-source":
+				delete(w.powerNodeLinks, pos)
+				w.invalidatePowerNetsLocked()
 			case "bridge-conveyor", "phase-conveyor":
 				delete(w.bridgeLinks, pos)
 			case "mass-driver":
@@ -1189,6 +1342,9 @@ func (w *World) configureAbsoluteLinkLocked(pos, target int32) bool {
 	}
 	tile := &w.model.Tiles[pos]
 	name := w.blockNameByID(int16(tile.Block))
+	if name == "power-node" || name == "power-node-large" || name == "surge-tower" || name == "beam-link" || name == "power-source" {
+		return w.togglePowerNodeLinkLocked(pos, target)
+	}
 	if name != "bridge-conveyor" && name != "phase-conveyor" && name != "bridge-conduit" && name != "phase-conduit" && name != "mass-driver" && name != "payload-mass-driver" && name != "large-payload-mass-driver" {
 		return false
 	}
@@ -1292,6 +1448,29 @@ func (w *World) normalizedBuildingConfigLocked(pos int32) (any, bool) {
 			return nil, false
 		}
 		return filter, true
+	case "power-node", "power-node-large", "surge-tower", "beam-link", "power-source":
+		links := w.powerNodeLinks[pos]
+		if len(links) == 0 {
+			return nil, false
+		}
+		out := make([]protocol.Point2, 0, len(links))
+		for _, target := range links {
+			if target < 0 || int(target) >= len(w.model.Tiles) {
+				continue
+			}
+			targetTile := &w.model.Tiles[target]
+			out = append(out, protocol.Point2{X: int32(targetTile.X - tile.X), Y: int32(targetTile.Y - tile.Y)})
+		}
+		if len(out) == 0 {
+			return nil, false
+		}
+		sort.Slice(out, func(i, j int) bool {
+			if out[i].X == out[j].X {
+				return out[i].Y < out[j].Y
+			}
+			return out[i].X < out[j].X
+		})
+		return out, true
 	case "bridge-conveyor", "phase-conveyor", "bridge-conduit", "phase-conduit":
 		target, ok := w.bridgeLinks[pos]
 		if !ok || target < 0 || int(target) >= len(w.model.Tiles) {
@@ -1504,6 +1683,24 @@ func (w *World) itemCapacityForBlockLocked(tile *Tile) int32 {
 		return 3
 	case "duct", "armored-duct", "duct-router", "overflow-duct", "underflow-duct":
 		return 1
+	case "combustion-generator", "steam-generator", "differential-generator", "rtg-generator":
+		return 10
+	case "graphite-press", "silicon-smelter", "kiln", "plastanium-compressor", "cryofluid-mixer", "pyratite-mixer", "blast-mixer", "separator", "pulverizer", "coal-centrifuge", "spore-press", "cultivator", "oxidation-chamber", "phase-heater":
+		return 10
+	case "neoplasia-reactor":
+		return 10
+	case "mechanical-drill", "pneumatic-drill", "laser-drill":
+		return 10
+	case "blast-drill":
+		return 20
+	case "oil-extractor", "melter", "disassembler", "slag-centrifuge":
+		return 10
+	case "multi-press", "surge-smelter", "carbide-crucible", "surge-crucible", "heat-reactor":
+		return 20
+	case "phase-weaver", "silicon-crucible", "silicon-arc-furnace":
+		return 30
+	case "phase-synthesizer":
+		return 40
 	case "core-shard":
 		return 4000
 	case "core-foundation":
@@ -1554,8 +1751,58 @@ func (w *World) liquidCapacityForBlockLocked(tile *Tile) float32 {
 		return 40
 	case "plated-conduit", "reinforced-conduit":
 		return 50
+	case "multi-press", "plastanium-compressor", "coal-centrifuge", "spore-press":
+		return 60
 	case "thorium-reactor":
 		return 30
+	case "mechanical-pump":
+		return 20
+	case "rotary-pump":
+		return 80
+	case "impulse-pump":
+		return 200
+	case "water-extractor", "oil-extractor":
+		return 40
+	case "cryofluid-mixer":
+		return 36
+	case "electrolyzer":
+		return 50
+	case "melter":
+		return 10
+	case "separator":
+		return 40
+	case "slag-centrifuge":
+		return 80
+	case "heat-reactor":
+		return 10
+	case "surge-crucible":
+		return 80 * 5
+	case "slag-heater":
+		return 120
+	case "neoplasia-reactor":
+		return 80
+	case "vent-condenser":
+		return 60
+	case "atmospheric-concentrator":
+		return 60
+	case "oxidation-chamber":
+		return 30
+	case "turbine-condenser":
+		return 20
+	case "chemical-combustion-chamber":
+		return 20 * 5
+	case "pyrolysis-generator":
+		return 30 * 5
+	case "flux-reactor":
+		return 30
+	case "cyanogen-synthesizer":
+		return 80
+	case "phase-synthesizer":
+		return 10 * 4
+	case "cultivator":
+		return 80
+	case "disassembler":
+		return 12
 	case "liquid-router":
 		return 120
 	case "liquid-container":
@@ -1588,12 +1835,13 @@ func (w *World) stepNuclearReactors(delta time.Duration) {
 		return
 	}
 	const (
-		thoriumItemID       = ItemID(5)
 		reactorItemCapacity = float32(30)
 		// Mindustry 156 Blocks.thoriumReactor:
-		// itemDuration = 360f, heating = 0.02f
+		// itemDuration = 360f, heating = 0.02f, heatOutput = 15f, heatWarmupRate = 1f
 		reactorHeatingPerFrame    = float32(0.02)
 		reactorItemDurationFrames = float32(360)
+		reactorHeatOutput         = float32(15)
+		reactorHeatWarmupRate     = float32(1)
 		reactorAmbientCooldown    = float32(60 * 20)
 		reactorCoolantPower       = float32(0.5)
 		reactorExplosionRadius    = 19
@@ -1610,14 +1858,14 @@ func (w *World) stepNuclearReactors(delta time.Duration) {
 			continue
 		}
 		state := w.reactorStates[pos]
-		fuel := tile.Build.ItemAmount(thoriumItemID)
+		fuel := itemAmountOneOf(tile.Build, thoriumItemID, legacyThoriumItemID)
 		fullness := clampf(float32(fuel)/reactorItemCapacity, 0, 1)
 
 		if fuel > 0 {
 			state.Heat += fullness * reactorHeatingPerFrame * minf(deltaFrames, 4)
 			state.FuelProgress += deltaFrames
 			for state.FuelProgress >= reactorItemDurationFrames {
-				if !tile.Build.RemoveItem(thoriumItemID, 1) {
+				if !removeOneItemOfLocked(tile.Build, thoriumItemID, legacyThoriumItemID) {
 					state.FuelProgress = 0
 					break
 				}
@@ -1652,6 +1900,12 @@ func (w *World) stepNuclearReactors(delta time.Duration) {
 		}
 
 		state.Heat = clampf(state.Heat, 0, 1)
+		state.HeatProgress = approachf(state.HeatProgress, state.Heat*reactorHeatOutput, reactorHeatWarmupRate*deltaFrames)
+		if state.HeatProgress <= 0.0001 {
+			delete(w.heatStates, pos)
+		} else {
+			w.heatStates[pos] = state.HeatProgress
+		}
 		w.reactorStates[pos] = state
 
 		if state.Heat >= 0.999 {
@@ -2873,6 +3127,14 @@ func (w *World) stepPayloadMassDriverLocked(pos int32, tile *Tile, reloadFrames,
 		w.syncPayloadTileLocked(tile, st.Payload)
 		return
 	}
+	powerUse := float32(0.5)
+	if w.blockNameByID(int16(tile.Block)) == "large-payload-mass-driver" {
+		powerUse = 3
+	}
+	if !w.requirePowerAtLocked(pos, tile.Team, powerUse*(frames/60)) {
+		w.syncPayloadTileLocked(tile, st.Payload)
+		return
+	}
 	driver.Charge += frames
 	if driver.Charge < chargeFrames {
 		w.syncPayloadTileLocked(tile, st.Payload)
@@ -3419,6 +3681,9 @@ func (w *World) stepStackConveyorLocked(pos int32, tile *Tile, speed float32, re
 		st.Link = -1
 		return
 	}
+	if w.blockNameByID(int16(tile.Block)) == "surge-conveyor" && !w.requirePowerAtLocked(pos, tile.Team, (1.0/60.0)*dt) {
+		return
+	}
 	frontPos, hasFront := w.forwardItemTargetPosLocked(pos, tile.Rotation)
 	if hasFront {
 		frontTile := &w.model.Tiles[frontPos]
@@ -3470,6 +3735,9 @@ func (w *World) stepStackRouterLocked(pos int32, tile *Tile, speed float32, dt f
 		sst.Unloading = false
 		dst.HasItem = false
 		dst.Progress = 0
+		return
+	}
+	if w.blockNameByID(int16(tile.Block)) == "surge-router" && !w.requirePowerAtLocked(pos, tile.Team, (3.0/60.0)*dt) {
 		return
 	}
 	if !sst.Unloading && totalBuildingItems(tile.Build) >= w.itemCapacityForBlockLocked(tile) {
@@ -3683,6 +3951,9 @@ func (w *World) stepMassDriverLocked(pos int32, tile *Tile, dt float32) {
 	if w.massDriverIncomingShotsLocked(target) > 0 {
 		return
 	}
+	if !w.requirePowerAtLocked(pos, tile.Team, 1.75*dt) {
+		return
+	}
 	items := w.massDriverTakePayloadLocked(tile, 120)
 	if len(items) == 0 {
 		return
@@ -3892,6 +4163,14 @@ func (w *World) tryInsertItemLocked(fromPos, toPos int32, item ItemID, depth int
 			return false
 		}
 		return w.addItemAtLocked(toPos, item, 1)
+	case "item-void":
+		return true
+	case "incinerator":
+		if !w.incineratorAcceptsItemLocked(toPos) {
+			return false
+		}
+		w.incineratorBurnItemLocked(toPos)
+		return true
 	default:
 		cap := w.itemCapacityAtLocked(toPos)
 		if cap <= 0 || w.itemAmountAtLocked(toPos, item) >= cap {
@@ -4005,6 +4284,8 @@ func (w *World) canAcceptLiquidLocked(fromPos, toPos int32, liquid LiquidID, dep
 		return w.conduitAcceptsLiquidLocked(fromPos, toPos, liquid, true)
 	case "reinforced-conduit":
 		return w.conduitAcceptsLiquidLocked(fromPos, toPos, liquid, false)
+	case "liquid-void":
+		return true
 	case "liquid-router", "liquid-container", "liquid-tank", "reinforced-liquid-router", "reinforced-liquid-container", "reinforced-liquid-tank", "thorium-reactor":
 		return w.liquidCanStoreLocked(toTile, liquid)
 	case "bridge-conduit", "phase-conduit":
@@ -4018,6 +4299,8 @@ func (w *World) canAcceptLiquidLocked(fromPos, toPos int32, liquid LiquidID, dep
 	case "liquid-junction", "reinforced-liquid-junction":
 		_, ok := w.liquidJunctionDestinationLocked(fromPos, toPos, liquid, depth+1)
 		return ok
+	case "incinerator":
+		return w.incineratorAcceptsLiquidLocked(toPos, liquid)
 	default:
 		cap := w.liquidCapacityForBlockLocked(toTile)
 		return cap > 0 && w.liquidCanStoreLocked(toTile, liquid)
@@ -4063,6 +4346,13 @@ func (w *World) tryMoveLiquidLocked(fromPos, toPos int32, liquid LiquidID, amoun
 			return 0
 		}
 		return w.tryMoveLiquidLocked(toPos, target, liquid, amount, depth+1)
+	}
+	if name == "incinerator" {
+		w.incineratorBurnLiquidLocked(toPos)
+		return amount
+	}
+	if name == "liquid-void" {
+		return amount
 	}
 	cap := w.liquidCapacityForBlockLocked(toTile)
 	if cap <= 0 {
@@ -5100,13 +5390,23 @@ func blockSizeByName(name string) int {
 	switch name {
 	case "distributor":
 		return 2
+	case "mechanical-drill", "pneumatic-drill", "rotary-pump", "water-extractor", "graphite-press", "silicon-smelter", "kiln", "plastanium-compressor", "phase-weaver", "cryofluid-mixer", "pyratite-mixer", "blast-mixer", "separator", "coal-centrifuge", "spore-press", "cultivator", "electric-heater", "phase-heater":
+		return 2
+	case "power-node-large", "surge-tower", "thermal-generator", "steam-generator", "rtg-generator", "multi-press", "surge-smelter", "small-heat-redirector":
+		return 2
 	case "container", "reinforced-container":
 		return 2
+	case "laser-drill", "impulse-pump", "oil-extractor", "melter", "silicon-crucible", "disassembler", "silicon-arc-furnace", "electrolyzer", "atmospheric-concentrator", "oxidation-chamber", "slag-heater", "vent-condenser", "slag-centrifuge", "heat-reactor", "turbine-condenser", "chemical-combustion-chamber", "pyrolysis-generator", "carbide-crucible", "surge-crucible", "cyanogen-synthesizer", "phase-synthesizer", "heat-redirector", "heat-router":
+		return 3
+	case "battery-large", "solar-panel-large", "differential-generator", "beam-tower", "beam-link":
+		return 3
 	case "core-shard", "vault", "reinforced-vault", "thorium-reactor", "mass-driver", "payload-conveyor", "reinforced-payload-conveyor", "payload-router", "reinforced-payload-router", "payload-mass-driver", "payload-loader", "payload-unloader":
 		return 3
+	case "blast-drill":
+		return 4
 	case "core-foundation", "core-bastion", "impact-reactor":
 		return 4
-	case "core-nucleus", "core-citadel", "large-payload-mass-driver":
+	case "core-nucleus", "core-citadel", "large-payload-mass-driver", "flux-reactor", "neoplasia-reactor":
 		return 5
 	case "core-acropolis":
 		return 6
@@ -5461,6 +5761,18 @@ func (w *World) SetModel(m *WorldModel) {
 	w.pendingBreaks = map[int32]pendingBreakState{}
 	w.builderStates = map[int32]builderRuntimeState{}
 	w.factoryStates = map[int32]factoryState{}
+	w.drillStates = map[int32]drillRuntimeState{}
+	w.pumpStates = map[int32]pumpRuntimeState{}
+	w.crafterStates = map[int32]crafterRuntimeState{}
+	w.heatStates = map[int32]float32{}
+	w.incineratorStates = map[int32]float32{}
+	w.teamPowerStates = map[TeamID]*teamPowerState{}
+	w.teamPowerBudget = map[TeamID]float32{}
+	w.powerNetStates = map[int32]*powerNetState{}
+	w.powerNetByPos = map[int32]int32{}
+	w.powerNetDirty = true
+	w.powerStorageState = map[int32]float32{}
+	w.powerGeneratorState = map[int32]*powerGeneratorState{}
 	w.unitMountCDs = map[int32][]float32{}
 	w.unitTargets = map[int32]targetTrackState{}
 	w.teamItems = map[TeamID]map[ItemID]int32{}
@@ -5469,6 +5781,7 @@ func (w *World) SetModel(m *WorldModel) {
 	w.sorterCfg = map[int32]ItemID{}
 	w.unloaderCfg = map[int32]ItemID{}
 	w.payloadRouterCfg = map[int32]protocol.Content{}
+	w.powerNodeLinks = map[int32][]int32{}
 	w.bridgeLinks = map[int32]int32{}
 	w.massDriverLinks = map[int32]int32{}
 	w.payloadDriverLinks = map[int32]int32{}
@@ -5741,6 +6054,8 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 		}
 		w.setBuildingOccupancyLocked(pos, tile, true)
 		w.applyBuildingConfigLocked(pos, st.Config, true)
+		selfConfigTargets := w.autoLinkPowerNodeLocked(pos)
+		changedConfigs := w.autoLinkNearbyPowerNodesForBuildingLocked(pos)
 		w.ensureTeamInventory(st.Team)
 		dirtyActiveTiles = true
 		w.entityEvents = append(w.entityEvents, EntityEvent{
@@ -5756,6 +6071,20 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			BuildRot:    st.Rotation,
 			BuildConfig: st.Config,
 		})
+		for _, target := range selfConfigTargets {
+			if target < 0 || int(target) >= len(w.model.Tiles) {
+				continue
+			}
+			targetTile := &w.model.Tiles[target]
+			w.appendBuildConfigValueEventLocked(pos, packTilePos(targetTile.X, targetTile.Y))
+		}
+		for _, changed := range changedConfigs {
+			if changed.targetPos < 0 || int(changed.targetPos) >= len(w.model.Tiles) {
+				continue
+			}
+			targetTile := &w.model.Tiles[changed.targetPos]
+			w.appendBuildConfigValueEventLocked(changed.nodePos, packTilePos(targetTile.X, targetTile.Y))
+		}
 		delete(w.pendingBuilds, pos)
 	}
 	if dirtyActiveTiles {
@@ -6830,6 +7159,8 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 		w.rebuildActiveTilesLocked()
 		w.refreshCoreStorageLinksLocked()
 		w.applyBuildingConfigLocked(pos, op.Config, true)
+		selfConfigTargets := w.autoLinkPowerNodeLocked(pos)
+		changedConfigs := w.autoLinkNearbyPowerNodesForBuildingLocked(pos)
 		w.ensureTeamInventory(team)
 		w.entityEvents = append(w.entityEvents,
 			EntityEvent{
@@ -6847,6 +7178,20 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 				BuildConfig: op.Config,
 			},
 		)
+		for _, target := range selfConfigTargets {
+			if target < 0 || int(target) >= len(w.model.Tiles) {
+				continue
+			}
+			targetTile := &w.model.Tiles[target]
+			w.appendBuildConfigValueEventLocked(pos, packTilePos(targetTile.X, targetTile.Y))
+		}
+		for _, changed := range changedConfigs {
+			if changed.targetPos < 0 || int(changed.targetPos) >= len(w.model.Tiles) {
+				continue
+			}
+			targetTile := &w.model.Tiles[changed.targetPos]
+			w.appendBuildConfigValueEventLocked(changed.nodePos, packTilePos(targetTile.X, targetTile.Y))
+		}
 		delete(w.pendingBreaks, pos)
 		delete(w.pendingBuilds, pos)
 		addChanged(pos)
@@ -6915,10 +7260,16 @@ func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation
 		Health:    1000,
 		MaxHealth: 1000,
 	}
+	if w.isPowerRelevantBuildingLocked(tile) {
+		w.invalidatePowerNetsLocked()
+	}
 	w.setBuildingOccupancyLocked(int32(tile.Y*w.model.Width+tile.X), tile, true)
 	w.rebuildActiveTilesLocked()
 	w.refreshCoreStorageLinksLocked()
 	w.applyBuildingConfigLocked(int32(tile.Y*w.model.Width+tile.X), config, true)
+	posIndex := int32(tile.Y*w.model.Width + tile.X)
+	selfConfigTargets := w.autoLinkPowerNodeLocked(posIndex)
+	changedConfigs := w.autoLinkNearbyPowerNodesForBuildingLocked(posIndex)
 	w.ensureTeamInventory(team)
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind:        EntityEventBuildConstructed,
@@ -6929,6 +7280,20 @@ func (w *World) placeTileLocked(tile *Tile, team TeamID, blockID int16, rotation
 		BuildRot:    rotation,
 		BuildConfig: config,
 	})
+	for _, target := range selfConfigTargets {
+		if target < 0 || int(target) >= len(w.model.Tiles) {
+			continue
+		}
+		targetTile := &w.model.Tiles[target]
+		w.appendBuildConfigValueEventLocked(posIndex, packTilePos(targetTile.X, targetTile.Y))
+	}
+	for _, changed := range changedConfigs {
+		if changed.targetPos < 0 || int(changed.targetPos) >= len(w.model.Tiles) {
+			continue
+		}
+		targetTile := &w.model.Tiles[changed.targetPos]
+		w.appendBuildConfigValueEventLocked(changed.nodePos, packTilePos(targetTile.X, targetTile.Y))
+	}
 }
 
 func (w *World) destroyTileLocked(tile *Tile, fallbackTeam TeamID, owner int32) {
@@ -6944,6 +7309,7 @@ func (w *World) destroyTileLocked(tile *Tile, fallbackTeam TeamID, owner int32) 
 	if teamOld == 0 {
 		teamOld = fallbackTeam
 	}
+	powerRelevant := w.isPowerRelevantBuildingLocked(tile)
 	w.refundDeconstructCost(tile, fallbackTeam)
 	w.setBuildingOccupancyLocked(pos, tile, false)
 	tile.Block = 0
@@ -6951,6 +7317,9 @@ func (w *World) destroyTileLocked(tile *Tile, fallbackTeam TeamID, owner int32) 
 	tile.Team = 0
 	tile.Build = nil
 	w.clearBuildingRuntimeLocked(pos)
+	if powerRelevant {
+		w.invalidatePowerNetsLocked()
+	}
 	w.rebuildActiveTilesLocked()
 	w.refreshCoreStorageLinksLocked()
 	w.entityEvents = append(w.entityEvents, EntityEvent{
@@ -7559,7 +7928,7 @@ func (w *World) stepBuildingCombat(dt float32, idToIndex map[int32]int, spatial 
 				Power: prof.PowerCapacity,
 			}
 		}
-		state = w.regenBuildState(state, prof, dt)
+		state = w.regenBuildState(pos, state, prof, t.Build.Team, dt)
 		if state.Cooldown > 0 {
 			state.Cooldown -= dt
 			if state.Cooldown < 0 {
@@ -7628,7 +7997,7 @@ func (w *World) stepBuildingCombat(dt float32, idToIndex map[int32]int, spatial 
 	}
 }
 
-func (w *World) regenBuildState(state buildCombatState, prof buildingWeaponProfile, dt float32) buildCombatState {
+func (w *World) regenBuildState(pos int32, state buildCombatState, prof buildingWeaponProfile, team TeamID, dt float32) buildCombatState {
 	if prof.AmmoCapacity > 0 {
 		if prof.AmmoRegen > 0 {
 			state.Ammo = minf(prof.AmmoCapacity, state.Ammo+prof.AmmoRegen*dt)
@@ -7636,7 +8005,8 @@ func (w *World) regenBuildState(state buildCombatState, prof buildingWeaponProfi
 	}
 	if prof.PowerCapacity > 0 {
 		if prof.PowerRegen > 0 {
-			state.Power = minf(prof.PowerCapacity, state.Power+prof.PowerRegen*dt)
+			got := w.consumePowerAtLocked(pos, team, prof.PowerRegen*dt)
+			state.Power = minf(prof.PowerCapacity, state.Power+got)
 		}
 	}
 	return state
@@ -8171,10 +8541,14 @@ func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
 		return true
 	}
 	team := t.Team
+	powerRelevant := w.isPowerRelevantBuildingLocked(t)
 	t.Build = nil
 	t.Block = 0
 	delete(w.buildStates, pos)
 	w.clearBuildingRuntimeLocked(pos)
+	if powerRelevant {
+		w.invalidatePowerNetsLocked()
+	}
 	w.rebuildActiveTilesLocked()
 	w.entityEvents = append(w.entityEvents, EntityEvent{
 		Kind:       EntityEventBuildDestroyed,

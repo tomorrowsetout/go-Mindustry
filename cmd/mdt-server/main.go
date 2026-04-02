@@ -971,6 +971,27 @@ func main() {
 		_, _ = wld.SetEntityPlayerController(ent.ID, c.PlayerID())
 		return x, y, true
 	}
+	srv.SpawnUnitAtFn = func(c *netserver.Conn, unitID int32, x, y, rotation float32, unitType int16, spawnedByCore bool) (float32, float32, bool) {
+		if c == nil || wld == nil || unitType <= 0 {
+			return 0, 0, false
+		}
+		team := resolveConnTeam(c, wld)
+		builderSpeed := wld.BuilderSpeedForUnitType(unitType)
+		wld.SetTeamBuilderSpeed(team, builderSpeed)
+		ent, err := wld.AddEntityWithID(unitType, unitID, x, y, team)
+		if err != nil {
+			return 0, 0, false
+		}
+		_, _ = wld.SetEntityPosition(ent.ID, x, y, rotation)
+		_, _ = wld.SetEntityPlayerController(ent.ID, c.PlayerID())
+		return x, y, true
+	}
+	srv.ResolveRespawnUnitTypeFn = func(c *netserver.Conn, tile protocol.Point2, fallback int16) int16 {
+		if wld == nil {
+			return fallback
+		}
+		return resolveRespawnUnitTypeByCoreTile(wld, tile, resolveConnTeam(c, wld), fallback)
+	}
 	srv.ReserveUnitIDFn = func() int32 {
 		if wld == nil {
 			return 0
@@ -1397,12 +1418,19 @@ func main() {
 		return 0, nil
 	}
 	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				fmt.Printf("[net] event-loop panic err=%v\n", rec)
+			}
+		}()
 		t := time.NewTicker(time.Second / time.Duration(sim.DefaultTPS))
 		defer t.Stop()
 		for range t.C {
 			evs := wld.DrainEntityEvents()
+			groupedExplosionBuilds := classifyReactorExplosionBuilds(wld, evs)
 			buildHealth := make([]int32, 0, len(evs)*2)
-			for _, ev := range evs {
+			for i := range evs {
+				ev := evs[i]
 				switch ev.Kind {
 				case world.EntityEventRemoved:
 					broadcastUnitDestroy(srv, ev.Entity.ID)
@@ -1454,6 +1482,12 @@ func main() {
 					} else if ev.BuildConfig != nil {
 						srv.BroadcastTileConfig(ev.BuildPos, ev.BuildConfig, nil)
 					}
+				case world.EntityEventBuildConfig:
+					if cfgValue, ok := wld.BuildingConfigPacked(ev.BuildPos); ok {
+						srv.BroadcastTileConfig(ev.BuildPos, cfgValue, nil)
+					} else if ev.BuildConfig != nil {
+						srv.BroadcastTileConfig(ev.BuildPos, ev.BuildConfig, nil)
+					}
 				case world.EntityEventBuildDeconstructing:
 					x, y := unpackTilePos(ev.BuildPos)
 					if shouldFileLogBuildBreakStart() {
@@ -1486,7 +1520,7 @@ func main() {
 						detailLog.LogLine(fmt.Sprintf("%s [BUILD] action=destroyed x=%d y=%d block_id=%d block=%s team=%d",
 							time.Now().Format(time.RFC3339Nano), x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
 					}
-					if shouldLogBuildBreakDone() {
+					if shouldLogBuildBreakDone() && groupedExplosionBuilds[i] == nil {
 						if cfg.Building.Translated {
 							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
 							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 拆除了 block=%d(%s) team=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
@@ -1522,6 +1556,9 @@ func main() {
 					}
 					broadcastBuildHealthUpdate(srv, buildHealth[i:end])
 				}
+			}
+			if shouldLogBuildBreakDone() {
+				logGroupedReactorExplosions(wld, evs, groupedExplosionBuilds)
 			}
 		}
 	}()
@@ -3878,6 +3915,176 @@ func translateBlockNameCN(name string) string {
 	return n
 }
 
+type reactorExplosionGroup struct {
+	effectName    string
+	centerX       int
+	centerY       int
+	radiusTiles   int
+	sourceIndex   int
+	affectedIndex []int
+}
+
+func isReactorBlockName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "thorium-reactor", "impact-reactor", "flux-reactor", "neoplasia-reactor", "heat-reactor":
+		return true
+	default:
+		return false
+	}
+}
+
+func reactorExplosionRadiusByEffect(name string) (int, bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "reactorexplosion":
+		return 19, true
+	case "explosionreactorneoplasm":
+		return 9, true
+	default:
+		return 0, false
+	}
+}
+
+func effectWorldToTile(v float32) int {
+	return int(math.Round(float64((v - 4) / 8)))
+}
+
+func destroyedBuildCoords(ev world.EntityEvent) (int, int) {
+	pt := protocol.UnpackPoint2(ev.BuildPos)
+	return int(pt.X), int(pt.Y)
+}
+
+func classifyReactorExplosionBuilds(wld *world.World, evs []world.EntityEvent) map[int]*reactorExplosionGroup {
+	groups := make([]*reactorExplosionGroup, 0, 4)
+	for i, ev := range evs {
+		if ev.Kind != world.EntityEventEffect {
+			continue
+		}
+		radius, ok := reactorExplosionRadiusByEffect(ev.EffectName)
+		if !ok {
+			continue
+		}
+		groups = append(groups, &reactorExplosionGroup{
+			effectName:  ev.EffectName,
+			centerX:     effectWorldToTile(ev.EffectX),
+			centerY:     effectWorldToTile(ev.EffectY),
+			radiusTiles: radius,
+			sourceIndex: -1,
+		})
+		_ = i
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+
+	out := make(map[int]*reactorExplosionGroup)
+
+	for _, group := range groups {
+		for i, ev := range evs {
+			if ev.Kind != world.EntityEventBuildDestroyed {
+				continue
+			}
+			x, y := destroyedBuildCoords(ev)
+			if x != group.centerX || y != group.centerY {
+				continue
+			}
+			blockName := ""
+			if wld != nil {
+				model := wld.Model()
+				if model != nil {
+					blockName = model.BlockNames[ev.BuildBlock]
+				}
+			}
+			if isReactorBlockName(blockName) {
+				group.sourceIndex = i
+				out[i] = group
+				break
+			}
+			if group.sourceIndex < 0 {
+				group.sourceIndex = i
+				out[i] = group
+			}
+		}
+	}
+
+	for i, ev := range evs {
+		if ev.Kind != world.EntityEventBuildDestroyed {
+			continue
+		}
+		if _, ok := out[i]; ok {
+			continue
+		}
+		x, y := destroyedBuildCoords(ev)
+		best := (*reactorExplosionGroup)(nil)
+		bestDist := math.MaxFloat64
+		for _, group := range groups {
+			dx := float64(x - group.centerX)
+			dy := float64(y - group.centerY)
+			dist2 := dx*dx + dy*dy
+			if dist2 > float64(group.radiusTiles*group.radiusTiles) {
+				continue
+			}
+			if best == nil || dist2 < bestDist {
+				best = group
+				bestDist = dist2
+			}
+		}
+		if best != nil {
+			best.affectedIndex = append(best.affectedIndex, i)
+			out[i] = best
+		}
+	}
+
+	return out
+}
+
+func logGroupedReactorExplosions(wld *world.World, evs []world.EntityEvent, grouped map[int]*reactorExplosionGroup) {
+	if len(grouped) == 0 {
+		return
+	}
+	seen := map[*reactorExplosionGroup]struct{}{}
+	for _, group := range grouped {
+		if group == nil {
+			continue
+		}
+		if _, ok := seen[group]; ok {
+			continue
+		}
+		seen[group] = struct{}{}
+
+		sourceLabel := fmt.Sprintf("(x%d-y%d)", group.centerX, group.centerY)
+		sourceTeam := world.TeamID(0)
+		sourceBlockID := int16(0)
+		sourceBlockName := "未知"
+		if group.sourceIndex >= 0 && group.sourceIndex < len(evs) {
+			ev := evs[group.sourceIndex]
+			sourceTeam = ev.BuildTeam
+			sourceBlockID = ev.BuildBlock
+			sourceBlockName = blockDisplayName(wld, ev.BuildBlock)
+			sx, sy := destroyedBuildCoords(ev)
+			sourceLabel = fmt.Sprintf("(x%d-y%d)", sx, sy)
+		}
+
+		fmt.Printf("[反应堆爆炸] 源头=%s block=%d(%s) team=%d effect=%s 波及=%d\n",
+			sourceLabel, sourceBlockID, sourceBlockName, sourceTeam, group.effectName, len(group.affectedIndex))
+
+		if len(group.affectedIndex) == 0 {
+			continue
+		}
+		parts := make([]string, 0, len(group.affectedIndex))
+		for _, idx := range group.affectedIndex {
+			if idx < 0 || idx >= len(evs) {
+				continue
+			}
+			ev := evs[idx]
+			x, y := destroyedBuildCoords(ev)
+			parts = append(parts, fmt.Sprintf("(x%d-y%d)%s team=%d", x, y, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam))
+		}
+		if len(parts) > 0 {
+			fmt.Printf("[爆炸波及] 源头=%s %s\n", sourceLabel, strings.Join(parts, ", "))
+		}
+	}
+}
+
 type unitTypeRef struct {
 	id int16
 }
@@ -4022,10 +4229,12 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 		return
 	}
 	builds := wld.BuildSyncSnapshot()
-	if len(builds) == 0 {
-		return
-	}
 	health := make([]int32, 0, 256)
+	type buildConfigState struct {
+		pos   int32
+		value any
+	}
+	configs := make([]buildConfigState, 0, 64)
 	for i := range builds {
 		b := builds[i]
 		if b.BlockID <= 0 {
@@ -4048,6 +4257,12 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 			})
 			health = health[:0]
 		}
+		if cfgValue, ok := wld.BuildingConfigPacked(b.Pos); ok {
+			configs = append(configs, buildConfigState{
+				pos:   b.Pos,
+				value: cfgValue,
+			})
+		}
 		if i > 0 && i%128 == 0 {
 			time.Sleep(5 * time.Millisecond)
 		}
@@ -4056,6 +4271,16 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
 			Buildings: protocol.IntSeq{Items: health},
 		})
+	}
+	for i, cfg := range configs {
+		_ = conn.SendAsync(&protocol.Remote_InputHandler_tileConfig_127{
+			Player: nil,
+			Build:  protocol.BuildingBox{PosValue: cfg.pos},
+			Value:  cfg.value,
+		})
+		if i > 0 && i%128 == 0 {
+			time.Sleep(5 * time.Millisecond)
+		}
 	}
 	for _, snapshot := range wld.TeamCoreItemSnapshots() {
 		positions := wld.TeamItemSyncPositions(snapshot.Team)
@@ -4101,7 +4326,6 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 	}
 	if baseModel == nil || baseModel.Width != liveModel.Width || baseModel.Height != liveModel.Height {
 		syncCurrentWorldToConn(conn, wld)
-		syncCoreItemsToConn(conn, wld)
 		return
 	}
 

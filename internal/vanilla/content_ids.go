@@ -55,7 +55,7 @@ func GenerateContentIDs(repoRoot, outPath string) (*ContentIDsFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	out.Liquids, err = parseNamedNewEntries(filepath.Join(base, "Liquids.java"), `=\s*new\s+Liquid\s*\(\s*"([^"]+)"`)
+	out.Liquids, err = parseNamedNewEntries(filepath.Join(base, "Liquids.java"), `=\s*new\s+[A-Za-z0-9_$.]*Liquid\s*\(\s*"([^"]+)"`)
 	if err != nil {
 		return nil, err
 	}

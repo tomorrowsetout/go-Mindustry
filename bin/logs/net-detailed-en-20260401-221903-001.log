@@ -1,0 +1,12 @@
+2026-04-01T14:19:05.1379295Z [NET] kind=tcp_accept packet= conn_id=1905204582 uuid= ip=192.168.0.101 name="" detail=
+2026-04-01T14:19:05.1511829Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=192.168.0.101 name="" detail=version=156 type=official mods=0
+2026-04-01T14:19:05.3182653Z [NET] kind=world_handshake_sent packet= conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=
+2026-04-01T14:19:05.9212498Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=
+2026-04-01T22:19:06.0793567+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=408 core_y=213 spawn_x=408 spawn_y=213
+2026-04-01T22:19:06.1222931+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=408 spawn_y=213
+2026-04-01T22:19:07.0117952+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=408 core_y=213 spawn_x=408 spawn_y=213
+2026-04-01T22:19:07.0608062+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=408 spawn_y=213
+2026-04-01T22:19:09.2285509+08:00 [BUILD] action=placed x=414 y=208 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-01T22:19:09.6065828+08:00 [BUILD] action=constructed x=414 y=208 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-01T22:19:11.0871236+08:00 [BUILD] action=placed x=413 y=204 block_id=302 block=电力节点 team=1 rot=0
+2026-04-01T14:19:23.3844015Z [NET] kind=tcp_closed packet= conn_id=53404 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=192.168.0.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]53404[]" detail=EOF

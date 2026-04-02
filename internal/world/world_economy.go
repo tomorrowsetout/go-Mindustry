@@ -105,6 +105,10 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 		if st.Progress <= 0 && !w.consumeProductionCost(t.Team, prof.Cost) {
 			continue
 		}
+		if !w.requirePowerAtLocked(pos, t.Team, 1.2*dt) {
+			w.factoryStates[pos] = st
+			continue
+		}
 		rules := w.rulesMgr.Get()
 		speedMul := float32(1)
 		if rules != nil && rules.UnitBuildSpeedMultiplier > 0 {

@@ -236,3 +236,130 @@
 {"timestamp":"2026-03-31T16:22:29.3420988Z","kind":"tcp_accept","conn_id":2107939622,"ip":"10.147.17.101"}
 {"timestamp":"2026-03-31T16:23:19.9666004Z","kind":"connection_open","trigger":11,"detail":"tcp=36.112.29.124:3234 udp=","conn_id":1039078027,"ip":"36.112.29.124:3234"}
 {"timestamp":"2026-03-31T16:23:19.9666004Z","kind":"tcp_accept","conn_id":1039078027,"ip":"36.112.29.124"}
+{"timestamp":"2026-04-01T04:39:02.6115451Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:53279 udp=","conn_id":1813964939,"ip":"127.0.0.1:53279"}
+{"timestamp":"2026-04-01T04:39:02.6115451Z","kind":"tcp_accept","conn_id":1813964939,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T04:39:18.239041Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:57526 udp=","conn_id":1812670382,"ip":"10.147.17.101:57526"}
+{"timestamp":"2026-04-01T04:39:18.2395731Z","kind":"tcp_accept","conn_id":1812670382,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T04:39:38.0547118Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:54737 udp=","conn_id":1976548332,"ip":"10.147.17.101:54737"}
+{"timestamp":"2026-04-01T04:39:38.0547118Z","kind":"tcp_accept","conn_id":1976548332,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T04:39:49.6539056Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:54743 udp=","conn_id":2016144326,"ip":"10.147.17.101:54743"}
+{"timestamp":"2026-04-01T04:39:49.6539056Z","kind":"tcp_accept","conn_id":2016144326,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T04:40:24.501022Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:56249 udp=","conn_id":1395847008,"ip":"10.147.17.101:56249"}
+{"timestamp":"2026-04-01T04:40:24.501022Z","kind":"tcp_accept","conn_id":1395847008,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T04:40:29.1013945Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:59853 udp=","conn_id":1796258085,"ip":"10.147.17.101:59853"}
+{"timestamp":"2026-04-01T04:40:29.1013945Z","kind":"tcp_accept","conn_id":1796258085,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T04:40:35.2008455Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:59858 udp=","conn_id":670431727,"ip":"10.147.17.101:59858"}
+{"timestamp":"2026-04-01T04:40:35.2008455Z","kind":"tcp_accept","conn_id":670431727,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T04:41:00.548893Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:56940 udp=","conn_id":1660245444,"ip":"10.147.17.101:56940"}
+{"timestamp":"2026-04-01T04:41:00.548893Z","kind":"tcp_accept","conn_id":1660245444,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T12:48:34.6014682Z","kind":"connection_open","trigger":11,"detail":"tcp=10.147.17.101:51703 udp=","conn_id":711075545,"ip":"10.147.17.101:51703"}
+{"timestamp":"2026-04-01T12:48:34.6014682Z","kind":"tcp_accept","conn_id":711075545,"ip":"10.147.17.101"}
+{"timestamp":"2026-04-01T13:04:37.5439559Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:50124 udp=","conn_id":918018930,"ip":"192.168.0.101:50124"}
+{"timestamp":"2026-04-01T13:04:37.5439559Z","kind":"tcp_accept","conn_id":918018930,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:04:37.5465768Z","kind":"tcp_closed","detail":"EOF","conn_id":918018930,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:04:37.5608811Z","kind":"connection_close","trigger":13,"conn_id":918018930,"ip":"192.168.0.101:50124"}
+{"timestamp":"2026-04-01T13:04:45.7426178Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:50142 udp=","conn_id":652204938,"ip":"127.0.0.1:50142"}
+{"timestamp":"2026-04-01T13:04:45.7426178Z","kind":"tcp_accept","conn_id":652204938,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T13:05:02.3580742Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:50145 udp=","conn_id":1589706418,"ip":"192.168.0.101:50145"}
+{"timestamp":"2026-04-01T13:05:02.3580742Z","kind":"tcp_accept","conn_id":1589706418,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:05:59.1439169Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:49641 udp=","conn_id":153620627,"ip":"192.168.0.101:49641"}
+{"timestamp":"2026-04-01T13:05:59.1439169Z","kind":"tcp_accept","conn_id":153620627,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:17:08.6389435Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:55275 udp=","conn_id":824256076,"ip":"192.168.0.101:55275"}
+{"timestamp":"2026-04-01T13:17:08.6389435Z","kind":"tcp_accept","conn_id":824256076,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:17:43.62091Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:51032 udp=","conn_id":1467891801,"ip":"192.168.0.101:51032"}
+{"timestamp":"2026-04-01T13:17:43.62091Z","kind":"tcp_accept","conn_id":1467891801,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:17:48.6499763Z","kind":"tcp_closed","detail":"EOF","conn_id":1467891801,"ip":"192.168.0.101","name":"[scarlet]（未绑定杂鱼~）[]未知玩家[gray]1467891801[]"}
+{"timestamp":"2026-04-01T13:17:59.3213623Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:54240 udp=","conn_id":90212789,"ip":"192.168.0.101:54240"}
+{"timestamp":"2026-04-01T13:17:59.3213623Z","kind":"tcp_accept","conn_id":90212789,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:28:03.7446074Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:54530 udp=","conn_id":744216687,"ip":"192.168.0.101:54530"}
+{"timestamp":"2026-04-01T13:28:03.7446074Z","kind":"tcp_accept","conn_id":744216687,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T13:28:52.1764869Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:50300 udp=","conn_id":1397232035,"ip":"127.0.0.1:50300"}
+{"timestamp":"2026-04-01T13:28:52.1764869Z","kind":"tcp_accept","conn_id":1397232035,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T13:28:52.1788838Z","kind":"tcp_closed","detail":"EOF","conn_id":1397232035,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T13:28:52.217559Z","kind":"connection_close","trigger":13,"conn_id":1397232035,"ip":"127.0.0.1:50300"}
+{"timestamp":"2026-04-01T13:28:53.6933819Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:50301 udp=","conn_id":164345653,"ip":"127.0.0.1:50301"}
+{"timestamp":"2026-04-01T13:28:53.6933819Z","kind":"tcp_accept","conn_id":164345653,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T13:28:53.6953976Z","kind":"tcp_closed","detail":"EOF","conn_id":164345653,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T13:28:53.7277163Z","kind":"connection_close","trigger":13,"conn_id":164345653,"ip":"127.0.0.1:50301"}
+{"timestamp":"2026-04-01T13:29:03.3082474Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:55828 udp=","conn_id":2004139544,"ip":"192.168.0.101:55828"}
+{"timestamp":"2026-04-01T13:29:03.3082474Z","kind":"tcp_accept","conn_id":2004139544,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T14:10:52.8475022Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:50286 udp=","conn_id":216204672,"ip":"127.0.0.1:50286"}
+{"timestamp":"2026-04-01T14:10:52.8475022Z","kind":"tcp_accept","conn_id":216204672,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T14:19:05.1379295Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:62804 udp=","conn_id":1905204582,"ip":"192.168.0.101:62804"}
+{"timestamp":"2026-04-01T14:19:05.1379295Z","kind":"tcp_accept","conn_id":1905204582,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T14:26:19.3000411Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:64889 udp=","conn_id":344081888,"ip":"192.168.0.101:64889"}
+{"timestamp":"2026-04-01T14:26:19.3000411Z","kind":"tcp_accept","conn_id":344081888,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T14:47:32.1624718Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:57254 udp=","conn_id":555981471,"ip":"192.168.0.101:57254"}
+{"timestamp":"2026-04-01T14:47:32.1624718Z","kind":"tcp_accept","conn_id":555981471,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T14:48:37.1389237Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:60121 udp=","conn_id":831028264,"ip":"127.0.0.1:60121"}
+{"timestamp":"2026-04-01T14:48:37.1389237Z","kind":"tcp_accept","conn_id":831028264,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T14:48:37.1409181Z","kind":"tcp_closed","detail":"EOF","conn_id":831028264,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T14:48:37.1686218Z","kind":"connection_close","trigger":13,"conn_id":831028264,"ip":"127.0.0.1:60121"}
+{"timestamp":"2026-04-01T14:48:39.5874402Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:60122 udp=","conn_id":1141162997,"ip":"127.0.0.1:60122"}
+{"timestamp":"2026-04-01T14:48:39.5874402Z","kind":"tcp_accept","conn_id":1141162997,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T14:50:11.911007Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:64928 udp=","conn_id":1803390994,"ip":"192.168.0.101:64928"}
+{"timestamp":"2026-04-01T14:50:11.911007Z","kind":"tcp_accept","conn_id":1803390994,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T14:53:33.243944Z","kind":"connection_open","trigger":11,"detail":"tcp=117.188.25.8:26695 udp=","conn_id":1929867552,"ip":"117.188.25.8:26695"}
+{"timestamp":"2026-04-01T14:53:33.243944Z","kind":"tcp_accept","conn_id":1929867552,"ip":"117.188.25.8"}
+{"timestamp":"2026-04-01T14:56:19.3179204Z","kind":"connection_open","trigger":11,"detail":"tcp=176.59.146.206:45595 udp=","conn_id":1515214091,"ip":"176.59.146.206:45595"}
+{"timestamp":"2026-04-01T14:56:19.3180025Z","kind":"tcp_accept","conn_id":1515214091,"ip":"176.59.146.206"}
+{"timestamp":"2026-04-01T15:00:46.530079Z","kind":"connection_open","trigger":11,"detail":"tcp=39.155.7.119:15519 udp=","conn_id":273757669,"ip":"39.155.7.119:15519"}
+{"timestamp":"2026-04-01T15:00:46.530079Z","kind":"tcp_accept","conn_id":273757669,"ip":"39.155.7.119"}
+{"timestamp":"2026-04-01T15:01:07.2537681Z","kind":"connection_open","trigger":11,"detail":"tcp=111.37.234.200:5489 udp=","conn_id":979160328,"ip":"111.37.234.200:5489"}
+{"timestamp":"2026-04-01T15:01:07.2537681Z","kind":"tcp_accept","conn_id":979160328,"ip":"111.37.234.200"}
+{"timestamp":"2026-04-01T15:01:42.8160035Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:60787 udp=","conn_id":1876036022,"ip":"192.168.0.101:60787"}
+{"timestamp":"2026-04-01T15:01:42.8160035Z","kind":"tcp_accept","conn_id":1876036022,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:01:42.8201702Z","kind":"tcp_closed","detail":"EOF","conn_id":1876036022,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:01:42.8459982Z","kind":"connection_close","trigger":13,"conn_id":1876036022,"ip":"192.168.0.101:60787"}
+{"timestamp":"2026-04-01T15:01:44.9568416Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:60799 udp=","conn_id":832729320,"ip":"127.0.0.1:60799"}
+{"timestamp":"2026-04-01T15:01:44.9568416Z","kind":"tcp_accept","conn_id":832729320,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T15:01:44.9593625Z","kind":"tcp_closed","detail":"EOF","conn_id":832729320,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T15:01:44.9985533Z","kind":"connection_close","trigger":13,"conn_id":832729320,"ip":"127.0.0.1:60799"}
+{"timestamp":"2026-04-01T15:01:51.5879255Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:55701 udp=","conn_id":7656626,"ip":"127.0.0.1:55701"}
+{"timestamp":"2026-04-01T15:01:51.5879255Z","kind":"tcp_accept","conn_id":7656626,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T15:03:16.7754442Z","kind":"connection_open","trigger":11,"detail":"tcp=223.89.154.233:1766 udp=","conn_id":815140101,"ip":"223.89.154.233:1766"}
+{"timestamp":"2026-04-01T15:03:16.7754442Z","kind":"tcp_accept","conn_id":815140101,"ip":"223.89.154.233"}
+{"timestamp":"2026-04-01T15:06:31.2913276Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:64945 udp=","conn_id":1547119210,"ip":"192.168.0.101:64945"}
+{"timestamp":"2026-04-01T15:06:31.2924422Z","kind":"tcp_accept","conn_id":1547119210,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:07:30.4733552Z","kind":"connection_open","trigger":11,"detail":"tcp=116.162.0.204:50529 udp=","conn_id":642338467,"ip":"116.162.0.204:50529"}
+{"timestamp":"2026-04-01T15:07:30.4733552Z","kind":"tcp_accept","conn_id":642338467,"ip":"116.162.0.204"}
+{"timestamp":"2026-04-01T15:07:59.5592352Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:55372 udp=","conn_id":205974504,"ip":"192.168.0.101:55372"}
+{"timestamp":"2026-04-01T15:07:59.5592352Z","kind":"tcp_accept","conn_id":205974504,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:08:20.4189956Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:55393 udp=","conn_id":1941122148,"ip":"127.0.0.1:55393"}
+{"timestamp":"2026-04-01T15:08:20.4205016Z","kind":"tcp_accept","conn_id":1941122148,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T15:08:31.9863343Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:55397 udp=","conn_id":317773500,"ip":"192.168.0.101:55397"}
+{"timestamp":"2026-04-01T15:08:31.9863343Z","kind":"tcp_accept","conn_id":317773500,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:09:34.5038194Z","kind":"connection_open","trigger":11,"detail":"tcp=36.112.29.124:2315 udp=","conn_id":1471216453,"ip":"36.112.29.124:2315"}
+{"timestamp":"2026-04-01T15:09:34.5048277Z","kind":"tcp_accept","conn_id":1471216453,"ip":"36.112.29.124"}
+{"timestamp":"2026-04-01T15:11:34.4424743Z","kind":"connection_open","trigger":11,"detail":"tcp=117.155.153.24:16189 udp=","conn_id":1486957695,"ip":"117.155.153.24:16189"}
+{"timestamp":"2026-04-01T15:11:34.4424743Z","kind":"tcp_accept","conn_id":1486957695,"ip":"117.155.153.24"}
+{"timestamp":"2026-04-01T15:15:36.5612636Z","kind":"connection_open","trigger":11,"detail":"tcp=114.97.17.103:13918 udp=","conn_id":632426435,"ip":"114.97.17.103:13918"}
+{"timestamp":"2026-04-01T15:15:36.5612636Z","kind":"tcp_accept","conn_id":632426435,"ip":"114.97.17.103"}
+{"timestamp":"2026-04-01T15:16:13.1358397Z","kind":"connection_open","trigger":11,"detail":"tcp=117.155.153.24:5016 udp=","conn_id":1652502674,"ip":"117.155.153.24:5016"}
+{"timestamp":"2026-04-01T15:16:13.1358397Z","kind":"tcp_accept","conn_id":1652502674,"ip":"117.155.153.24"}
+{"timestamp":"2026-04-01T15:16:51.2435831Z","kind":"connection_open","trigger":11,"detail":"tcp=112.85.61.38:20307 udp=","conn_id":761848732,"ip":"112.85.61.38:20307"}
+{"timestamp":"2026-04-01T15:16:51.2435831Z","kind":"tcp_accept","conn_id":761848732,"ip":"112.85.61.38"}
+{"timestamp":"2026-04-01T15:16:59.4167894Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:64930 udp=","conn_id":1009380576,"ip":"192.168.0.101:64930"}
+{"timestamp":"2026-04-01T15:16:59.4167894Z","kind":"tcp_accept","conn_id":1009380576,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:17:08.6766373Z","kind":"connection_open","trigger":11,"detail":"tcp=116.162.0.204:7035 udp=","conn_id":1106202147,"ip":"116.162.0.204:7035"}
+{"timestamp":"2026-04-01T15:17:08.6766373Z","kind":"tcp_accept","conn_id":1106202147,"ip":"116.162.0.204"}
+{"timestamp":"2026-04-01T15:42:18.5972002Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:59542 udp=","conn_id":154846315,"ip":"192.168.0.101:59542"}
+{"timestamp":"2026-04-01T15:42:18.5972002Z","kind":"tcp_accept","conn_id":154846315,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T15:43:06.4151152Z","kind":"connection_open","trigger":11,"detail":"tcp=39.188.8.237:9473 udp=","conn_id":103701863,"ip":"39.188.8.237:9473"}
+{"timestamp":"2026-04-01T15:43:06.4151152Z","kind":"tcp_accept","conn_id":103701863,"ip":"39.188.8.237"}
+{"timestamp":"2026-04-01T15:48:37.4778882Z","kind":"connection_open","trigger":11,"detail":"tcp=117.155.153.24:16701 udp=","conn_id":2062842310,"ip":"117.155.153.24:16701"}
+{"timestamp":"2026-04-01T15:48:37.4789992Z","kind":"tcp_accept","conn_id":2062842310,"ip":"117.155.153.24"}
+{"timestamp":"2026-04-01T16:05:37.6786382Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:51434 udp=","conn_id":699813215,"ip":"192.168.0.101:51434"}
+{"timestamp":"2026-04-01T16:05:37.6786382Z","kind":"tcp_accept","conn_id":699813215,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T16:06:59.4902849Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:57943 udp=","conn_id":533224223,"ip":"127.0.0.1:57943"}
+{"timestamp":"2026-04-01T16:06:59.4908016Z","kind":"tcp_accept","conn_id":533224223,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T16:08:08.9530651Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:55672 udp=","conn_id":372008336,"ip":"192.168.0.101:55672"}
+{"timestamp":"2026-04-01T16:08:08.9530651Z","kind":"tcp_accept","conn_id":372008336,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-01T16:14:05.087016Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:52762 udp=","conn_id":1178330486,"ip":"127.0.0.1:52762"}
+{"timestamp":"2026-04-01T16:14:05.0875512Z","kind":"tcp_accept","conn_id":1178330486,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T16:14:05.08998Z","kind":"tcp_closed","detail":"EOF","conn_id":1178330486,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-01T16:14:05.1194349Z","kind":"connection_close","trigger":13,"conn_id":1178330486,"ip":"127.0.0.1:52762"}
+{"timestamp":"2026-04-01T16:14:14.6723078Z","kind":"connection_open","trigger":11,"detail":"tcp=123.55.0.107:52769 udp=","conn_id":2057450763,"ip":"123.55.0.107:52769"}
+{"timestamp":"2026-04-01T16:14:14.6723078Z","kind":"tcp_accept","conn_id":2057450763,"ip":"123.55.0.107"}
+{"timestamp":"2026-04-01T16:17:00.2367835Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:57089 udp=","conn_id":269659135,"ip":"192.168.0.101:57089"}
+{"timestamp":"2026-04-01T16:17:00.2367835Z","kind":"tcp_accept","conn_id":269659135,"ip":"192.168.0.101"}
