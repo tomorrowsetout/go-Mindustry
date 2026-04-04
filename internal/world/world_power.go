@@ -80,6 +80,20 @@ func (w *World) beginTeamPowerStep(delta time.Duration) {
 	if w.powerNetByPos == nil {
 		w.powerNetByPos = map[int32]int32{}
 	}
+	if w.powerRequested == nil {
+		w.powerRequested = map[int32]float32{}
+	} else {
+		for pos := range w.powerRequested {
+			delete(w.powerRequested, pos)
+		}
+	}
+	if w.powerSupplied == nil {
+		w.powerSupplied = map[int32]float32{}
+	} else {
+		for pos := range w.powerSupplied {
+			delete(w.powerSupplied, pos)
+		}
+	}
 	for team := range w.teamPowerStates {
 		st := w.teamPowerStateLocked(team)
 		st.Stored = 0
@@ -218,9 +232,17 @@ func (w *World) consumePowerAtLocked(pos int32, team TeamID, amount float32) flo
 	if amount <= 0 {
 		return 0
 	}
+	if w.powerRequested == nil {
+		w.powerRequested = map[int32]float32{}
+	}
+	w.powerRequested[pos] += amount
 	if rules := w.rulesMgr.Get(); rules != nil && rules.teamInfiniteResources(team) {
 		st := w.teamPowerStateLocked(team)
 		st.Consumed += amount
+		if w.powerSupplied == nil {
+			w.powerSupplied = map[int32]float32{}
+		}
+		w.powerSupplied[pos] += amount
 		return amount
 	}
 	net, ok := w.powerNetStateForPosLocked(pos)
@@ -233,6 +255,12 @@ func (w *World) consumePowerAtLocked(pos int32, team TeamID, amount float32) flo
 	}
 	net.Budget -= got
 	net.Consumed += got
+	if got > 0 {
+		if w.powerSupplied == nil {
+			w.powerSupplied = map[int32]float32{}
+		}
+		w.powerSupplied[pos] += got
+	}
 	return got
 }
 
@@ -246,6 +274,11 @@ func (w *World) refundPowerAtLocked(pos int32, amount float32) {
 	}
 	net.Budget += amount
 	net.Consumed = maxf(0, net.Consumed-amount)
+	if supplied := w.powerSupplied[pos] - amount; supplied > 0 {
+		w.powerSupplied[pos] = supplied
+	} else {
+		delete(w.powerSupplied, pos)
+	}
 }
 
 func (w *World) requirePowerAtLocked(pos int32, team TeamID, amount float32) bool {
@@ -773,6 +806,24 @@ func (w *World) buildPowerNetsLocked() {
 	}
 	for _, pos := range positions {
 		tile := relevant[pos]
+		if tile == nil {
+			continue
+		}
+		for _, edge := range blockEdgeOffsets(w.blockSizeForTileLocked(tile)) {
+			otherPos, ok := w.buildingOccupyingCellLocked(tile.X+edge[0], tile.Y+edge[1])
+			if !ok || otherPos == pos {
+				continue
+			}
+			otherTile, ok := relevant[otherPos]
+			if !ok || otherTile == nil || !w.powerAdjacentConnectedLocked(pos, tile, otherPos, otherTile) {
+				continue
+			}
+			adj[pos] = appendUniquePowerPos(adj[pos], otherPos)
+			adj[otherPos] = appendUniquePowerPos(adj[otherPos], pos)
+		}
+	}
+	for _, pos := range positions {
+		tile := relevant[pos]
 		if tile == nil || !isPowerNodeBlockName(w.blockNameByID(int16(tile.Block))) {
 			continue
 		}
@@ -981,6 +1032,39 @@ func isPowerConsumerBlockName(name string) bool {
 	}
 }
 
+func (w *World) blockConsumesPowerLocked(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if isPowerConsumerBlockName(name) || powerStorageCapacityByBlockName(name) > 0 || name == "power-void" {
+		return true
+	}
+	if prof, ok := w.buildingProfilesByName[name]; ok {
+		return prof.PowerCapacity > 0 || prof.PowerPerShot > 0 || prof.PowerRegen > 0
+	}
+	return false
+}
+
+func (w *World) blockOutputsPowerLocked(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	return isPowerProducerBlockName(name) || powerStorageCapacityByBlockName(name) > 0
+}
+
+func (w *World) blockConductivePowerLocked(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "shielded-wall", "surge-conveyor", "surge-router":
+		return true
+	default:
+		return false
+	}
+}
+
+func (w *World) isPowerNodeLinkTargetLocked(tile *Tile) bool {
+	if w == nil || tile == nil || tile.Build == nil || tile.Block == 0 {
+		return false
+	}
+	name := w.blockNameByID(int16(tile.Block))
+	return isPowerNodeBlockName(name) || w.blockOutputsPowerLocked(name) || w.blockConsumesPowerLocked(name)
+}
+
 func isAutoLinkPowerBuildingName(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if isPowerNodeBlockName(name) || isPowerProducerBlockName(name) || isPowerConsumerBlockName(name) || powerStorageCapacityByBlockName(name) > 0 {
@@ -1025,6 +1109,49 @@ func isBeamInsulatedBlockName(name string) bool {
 	default:
 		return false
 	}
+}
+
+func (w *World) powerNodeInsulatedLocked(pos, target int32) bool {
+	if w == nil || w.model == nil || pos < 0 || target < 0 || int(pos) >= len(w.model.Tiles) || int(target) >= len(w.model.Tiles) {
+		return false
+	}
+	fromTile := &w.model.Tiles[pos]
+	targetTile := &w.model.Tiles[target]
+	x0, y0 := fromTile.X, fromTile.Y
+	x1, y1 := targetTile.X, targetTile.Y
+	dx := absInt(x1 - x0)
+	dy := absInt(y1 - y0)
+	sx := 1
+	if x0 > x1 {
+		sx = -1
+	}
+	sy := 1
+	if y0 > y1 {
+		sy = -1
+	}
+	err := dx - dy
+	for {
+		if x0 == x1 && y0 == y1 {
+			break
+		}
+		if (x0 != fromTile.X || y0 != fromTile.Y) && (x0 != targetTile.X || y0 != targetTile.Y) {
+			if otherPos, ok := w.buildingOccupyingCellLocked(x0, y0); ok && otherPos != pos && otherPos != target && otherPos >= 0 && int(otherPos) < len(w.model.Tiles) {
+				if isBeamInsulatedBlockName(w.blockNameByID(int16(w.model.Tiles[otherPos].Block))) {
+					return true
+				}
+			}
+		}
+		e2 := err * 2
+		if e2 > -dy {
+			err -= dy
+			x0 += sx
+		}
+		if e2 < dx {
+			err += dx
+			y0 += sy
+		}
+	}
+	return false
 }
 
 func (w *World) beamNodeTargetsLocked(pos int32, tile *Tile) []int32 {
@@ -1073,6 +1200,26 @@ func (w *World) beamNodeTargetsLocked(pos int32, tile *Tile) []int32 {
 		}
 	}
 	return out
+}
+
+func (w *World) powerAdjacentConnectedLocked(pos int32, tile *Tile, otherPos int32, other *Tile) bool {
+	if w == nil || tile == nil || other == nil || tile.Build == nil || other.Build == nil || tile.Block == 0 || other.Block == 0 {
+		return false
+	}
+	if pos == otherPos || tile.Build.Team == 0 || tile.Build.Team != other.Build.Team {
+		return false
+	}
+	fromName := w.blockNameByID(int16(tile.Block))
+	otherName := w.blockNameByID(int16(other.Block))
+	if isPowerDiodeBlockName(fromName) || isPowerDiodeBlockName(otherName) {
+		return false
+	}
+	if w.blockConsumesPowerLocked(fromName) && w.blockConsumesPowerLocked(otherName) &&
+		!w.blockOutputsPowerLocked(fromName) && !w.blockOutputsPowerLocked(otherName) &&
+		!w.blockConductivePowerLocked(fromName) && !w.blockConductivePowerLocked(otherName) {
+		return false
+	}
+	return true
 }
 
 func isPowerDiodeBlockName(name string) bool {
@@ -1189,7 +1336,7 @@ func (w *World) autoLinkPowerNodeLocked(pos int32) []int32 {
 		if other.Build == nil || other.Block == 0 || other.Build.Team != tile.Build.Team {
 			continue
 		}
-		if !w.powerNodeLinkValidLocked(pos, otherPos) || w.powerNodeAdjacentLocked(pos, otherPos) {
+		if !w.powerNodeLinkValidLocked(pos, otherPos) || w.powerNodeAdjacentLocked(pos, otherPos) || w.powerNodeInsulatedLocked(pos, otherPos) {
 			continue
 		}
 		otherName := w.blockNameByID(int16(other.Block))
@@ -1288,7 +1435,7 @@ func (w *World) autoLinkNearbyPowerNodesForBuildingLocked(pos int32) []powerAuto
 		if !ok || len(w.powerNodeLinks[otherPos]) >= maxNodes {
 			continue
 		}
-		if !w.powerNodeLinkValidLocked(otherPos, pos) || w.powerNodeAdjacentLocked(otherPos, pos) {
+		if !w.powerNodeLinkValidLocked(otherPos, pos) || w.powerNodeAdjacentLocked(otherPos, pos) || w.powerNodeInsulatedLocked(otherPos, pos) {
 			continue
 		}
 		dx := float32(tile.X - other.X)
@@ -1390,7 +1537,7 @@ func (w *World) powerNodeLinkValidLocked(pos, target int32) bool {
 	if fromTile.Build.Team != targetTile.Build.Team {
 		return false
 	}
-	if !w.isPowerRelevantBuildingLocked(targetTile) || isPowerDiodeBlockName(w.blockNameByID(int16(targetTile.Block))) {
+	if !w.isPowerNodeLinkTargetLocked(targetTile) || isPowerDiodeBlockName(w.blockNameByID(int16(targetTile.Block))) {
 		return false
 	}
 	return w.powerNodeCanReachLocked(pos, target)

@@ -38,6 +38,7 @@ import (
 	netserver "mdt-server/internal/net"
 	"mdt-server/internal/persist"
 	"mdt-server/internal/protocol"
+	"mdt-server/internal/runtimeassets"
 	"mdt-server/internal/sim"
 	"mdt-server/internal/storage"
 	"mdt-server/internal/vanilla"
@@ -688,6 +689,8 @@ func main() {
 	runtimeWorldRoots = []string{cfg.Runtime.WorldsDir}
 	applyBlockNameTranslations(configDir)
 	initStatusBarRuntime(cfg)
+	initJoinPopupRuntime(cfg)
+	initMapVoteRuntimeConfig(cfg)
 
 	startMemoryGuard(cfg.Core)
 
@@ -1070,6 +1073,24 @@ func main() {
 		wld.SetTeamBuilderSpeed(resolveDefaultPlayerTeam(wld), wld.BuilderSpeedForUnitType(spawnType))
 		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
+	applyVotedWorld := func(next string) error {
+		state.set(next)
+		loadWorldModel(next)
+		if invalidateWorldCache != nil {
+			invalidateWorldCache()
+		}
+		reloaded, failed := srv.ReloadWorldLiveForAll()
+		mapName := worldstream.TrimMapName(filepath.Base(next))
+		if reloaded == 0 && failed == 0 {
+			srv.BroadcastChat(fmt.Sprintf("[accent]地图已切换[]: [white]%s[]（当前无在线玩家）", mapName))
+			return nil
+		}
+		srv.BroadcastChat(fmt.Sprintf("[accent]地图已切换[]: [white]%s[]（成功=%d 失败=%d）", mapName, reloaded, failed))
+		return nil
+	}
+	initMapVoteRuntime(listWorldMaps, resolveWorldSelection, applyVotedWorld, func(result mapVoteResult) {
+		handleMapVoteResult(srv, currentMapVoteRuntime(), result)
+	}, srv)
 	if persistedOK {
 		waveTime := persisted.WaveTime
 		if waveTime < 0 || waveTime > 3600 {
@@ -1215,6 +1236,10 @@ func main() {
 		time.Sleep(350 * time.Millisecond)
 		syncRulesToConn(conn, wld)
 		syncWorldDiffToConn(conn, wld, cache.model(state.get()))
+		showJoinPopupForConn(srv, conn)
+	}
+	srv.OnMenuChoose = func(c *netserver.Conn, menuID, option int32) {
+		handleJoinPopupMenuChoice(srv, c, menuID, option)
 	}
 	srv.OnHotReloadConnFn = func(conn *netserver.Conn) {
 		if conn == nil {
@@ -1411,11 +1436,8 @@ func main() {
 			CoreData: buildCoreSnapshotData(wld),
 		}
 	}
-	srv.ExtraEntitySnapshotFn = func(w *protocol.Writer) (int16, error) {
-		// Disabled for now: full-map entity sync can exceed TypeIO int16 byte-array limits
-		// and corrupt packet decoding on official clients.
-		_ = w
-		return 0, nil
+	srv.ExtraEntitySnapshotEntitiesFn = func() ([]protocol.UnitSyncEntity, error) {
+		return wld.EntitySyncSnapshots(srv.Content, srv.PlayerUnitIDSet()), nil
 	}
 	go func() {
 		defer func() {
@@ -1423,12 +1445,18 @@ func main() {
 				fmt.Printf("[net] event-loop panic err=%v\n", rec)
 			}
 		}()
+		type teamItemSyncKey struct {
+			team world.TeamID
+			item world.ItemID
+		}
 		t := time.NewTicker(time.Second / time.Duration(sim.DefaultTPS))
 		defer t.Stop()
+		nextBlockSnapshotSync := time.Now()
 		for range t.C {
 			evs := wld.DrainEntityEvents()
 			groupedExplosionBuilds := classifyReactorExplosionBuilds(wld, evs)
 			buildHealth := make([]int32, 0, len(evs)*2)
+			teamItemSync := make(map[teamItemSyncKey]int32)
 			for i := range evs {
 				ev := evs[i]
 				switch ev.Kind {
@@ -1533,10 +1561,7 @@ func main() {
 				case world.EntityEventBuildHealth:
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
 				case world.EntityEventTeamItems:
-					positions := wld.TeamItemSyncPositions(ev.BuildTeam)
-					if len(positions) > 0 {
-						broadcastSetTileItems(srv, int16(ev.ItemID), ev.ItemAmount, positions)
-					}
+					teamItemSync[teamItemSyncKey{team: ev.BuildTeam, item: ev.ItemID}] = ev.ItemAmount
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
 				case world.EntityEventEffect:
@@ -1557,6 +1582,30 @@ func main() {
 					broadcastBuildHealthUpdate(srv, buildHealth[i:end])
 				}
 			}
+			if len(teamItemSync) > 0 {
+				keys := make([]teamItemSyncKey, 0, len(teamItemSync))
+				for key := range teamItemSync {
+					keys = append(keys, key)
+				}
+				sort.Slice(keys, func(i, j int) bool {
+					if keys[i].team == keys[j].team {
+						return keys[i].item < keys[j].item
+					}
+					return keys[i].team < keys[j].team
+				})
+				for _, key := range keys {
+					positions := wld.TeamItemSyncPositions(key.team)
+					if len(positions) == 0 {
+						continue
+					}
+					broadcastSetTileItems(srv, int16(key.item), teamItemSync[key], positions)
+				}
+			}
+			now := time.Now()
+			if !now.Before(nextBlockSnapshotSync) {
+				broadcastBlockSnapshots(srv, wld)
+				nextBlockSnapshotSync = now.Add(6 * time.Second)
+			}
 			if shouldLogBuildBreakDone() {
 				logGroupedReactorExplosions(wld, evs, groupedExplosionBuilds)
 			}
@@ -1573,6 +1622,18 @@ func main() {
 		case "/help":
 			sendChatHelp(srv, c, cfg)
 			return true
+		case "/votemap":
+			if c == nil {
+				return true
+			}
+			showMapVoteMenu(srv, c, 0)
+			return true
+		case "/vote":
+			if c == nil {
+				return true
+			}
+			showActiveMapVoteMenu(srv, c)
+			return true
 		case "/status":
 			srv.SendStatusTo(c)
 			return true
@@ -1585,6 +1646,35 @@ func main() {
 				return true
 			}
 			srv.SendChat(c, "[accent]正在重新同步世界状态...[]")
+			return true
+		}
+		lowerTrimmed := strings.ToLower(trimmed)
+		if strings.HasPrefix(lowerTrimmed, "/votemap ") {
+			if c == nil {
+				return true
+			}
+			startMapVote(srv, c, strings.TrimSpace(trimmed[len("/votemap "):]))
+			return true
+		}
+		if strings.HasPrefix(lowerTrimmed, "/vote ") {
+			if c == nil {
+				return true
+			}
+			args := strings.Fields(lowerTrimmed)
+			if len(args) < 2 {
+				showActiveMapVoteMenu(srv, c)
+				return true
+			}
+			switch args[1] {
+			case "yes", "y", "1", "同意":
+				castMapVote(srv, c, 1)
+			case "no", "n", "0", "反对":
+				castMapVote(srv, c, -1)
+			case "neutral", "mid", "中立", "abstain":
+				castMapVote(srv, c, 0)
+			default:
+				srv.SendChat(c, "[scarlet]用法: /vote yes|no|neutral[]")
+			}
 			return true
 		}
 		if strings.EqualFold(trimmed, "/stop") {
@@ -2246,6 +2336,8 @@ func main() {
 			runtimePlayerConnIDSuffixEnabled.Store(loaded.Personalization.PlayerConnIDSuffixEnabled)
 			runtimePlayerConnIDSuffixFormat.Store(loaded.Personalization.PlayerConnIDSuffixFormat)
 			initStatusBarRuntime(loaded)
+			initJoinPopupRuntime(loaded)
+			initMapVoteRuntimeConfig(loaded)
 			runtimeBindStatusResolver = newBindStatusResolver(
 				loaded.Personalization.PlayerBindSource,
 				loaded.Personalization.PlayerBindAPIURL,
@@ -3462,24 +3554,11 @@ func colorState(enabled bool) string {
 }
 
 func sendChatHelp(srv *netserver.Server, c *netserver.Conn, cfg config.Config) {
-	srv.SendChat(c, "[accent]命令列表：")
-	srv.SendChat(c, "[white]/help[] 查看命令")
-	srv.SendChat(c, "[white]/status[] 服务器状态")
-	srv.SendChat(c, "[white]/sync[] 重新同步当前世界状态")
-	srv.SendChat(c, "[white]/summon <typeId|unitName> [x y] [count] [team][] 召唤单位（OP，省略坐标=玩家脚底）")
-	srv.SendChat(c, "[white]/despawn <entityId>[] 移除单位（OP）")
-	srv.SendChat(c, "[white]/kill[] 杀死当前单位（附身/未附身均可）")
-	srv.SendChat(c, "[white]/stop[] 保存并关闭服务器（OP）")
-	state := "[red]关闭[]"
-	if cfg.Runtime.SchedulerEnabled {
-		state = "[green]开启[]"
+	_ = cfg
+	if srv == nil || c == nil {
+		return
 	}
-	srv.SendChat(c, "[accent]调度器状态: "+state)
-	dbState := "[red]关闭[]"
-	if cfg.Storage.DatabaseEnabled {
-		dbState = "[green]开启[]"
-	}
-	srv.SendChat(c, "[accent]数据库: "+dbState)
+	showHelpPageMenu(srv, c, currentJoinPopupRuntime(), 0)
 }
 
 type scriptPlugin struct {
@@ -4224,6 +4303,59 @@ func broadcastSetTileItems(srv *netserver.Server, itemID int16, amount int32, po
 	})
 }
 
+func buildBlockSnapshotPackets(snaps []world.BlockSyncSnapshot) []*protocol.Remote_NetClient_blockSnapshot_7 {
+	if len(snaps) == 0 {
+		return nil
+	}
+	const maxSnapshotSize = 800
+	packets := make([]*protocol.Remote_NetClient_blockSnapshot_7, 0, 4)
+	writer := protocol.NewWriter()
+	var sent int16
+	flush := func() {
+		if sent <= 0 {
+			return
+		}
+		packets = append(packets, &protocol.Remote_NetClient_blockSnapshot_7{
+			Amount: sent,
+			Data:   append([]byte(nil), writer.Bytes()...),
+		})
+		writer = protocol.NewWriter()
+		sent = 0
+	}
+	for _, snap := range snaps {
+		if snap.BlockID <= 0 || len(snap.Data) == 0 {
+			continue
+		}
+		_ = writer.WriteInt32(snap.Pos)
+		_ = writer.WriteInt16(snap.BlockID)
+		_ = writer.WriteBytes(snap.Data)
+		sent++
+		if len(writer.Bytes()) > maxSnapshotSize {
+			flush()
+		}
+	}
+	flush()
+	return packets
+}
+
+func sendBlockSnapshotsToConn(conn *netserver.Conn, wld *world.World) {
+	if conn == nil || wld == nil {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshots()) {
+		_ = conn.SendAsync(packet)
+	}
+}
+
+func broadcastBlockSnapshots(srv *netserver.Server, wld *world.World) {
+	if srv == nil || wld == nil {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshots()) {
+		srv.BroadcastUnreliable(packet)
+	}
+}
+
 func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 	if conn == nil || wld == nil {
 		return
@@ -4282,6 +4414,7 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
+	sendBlockSnapshotsToConn(conn, wld)
 	for _, snapshot := range wld.TeamCoreItemSnapshots() {
 		positions := wld.TeamItemSyncPositions(snapshot.Team)
 		if len(positions) == 0 {
@@ -4343,6 +4476,7 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 		posSet[state.Pos] = struct{}{}
 	}
 	if len(posSet) == 0 {
+		sendBlockSnapshotsToConn(conn, wld)
 		syncCoreItemsToConn(conn, wld)
 		return
 	}
@@ -4423,6 +4557,7 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 			Buildings: protocol.IntSeq{Items: health},
 		})
 	}
+	sendBlockSnapshotsToConn(conn, wld)
 	syncCoreItemsToConn(conn, wld)
 }
 
@@ -4858,7 +4993,7 @@ func printServerProgress(cfg config.Config, apiEnabled bool, scriptCtl *scriptCo
 
 func printCompatStatus(cfg config.Config, srv *netserver.Server) {
 	fmt.Println("原版一致性状态（基于当前 Go 多核服务端）:")
-	unitSyncBase := srv != nil && srv.ExtraEntitySnapshotFn != nil
+	unitSyncBase := srv != nil && (srv.ExtraEntitySnapshotEntitiesFn != nil || srv.ExtraEntitySnapshotFn != nil)
 	items := []struct {
 		Name   string
 		Status string
@@ -5599,15 +5734,6 @@ func loadWorldStream(path string) ([]byte, error) {
 }
 
 func loadBootstrapWorldFallback() ([]byte, error) {
-	candidates := []string{
-		filepath.Join(runtimeAssetsDir, "bootstrap-world.bin"),
-		filepath.Join("go-server", "assets", "bootstrap-world.bin"),
-	}
-	for _, p := range candidates {
-		data, err := os.ReadFile(p)
-		if err == nil && len(data) > 0 {
-			return data, nil
-		}
-	}
-	return nil, errors.New("bootstrap-world.bin not found")
+	data, _, err := runtimeassets.LoadBootstrapWorld(runtimeAssetsDir)
+	return data, err
 }

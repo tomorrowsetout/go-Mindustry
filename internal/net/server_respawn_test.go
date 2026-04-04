@@ -1,7 +1,11 @@
 package net
 
 import (
+	"bytes"
+	"io"
 	"net"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +20,52 @@ type testUnitType struct {
 func (t testUnitType) ContentType() protocol.ContentType { return protocol.ContentUnit }
 func (t testUnitType) ID() int16                         { return t.id }
 func (t testUnitType) Name() string                      { return t.name }
+
+type decodedSnapshotEntity struct {
+	ID      int32
+	ClassID byte
+	Player  *protocol.PlayerEntity
+	Unit    *protocol.UnitEntitySync
+}
+
+func decodeEntitySnapshotPacket(t *testing.T, srv *Server, packet *protocol.Remote_NetClient_entitySnapshot_32) []decodedSnapshotEntity {
+	t.Helper()
+	if packet == nil {
+		return nil
+	}
+	r := protocol.NewReaderWithContext(packet.Data, srv.TypeIO)
+	out := make([]decodedSnapshotEntity, 0, int(packet.Amount))
+	for i := 0; i < int(packet.Amount); i++ {
+		id, err := r.ReadInt32()
+		if err != nil {
+			t.Fatalf("read entity id failed: %v", err)
+		}
+		classID, err := r.ReadByte()
+		if err != nil {
+			t.Fatalf("read entity class failed: %v", err)
+		}
+		entry := decodedSnapshotEntity{ID: id, ClassID: classID}
+		switch classID {
+		case 12:
+			player := &protocol.PlayerEntity{IDValue: id}
+			if err := player.ReadSync(r); err != nil {
+				t.Fatalf("read player sync failed: %v", err)
+			}
+			entry.Player = player
+		default:
+			unit := &protocol.UnitEntitySync{IDValue: id, ClassIDValue: classID, ClassIDSet: true}
+			if err := unit.ReadSync(r); err != nil {
+				t.Fatalf("read unit sync failed: %v", err)
+			}
+			entry.Unit = unit
+		}
+		out = append(out, entry)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected entity snapshot packet to be fully consumed, remaining=%d", rem)
+	}
+	return out
+}
 
 func TestMaybeRespawnKeepsAliveWorldUnitWhenMirrorMissing(t *testing.T) {
 	srv := NewServer("127.0.0.1:0", 156)
@@ -66,6 +116,25 @@ func TestMaybeRespawnKeepsAliveWorldUnitWhenMirrorMissing(t *testing.T) {
 	}
 	if unit.TeamID != 1 {
 		t.Fatalf("expected mirrored team=1, got %d", unit.TeamID)
+	}
+}
+
+func TestConnectedTeamCountsSkipsUnassignedConns(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	assigned := &Conn{playerID: 1, hasBegunConnecting: true, teamID: 2}
+	unassigned := &Conn{playerID: 2, hasBegunConnecting: true, teamID: 0}
+	srv.conns[assigned] = struct{}{}
+	srv.conns[unassigned] = struct{}{}
+
+	counts := srv.ConnectedTeamCounts()
+	if len(counts) != 1 {
+		t.Fatalf("expected only assigned teams to be counted, got %+v", counts)
+	}
+	if counts[2] != 1 {
+		t.Fatalf("expected team 2 count 1, got %+v", counts)
+	}
+	if _, ok := counts[0]; ok {
+		t.Fatalf("expected team 0 to be ignored, got %+v", counts)
 	}
 }
 
@@ -380,6 +449,565 @@ func TestBuildPlayerEntitySnapshotDropsInvalidUnitReferenceWhenNoFallback(t *tes
 	}
 	if r.Remaining() != 0 {
 		t.Fatalf("expected exactly one snapshot entry, got %d trailing bytes", r.Remaining())
+	}
+}
+
+func TestBuildEntitySnapshotPacketsSplitPlayerAndUnitAcrossPackets(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+
+	conn := &Conn{
+		playerID:     12,
+		unitID:       1200,
+		teamID:       1,
+		hasConnected: true,
+	}
+
+	srv.mu.Lock()
+	srv.conns[conn] = struct{}{}
+	srv.mu.Unlock()
+
+	srv.entityMu.Lock()
+	srv.entities[conn.unitID] = &protocol.UnitEntitySync{
+		IDValue:       conn.unitID,
+		Controller:    &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: conn.playerID},
+		Health:        100,
+		TeamID:        1,
+		TypeID:        35,
+		Abilities:     []protocol.Ability{},
+		Mounts:        []protocol.WeaponMount{},
+		Plans:         []*protocol.BuildPlan{},
+		Statuses:      []protocol.StatusEntry{},
+		Stack:         protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}},
+		Elevation:     1,
+		Rotation:      90,
+		Vel:           protocol.Vec2{},
+		SpawnedByCore: true,
+	}
+	srv.entityMu.Unlock()
+
+	unit := srv.snapshotPlayerUnitEntity(conn)
+	if unit == nil {
+		t.Fatal("expected snapshot unit entity")
+	}
+	player := &protocol.PlayerEntity{IDValue: conn.playerID}
+	srv.updatePlayerEntity(player, conn)
+	player.Unit = protocol.UnitBox{IDValue: unit.ID()}
+
+	playerEntry, err := func() ([]byte, error) {
+		w := protocol.NewWriterWithContext(srv.TypeIO)
+		if err := w.WriteInt32(player.ID()); err != nil {
+			return nil, err
+		}
+		if err := w.WriteByte(player.ClassID()); err != nil {
+			return nil, err
+		}
+		if err := player.WriteSync(w); err != nil {
+			return nil, err
+		}
+		return w.Bytes(), nil
+	}()
+	if err != nil {
+		t.Fatalf("encode player entry: %v", err)
+	}
+	unitEntry, err := func() ([]byte, error) {
+		w := protocol.NewWriterWithContext(srv.TypeIO)
+		if err := w.WriteInt32(unit.ID()); err != nil {
+			return nil, err
+		}
+		if err := w.WriteByte(unit.ClassID()); err != nil {
+			return nil, err
+		}
+		if err := unit.WriteSync(w); err != nil {
+			return nil, err
+		}
+		return w.Bytes(), nil
+	}()
+	if err != nil {
+		t.Fatalf("encode unit entry: %v", err)
+	}
+
+	const maxEntitySnapshotData = 32000
+	basePlayerSize := len(playerEntry)
+	unitEntrySize := len(unitEntry)
+	nameLen := maxEntitySnapshotData - unitEntrySize + 1 - basePlayerSize + len(player.Name)
+	if nameLen <= 0 {
+		t.Fatalf("expected positive name length, player=%d unit=%d", basePlayerSize, unitEntrySize)
+	}
+	conn.name = strings.Repeat("a", nameLen)
+
+	packets, err := srv.buildEntitySnapshotPackets()
+	if err != nil {
+		t.Fatalf("buildEntitySnapshotPackets returned error: %v", err)
+	}
+	if len(packets) != 2 {
+		t.Fatalf("expected player and unit to be split into two packets, got %d packets", len(packets))
+	}
+
+	first := decodeEntitySnapshotPacket(t, srv, packets[0])
+	if len(first) != 1 || first[0].Player == nil {
+		t.Fatalf("expected first packet to contain exactly one player entity, got %+v", first)
+	}
+	if first[0].ID != conn.playerID {
+		t.Fatalf("expected player entity id %d, got %d", conn.playerID, first[0].ID)
+	}
+	if first[0].Player.Unit == nil {
+		t.Fatalf("expected player snapshot to retain unit reference when unit spills into next packet")
+	}
+	if first[0].Player.Unit.ID() != conn.unitID {
+		t.Fatalf("expected player unit reference id %d, got %d", conn.unitID, first[0].Player.Unit.ID())
+	}
+
+	second := decodeEntitySnapshotPacket(t, srv, packets[1])
+	if len(second) != 1 || second[0].Unit == nil {
+		t.Fatalf("expected second packet to contain exactly one unit entity, got %+v", second)
+	}
+	if second[0].ID != conn.unitID {
+		t.Fatalf("expected unit entity id %d, got %d", conn.unitID, second[0].ID)
+	}
+	if second[0].Unit.TypeID != 35 {
+		t.Fatalf("expected unit type 35, got %d", second[0].Unit.TypeID)
+	}
+}
+
+func TestPrepareUnitEntitySnapshotAppliesOfficialGammaClassID(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
+
+	unit := &protocol.UnitEntitySync{
+		IDValue:      9001,
+		Controller:   &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: 7},
+		Health:       220,
+		TeamID:       1,
+		TypeID:       37,
+		Abilities:    []protocol.Ability{},
+		Mounts:       []protocol.WeaponMount{},
+		Plans:        []*protocol.BuildPlan{},
+		Statuses:     []protocol.StatusEntry{},
+		Stack:        protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}},
+		Elevation:    1,
+		Rotation:     90,
+		BaseRotation: 90,
+		Vel:          protocol.Vec2{},
+	}
+
+	if !srv.prepareUnitEntitySnapshot(unit) {
+		t.Fatal("expected gamma unit snapshot to stay valid")
+	}
+	if got := unit.ClassID(); got != 31 {
+		t.Fatalf("expected gamma unit class id 31, got %d", got)
+	}
+}
+
+func TestPrepareUnitEntitySnapshotAppliesPayloadUnitLayout(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 55, name: "emanate"})
+
+	unit := &protocol.UnitEntitySync{
+		IDValue:        9101,
+		Controller:     &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: 9},
+		Health:         700,
+		TeamID:         1,
+		TypeID:         55,
+		Abilities:      []protocol.Ability{},
+		Mounts:         []protocol.WeaponMount{},
+		Plans:          []*protocol.BuildPlan{},
+		Payloads:       []protocol.Payload{},
+		Statuses:       []protocol.StatusEntry{},
+		Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}},
+		Elevation:      1,
+		Rotation:       90,
+		SpawnedByCore:  true,
+		UpdateBuilding: false,
+		Vel:            protocol.Vec2{},
+		X:              64,
+		Y:              96,
+	}
+
+	if !srv.prepareUnitEntitySnapshot(unit) {
+		t.Fatal("expected payload core unit snapshot to stay valid")
+	}
+	if got := unit.ClassID(); got != 5 {
+		t.Fatalf("expected emanate unit class id 5, got %d", got)
+	}
+
+	w := protocol.NewWriterWithContext(srv.TypeIO)
+	if err := unit.WriteSync(w); err != nil {
+		t.Fatalf("write payload unit sync failed: %v", err)
+	}
+	decoded := &protocol.UnitEntitySync{IDValue: unit.ID(), ClassIDValue: unit.ClassID(), ClassIDSet: true}
+	if err := decoded.ReadSync(protocol.NewReaderWithContext(w.Bytes(), srv.TypeIO)); err != nil {
+		t.Fatalf("read payload unit sync failed: %v", err)
+	}
+	if decoded.TypeID != 55 {
+		t.Fatalf("expected decoded unit type 55, got %d", decoded.TypeID)
+	}
+	if len(decoded.Payloads) != 0 {
+		t.Fatalf("expected empty payload seq, got %d entries", len(decoded.Payloads))
+	}
+}
+
+func TestBuildEntitySnapshotPacketsIncludeExtraWorldUnits(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.ExtraEntitySnapshotEntitiesFn = func() ([]protocol.UnitSyncEntity, error) {
+		return []protocol.UnitSyncEntity{
+			&protocol.UnitEntitySync{
+				IDValue:        9001,
+				Controller:     &protocol.ControllerState{Type: protocol.ControllerGenericAI},
+				Health:         175,
+				TeamID:         2,
+				TypeID:         35,
+				Abilities:      []protocol.Ability{},
+				Mounts:         []protocol.WeaponMount{},
+				Plans:          []*protocol.BuildPlan{},
+				Statuses:       []protocol.StatusEntry{},
+				Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}},
+				Elevation:      1,
+				Rotation:       45,
+				Vel:            protocol.Vec2{X: 1, Y: 2},
+				SpawnedByCore:  false,
+				UpdateBuilding: false,
+				X:              64,
+				Y:              96,
+			},
+		}, nil
+	}
+
+	packets, err := srv.buildEntitySnapshotPackets()
+	if err != nil {
+		t.Fatalf("buildEntitySnapshotPackets returned error: %v", err)
+	}
+	if len(packets) != 1 {
+		t.Fatalf("expected one packet for one extra entity, got %d", len(packets))
+	}
+
+	entries := decodeEntitySnapshotPacket(t, srv, packets[0])
+	if len(entries) != 1 || entries[0].Unit == nil {
+		t.Fatalf("expected packet to contain one extra unit entry, got %+v", entries)
+	}
+	if entries[0].ID != 9001 {
+		t.Fatalf("expected unit id 9001, got %d", entries[0].ID)
+	}
+	if entries[0].Unit.TypeID != 35 {
+		t.Fatalf("expected extra unit type 35, got %d", entries[0].Unit.TypeID)
+	}
+	if entries[0].Unit.TeamID != 2 {
+		t.Fatalf("expected extra unit team 2, got %d", entries[0].Unit.TeamID)
+	}
+}
+
+func TestBuildEntitySnapshotPacketsSkipPlayersInWorldReloadGrace(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+
+	graceConn := &Conn{
+		playerID:     41,
+		unitID:       4100,
+		teamID:       1,
+		hasConnected: true,
+	}
+	graceConn.SetWorldReloadGrace(3 * time.Second)
+	activeConn := &Conn{
+		playerID:     42,
+		unitID:       4200,
+		teamID:       1,
+		hasConnected: true,
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		switch unitID {
+		case graceConn.unitID:
+			return UnitInfo{ID: unitID, X: 16, Y: 24, Health: 100, TeamID: 1, TypeID: 35}, true
+		case activeConn.unitID:
+			return UnitInfo{ID: unitID, X: 32, Y: 48, Health: 100, TeamID: 1, TypeID: 35}, true
+		default:
+			return UnitInfo{}, false
+		}
+	}
+
+	srv.mu.Lock()
+	srv.conns[graceConn] = struct{}{}
+	srv.conns[activeConn] = struct{}{}
+	srv.mu.Unlock()
+
+	packets, err := srv.buildEntitySnapshotPackets()
+	if err != nil {
+		t.Fatalf("buildEntitySnapshotPackets returned error: %v", err)
+	}
+	if len(packets) == 0 {
+		t.Fatal("expected packets for active player")
+	}
+
+	seen := map[int32]bool{}
+	for _, packet := range packets {
+		for _, entry := range decodeEntitySnapshotPacket(t, srv, packet) {
+			seen[entry.ID] = true
+		}
+	}
+	if seen[graceConn.playerID] || seen[graceConn.unitID] {
+		t.Fatalf("expected world-reload-grace player/unit to be skipped, seen=%v", seen)
+	}
+	if !seen[activeConn.playerID] || !seen[activeConn.unitID] {
+		t.Fatalf("expected active player/unit to remain in snapshot, seen=%v", seen)
+	}
+}
+
+func TestPostConnectLoopSkipsEntitySnapshotsDuringWorldReloadGrace(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.SetSnapshotIntervals(20, 20)
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 51
+	conn.unitID = 5100
+	conn.teamID = 1
+	conn.hasConnected = true
+	conn.SetWorldReloadGrace(200 * time.Millisecond)
+
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:     unitID,
+			X:      64,
+			Y:      96,
+			Health: 100,
+			TeamID: 1,
+			TypeID: 35,
+		}, true
+	}
+
+	srv.mu.Lock()
+	srv.conns[conn] = struct{}{}
+	srv.mu.Unlock()
+
+	var entitySent atomic.Int32
+	var stateSent atomic.Int32
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		switch obj.(type) {
+		case *protocol.Remote_NetClient_entitySnapshot_32:
+			entitySent.Add(1)
+		case *protocol.Remote_NetClient_stateSnapshot_35:
+			stateSent.Add(1)
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	go srv.postConnectLoop(conn)
+	time.Sleep(90 * time.Millisecond)
+	_ = conn.Close()
+	<-done
+
+	if stateSent.Load() == 0 {
+		t.Fatal("expected postConnectLoop to keep sending state snapshots during grace")
+	}
+	if entitySent.Load() != 0 {
+		t.Fatalf("expected no entity snapshots during world reload grace, got %d", entitySent.Load())
+	}
+}
+
+func TestEnsurePostConnectStartedSetsInitialWorldReloadGraceAndRunsOnce(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	srv.SetSnapshotIntervals(250, 250)
+	srv.SpawnTileFn = func() (protocol.Point2, bool) {
+		return protocol.Point2{X: 8, Y: 9}, true
+	}
+
+	var spawnCalls atomic.Int32
+	srv.SpawnUnitFn = func(_ *Conn, _ int32, _ protocol.Point2, _ int16) (float32, float32, bool) {
+		spawnCalls.Add(1)
+		return 64, 72, true
+	}
+
+	var postCalls atomic.Int32
+	postDone := make(chan struct{}, 1)
+	srv.OnPostConnect = func(_ *Conn) {
+		postCalls.Add(1)
+		select {
+		case postDone <- struct{}{}:
+		default:
+		}
+	}
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	conn := NewConn(serverSide, srv.Serial)
+	conn.playerID = 61
+	conn.teamID = 1
+	conn.hasConnected = true
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.ensurePostConnectStarted(conn)
+	select {
+	case <-postDone:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected OnPostConnect to run")
+	}
+	if !conn.InWorldReloadGrace() {
+		t.Fatal("expected initial world reload grace after post-connect start")
+	}
+	if spawnCalls.Load() != 1 {
+		t.Fatalf("expected one initial spawn, got %d", spawnCalls.Load())
+	}
+
+	srv.ensurePostConnectStarted(conn)
+	time.Sleep(30 * time.Millisecond)
+	if spawnCalls.Load() != 1 {
+		t.Fatalf("expected post-connect init to run once, got %d spawns", spawnCalls.Load())
+	}
+	if postCalls.Load() != 1 {
+		t.Fatalf("expected OnPostConnect to run once, got %d", postCalls.Load())
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestSerializeEntityIncludesIDClassAndSyncBytes(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
+
+	unit := &protocol.UnitEntitySync{
+		IDValue:      9001,
+		Controller:   &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: 7},
+		Health:       220,
+		TeamID:       1,
+		TypeID:       37,
+		Abilities:    []protocol.Ability{},
+		Mounts:       []protocol.WeaponMount{},
+		Plans:        []*protocol.BuildPlan{},
+		Statuses:     []protocol.StatusEntry{},
+		Stack:        protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}},
+		Elevation:    1,
+		Rotation:     90,
+		BaseRotation: 90,
+		Vel:          protocol.Vec2{},
+		X:            64,
+		Y:            96,
+	}
+	if !srv.prepareUnitEntitySnapshot(unit) {
+		t.Fatal("expected gamma unit snapshot to stay valid")
+	}
+
+	got := srv.serializeEntity(unit)
+
+	wantWriter := protocol.NewWriterWithContext(srv.TypeIO)
+	if err := wantWriter.WriteInt32(unit.ID()); err != nil {
+		t.Fatalf("write expected entity id failed: %v", err)
+	}
+	if err := wantWriter.WriteByte(unit.ClassID()); err != nil {
+		t.Fatalf("write expected entity class failed: %v", err)
+	}
+	if err := unit.WriteSync(wantWriter); err != nil {
+		t.Fatalf("write expected entity sync failed: %v", err)
+	}
+	want := append([]byte(nil), wantWriter.Bytes()...)
+
+	if !bytes.Equal(got, want) {
+		t.Fatalf("serializeEntity mismatch:\n got=%x\nwant=%x", got, want)
+	}
+
+	entries := decodeEntitySnapshotPacket(t, srv, &protocol.Remote_NetClient_entitySnapshot_32{
+		Amount: 1,
+		Data:   got,
+	})
+	if len(entries) != 1 || entries[0].Unit == nil {
+		t.Fatalf("expected one decoded unit entry, got %+v", entries)
+	}
+	if entries[0].ID != 9001 {
+		t.Fatalf("expected unit id 9001, got %d", entries[0].ID)
+	}
+	if entries[0].ClassID != unit.ClassID() {
+		t.Fatalf("expected class id %d, got %d", unit.ClassID(), entries[0].ClassID)
+	}
+	if entries[0].Unit.TypeID != 37 {
+		t.Fatalf("expected decoded unit type 37, got %d", entries[0].Unit.TypeID)
+	}
+}
+
+func TestSnapshotPlayerUnitEntityDoesNotCreatePhantomUnitWhenWorldUnitMissing(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	conn := &Conn{
+		playerID:     42,
+		unitID:       4242,
+		teamID:       1,
+		hasConnected: true,
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		return UnitInfo{}, false
+	}
+
+	if unit := srv.snapshotPlayerUnitEntity(conn); unit != nil {
+		t.Fatalf("expected missing world unit to skip snapshot, got %+v", unit)
+	}
+
+	srv.entityMu.Lock()
+	_, ok := srv.entities[conn.unitID]
+	srv.entityMu.Unlock()
+	if ok {
+		t.Fatalf("expected snapshot path not to create phantom mirror entity for missing world unit")
+	}
+}
+
+func TestSnapshotPlayerUnitEntityCreatesMirrorOnlyForAliveWorldUnit(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 156)
+	srv.Content.RegisterUnitType(testUnitType{id: 36, name: "beta"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	conn := &Conn{
+		playerID:     43,
+		unitID:       4300,
+		teamID:       1,
+		hasConnected: true,
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:     unitID,
+			X:      40,
+			Y:      72,
+			Health: 170,
+			TeamID: 1,
+			TypeID: 36,
+		}, true
+	}
+
+	unit := srv.snapshotPlayerUnitEntity(conn)
+	if unit == nil {
+		t.Fatal("expected alive world unit to be snapshotted")
+	}
+	if unit.TypeID != 36 {
+		t.Fatalf("expected world unit type 36, got %d", unit.TypeID)
+	}
+	if unit.X != 40 || unit.Y != 72 {
+		t.Fatalf("expected world position (40,72), got (%.1f,%.1f)", unit.X, unit.Y)
+	}
+
+	srv.entityMu.Lock()
+	_, ok := srv.entities[conn.unitID]
+	srv.entityMu.Unlock()
+	if !ok {
+		t.Fatalf("expected snapshot path to cache mirror entity for alive world unit")
 	}
 }
 

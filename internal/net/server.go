@@ -11,9 +11,8 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"os"
-	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +21,7 @@ import (
 
 	"mdt-server/internal/devlog"
 	"mdt-server/internal/protocol"
+	"mdt-server/internal/runtimeassets"
 	"mdt-server/internal/storage"
 )
 
@@ -86,6 +86,7 @@ type Server struct {
 	OnDeletePlans      func(*Conn, []int32)
 	OnRemoveQueueBlock func(*Conn, int32, int32, bool)
 	OnTileConfig       func(*Conn, int32, any)
+	OnMenuChoose       func(*Conn, int32, int32)
 	// Respawn delay in "frames" (Mindustry Time.delta units). Defaults to 60 if zero.
 	RespawnDelayFrames float32
 	// Optional hook: spawn player unit in world/state. Uses provided unitID, returns world coords.
@@ -117,6 +118,9 @@ type Server struct {
 	// Appends additional entities into entity snapshot stream.
 	// Return value is appended entity count.
 	ExtraEntitySnapshotFn func(w *protocol.Writer) (int16, error)
+	// Appends additional sync entities into entity snapshots using the same
+	// per-entity packet splitting path as vanilla NetServer.writeEntitySnapshot().
+	ExtraEntitySnapshotEntitiesFn func() ([]protocol.UnitSyncEntity, error)
 
 	UdpRetryCount  int
 	UdpRetryDelay  time.Duration
@@ -314,6 +318,48 @@ func (s *Server) SendInfoPopup(c *Conn, message string, duration float32, align,
 	_ = c.SendAsync(packet)
 }
 
+func (s *Server) SendInfoMessage(c *Conn, message string) {
+	if s == nil || c == nil || !c.hasConnected {
+		return
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	_ = c.SendAsync(&protocol.Remote_Menus_infoMessage_48{Message: message})
+}
+
+func (s *Server) SendMenu(c *Conn, menuID int32, title, message string, options [][]string) {
+	if s == nil || c == nil || !c.hasConnected {
+		return
+	}
+	cleaned := make([][]string, 0, len(options))
+	for _, row := range options {
+		rowOut := make([]string, 0, len(row))
+		for _, option := range row {
+			rowOut = append(rowOut, strings.TrimSpace(option))
+		}
+		cleaned = append(cleaned, rowOut)
+	}
+	_ = c.SendAsync(&protocol.Remote_Menus_menu_62{
+		MenuId:  menuID,
+		Title:   strings.TrimSpace(title),
+		Message: strings.TrimSpace(message),
+		Options: cleaned,
+	})
+}
+
+func (s *Server) SendOpenURI(c *Conn, uri string) {
+	if s == nil || c == nil || !c.hasConnected {
+		return
+	}
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return
+	}
+	_ = c.SendAsync(&protocol.Remote_Menus_openURI_64{Uri: uri})
+}
+
 func (s *Server) BroadcastSetHudTextReliable(message string) {
 	if s == nil {
 		return
@@ -334,6 +380,42 @@ func (s *Server) BroadcastSetHudTextReliable(message string) {
 	for _, peer := range peers {
 		_ = peer.SendAsync(packet)
 	}
+}
+
+func (s *Server) SendSetHudTextReliable(c *Conn, message string) {
+	if s == nil || c == nil || !c.hasConnected {
+		return
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	_ = c.SendAsync(&protocol.Remote_Menus_setHudTextReliable_111{Message: message})
+}
+
+func (s *Server) BroadcastHideHudText() {
+	if s == nil {
+		return
+	}
+	peers := make([]*Conn, 0, len(s.conns))
+	s.mu.Lock()
+	for c := range s.conns {
+		if c != nil && c.hasConnected {
+			peers = append(peers, c)
+		}
+	}
+	s.mu.Unlock()
+	packet := &protocol.Remote_Menus_hideHudText_110{}
+	for _, peer := range peers {
+		_ = peer.SendAsync(packet)
+	}
+}
+
+func (s *Server) SendHideHudText(c *Conn) {
+	if s == nil || c == nil || !c.hasConnected {
+		return
+	}
+	_ = c.SendAsync(&protocol.Remote_Menus_hideHudText_110{})
 }
 
 func (s *Server) playerDisplayName(c *Conn) string {
@@ -986,11 +1068,11 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			} else {
 				fmt.Printf("[net] client dead ignored conn=%d player=%d %s\n", c.id, c.playerID, debugInfo)
 				if s.shouldForceRespawnAfterDeadIgnored(c, time.Now()) {
-					fmt.Printf("[net] client dead stuck conn=%d player=%d ignores=%d action=force-respawn\n",
+					fmt.Printf("[net] client dead stuck conn=%d player=%d ignores=%d action=repair-binding\n",
 						c.id, c.playerID, c.clientDeadIgnores)
 					c.clientDeadIgnores = 0
 					c.lastDeadIgnoreAt = time.Time{}
-					s.respawnNow(c, "client-dead-stuck")
+					s.repairAliveSpawnBinding(c, "client-dead-stuck")
 				} else {
 					s.repairAliveSpawnBinding(c, "client-dead-ignored")
 				}
@@ -1588,6 +1670,9 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 105, "Remote_Menus_menuChoose_105", "menu_choose")
 		}
+		if s.OnMenuChoose != nil {
+			s.OnMenuChoose(c, v.MenuId, v.Option)
+		}
 	case *protocol.Remote_Menus_textInput_106:
 		// 菜单 - 文本输入1
 		if s.DevLogger != nil {
@@ -2021,6 +2106,21 @@ func (s *Server) Broadcast(obj any) {
 	}
 }
 
+func (s *Server) BroadcastUnreliable(obj any) {
+	if obj == nil {
+		return
+	}
+	s.mu.Lock()
+	peers := make([]*Conn, 0, len(s.conns))
+	for c := range s.conns {
+		peers = append(peers, c)
+	}
+	s.mu.Unlock()
+	for _, peer := range peers {
+		_ = s.sendUnreliable(peer, obj)
+	}
+}
+
 func (s *Server) SendStatusTo(c *Conn) {
 	if c == nil {
 		return
@@ -2153,6 +2253,7 @@ type Conn struct {
 	lastClientSnapshot  atomic.Int32
 	lastClientTimeMs    atomic.Int64
 	snapshotsSent       atomic.Int32
+	entityDebugSent     atomic.Int32
 	lastRecvPacketID    int
 	lastRecvFrameworkID int
 	closed              chan struct{}
@@ -2386,8 +2487,8 @@ func (c *Conn) UnitID() int32 {
 }
 
 func (c *Conn) TeamID() byte {
-	if c == nil || c.teamID == 0 {
-		return 1
+	if c == nil {
+		return 0
 	}
 	return c.teamID
 }
@@ -2395,9 +2496,6 @@ func (c *Conn) TeamID() byte {
 func (c *Conn) SetTeamID(teamID byte) {
 	if c == nil {
 		return
-	}
-	if teamID == 0 {
-		teamID = 1
 	}
 	c.teamID = teamID
 }
@@ -2843,6 +2941,7 @@ func (s *Server) ensurePostConnectStarted(c *Conn) {
 		return
 	}
 	c.postOnce.Do(func() {
+		c.SetWorldReloadGrace(3 * time.Second)
 		s.spawnPlayerInitial(c)
 		if s.OnPostConnect != nil {
 			go s.OnPostConnect(c)
@@ -2864,6 +2963,9 @@ func (s *Server) assignConnTeam(c *Conn, force bool) {
 			teamID = assigned
 		}
 	}
+	if teamID == 0 {
+		teamID = 1
+	}
 	c.SetTeamID(teamID)
 }
 
@@ -2878,7 +2980,9 @@ func (s *Server) ConnectedTeamCounts() map[byte]int {
 		if c == nil || !c.hasBegunConnecting {
 			continue
 		}
-		out[c.TeamID()]++
+		if teamID := c.TeamID(); teamID != 0 {
+			out[teamID]++
+		}
 	}
 	return out
 }
@@ -2940,17 +3044,26 @@ func (s *Server) postConnectLoop(c *Conn) {
 			}
 			c.snapshotsSent.Add(1)
 		case <-entityTicker.C:
-			amount, data, err := s.buildPlayerEntitySnapshot()
+			if c.InWorldReloadGrace() {
+				continue
+			}
+			packets, err := s.buildEntitySnapshotPackets()
 			if err != nil {
 				fmt.Printf("[net] entity snapshot build failed id=%d err=%v\n", c.id, err)
-				s.emitEvent(c, "entity_snapshot_build_failed", "*protocol.Remote_NetClient_entitySnapshot_32", err.Error())
-				return
-			}
+					s.emitEvent(c, "entity_snapshot_build_failed", "*protocol.Remote_NetClient_entitySnapshot_32", err.Error())
+					return
+				}
+			s.logInitialEntitySnapshotDebug(c, packets)
 			// Keep lastSnapshotTimestamp fresh on client to prevent snapshot timeout.
-			if err := s.sendUnreliable(c, &protocol.Remote_NetClient_entitySnapshot_32{Amount: amount, Data: data}); err != nil {
-				fmt.Printf("[net] entity snapshot send failed id=%d err=%v\n", c.id, err)
-				s.emitEvent(c, "entity_snapshot_send_failed", "*protocol.Remote_NetClient_entitySnapshot_32", err.Error())
-				return
+			for _, packet := range packets {
+				if packet == nil {
+					continue
+				}
+				if err := s.sendUnreliable(c, packet); err != nil {
+					fmt.Printf("[net] entity snapshot send failed id=%d err=%v\n", c.id, err)
+					s.emitEvent(c, "entity_snapshot_send_failed", "*protocol.Remote_NetClient_entitySnapshot_32", err.Error())
+					return
+				}
 			}
 			c.snapshotsSent.Add(1)
 		case <-keepAliveTicker.C:
@@ -3503,82 +3616,284 @@ func (s *Server) MarkUnitDead(unitID int32, source string) {
 }
 
 func (s *Server) buildPlayerEntitySnapshot() (int16, []byte, error) {
+	packets, err := s.buildEntitySnapshotPackets()
+	if err != nil {
+		return 0, nil, err
+	}
+	if len(packets) == 0 || packets[0] == nil {
+		return 0, nil, nil
+	}
+	return packets[0].Amount, packets[0].Data, nil
+}
+
+func (s *Server) buildEntitySnapshotPackets() ([]*protocol.Remote_NetClient_entitySnapshot_32, error) {
 	// TypeIO.WriteBytes uses int16 length; keep snapshot data under signed-short limit.
 	const maxEntitySnapshotData = 32000
 
 	s.mu.Lock()
 	players := make([]*Conn, 0, len(s.conns))
 	for c := range s.conns {
-		if c.hasConnected && c.playerID != 0 {
+		if c.hasConnected && c.playerID != 0 && !c.InWorldReloadGrace() {
 			players = append(players, c)
 		}
 	}
 	s.mu.Unlock()
+	sort.Slice(players, func(i, j int) bool {
+		if players[i].playerID != players[j].playerID {
+			return players[i].playerID < players[j].playerID
+		}
+		return players[i].id < players[j].id
+	})
 
-	w := protocol.NewWriterWithContext(s.TypeIO)
-	var total int16
-	appendEntity := func(id int32, classID byte, syncWrite func(*protocol.Writer) error) error {
+	extraEntities := []protocol.UnitSyncEntity(nil)
+	if s.ExtraEntitySnapshotEntitiesFn != nil {
+		var err error
+		extraEntities, err = s.ExtraEntitySnapshotEntitiesFn()
+		if err != nil {
+			return nil, err
+		}
+		filtered := make([]protocol.UnitSyncEntity, 0, len(extraEntities))
+		for _, ent := range extraEntities {
+			if ent == nil {
+				continue
+			}
+			filtered = append(filtered, ent)
+		}
+		extraEntities = filtered
+		sort.Slice(extraEntities, func(i, j int) bool {
+			if extraEntities[i].ID() != extraEntities[j].ID() {
+				return extraEntities[i].ID() < extraEntities[j].ID()
+			}
+			return extraEntities[i].ClassID() < extraEntities[j].ClassID()
+		})
+	}
+
+	encodeEntity := func(entity protocol.UnitSyncEntity) ([]byte, error) {
+		if entity == nil {
+			return nil, nil
+		}
 		ew := protocol.NewWriterWithContext(s.TypeIO)
-		if err := ew.WriteInt32(id); err != nil {
+		if err := ew.WriteInt32(entity.ID()); err != nil {
+			return nil, err
+		}
+		if err := ew.WriteByte(entity.ClassID()); err != nil {
+			return nil, err
+		}
+		entity.BeforeWrite()
+		if err := entity.WriteSync(ew); err != nil {
+			return nil, err
+		}
+		return ew.Bytes(), nil
+	}
+
+	writer := protocol.NewWriterWithContext(s.TypeIO)
+	packets := make([]*protocol.Remote_NetClient_entitySnapshot_32, 0, 4)
+	var sent int16
+	flush := func() {
+		if sent <= 0 {
+			return
+		}
+		packets = append(packets, &protocol.Remote_NetClient_entitySnapshot_32{
+			Amount: sent,
+			Data:   append([]byte(nil), writer.Bytes()...),
+		})
+		writer = protocol.NewWriterWithContext(s.TypeIO)
+		sent = 0
+	}
+	appendEntry := func(entry []byte) error {
+		if len(entry) == 0 {
+			return nil
+		}
+		if len(entry) > maxEntitySnapshotData {
+			return fmt.Errorf("entity snapshot entry too large: %d", len(entry))
+		}
+		if sent > 0 && len(writer.Bytes())+len(entry) > maxEntitySnapshotData {
+			flush()
+		}
+		if err := writer.WriteBytes(entry); err != nil {
 			return err
 		}
-		if err := ew.WriteByte(classID); err != nil {
-			return err
-		}
-		if err := syncWrite(ew); err != nil {
-			return err
-		}
-		entry := ew.Bytes()
-		if len(w.Bytes())+len(entry) > maxEntitySnapshotData {
-			return io.EOF
-		}
-		if err := w.WriteBytes(entry); err != nil {
-			return err
-		}
-		total++
+		sent++
 		return nil
 	}
+
 	for _, p := range players {
-		unit := s.playerUnitEntity(p)
+		unit := s.snapshotPlayerUnitEntity(p)
 		if unit != nil && !s.prepareUnitEntitySnapshot(unit) {
 			fmt.Printf("[net] skipped unit snapshot conn=%d player=%d unit=%d invalid_type=%d\n",
 				p.id, p.playerID, unit.ID(), unit.TypeID)
 			unit = nil
 		}
-		ent := s.ensurePlayerEntity(p)
+		ent := &protocol.PlayerEntity{IDValue: p.playerID}
 		s.updatePlayerEntity(ent, p)
 		if unit == nil {
 			ent.Unit = nil
 		} else {
 			ent.Unit = protocol.UnitBox{IDValue: unit.ID()}
 		}
-		if err := appendEntity(ent.ID(), ent.ClassID(), ent.WriteSync); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return 0, nil, err
-		}
-		// Send currently controlled player unit entity when available.
-		if unit != nil {
-			if err := appendEntity(unit.ID(), unit.ClassID(), unit.WriteSync); err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				return 0, nil, err
-			}
-		}
-	}
-	if s.ExtraEntitySnapshotFn != nil {
-		n, err := s.ExtraEntitySnapshotFn(w)
+		playerEntry, err := encodeEntity(ent)
 		if err != nil {
-			return 0, nil, err
+			return nil, err
 		}
-		total += n
+		if err := appendEntry(playerEntry); err != nil {
+			return nil, err
+		}
+		if unit == nil {
+			continue
+		}
+		unitEntry, err := encodeEntity(unit)
+		if err != nil {
+			return nil, err
+		}
+		if err := appendEntry(unitEntry); err != nil {
+			return nil, err
+		}
 	}
-	if len(w.Bytes()) > maxEntitySnapshotData {
-		return total, w.Bytes()[:maxEntitySnapshotData], nil
+
+	for _, ent := range extraEntities {
+		switch typed := ent.(type) {
+		case *protocol.UnitEntitySync:
+			unit := cloneUnitEntitySync(typed)
+			if unit == nil || !s.prepareUnitEntitySnapshot(unit) {
+				continue
+			}
+			entry, err := encodeEntity(unit)
+			if err != nil {
+				return nil, err
+			}
+			if err := appendEntry(entry); err != nil {
+				return nil, err
+			}
+		default:
+			entry, err := encodeEntity(ent)
+			if err != nil {
+				return nil, err
+			}
+			if err := appendEntry(entry); err != nil {
+				return nil, err
+			}
+		}
 	}
-	return total, w.Bytes(), nil
+
+	if s.ExtraEntitySnapshotFn != nil {
+		if sent > 0 {
+			flush()
+		}
+		legacyWriter := protocol.NewWriterWithContext(s.TypeIO)
+		n, err := s.ExtraEntitySnapshotFn(legacyWriter)
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 || len(legacyWriter.Bytes()) > 0 {
+			if len(legacyWriter.Bytes()) > maxEntitySnapshotData {
+				return nil, fmt.Errorf("legacy entity snapshot payload too large: %d", len(legacyWriter.Bytes()))
+			}
+			packets = append(packets, &protocol.Remote_NetClient_entitySnapshot_32{
+				Amount: n,
+				Data:   append([]byte(nil), legacyWriter.Bytes()...),
+			})
+		}
+	}
+
+	flush()
+	return packets, nil
+}
+
+func (s *Server) logInitialEntitySnapshotDebug(c *Conn, packets []*protocol.Remote_NetClient_entitySnapshot_32) {
+	if s == nil || c == nil || len(packets) == 0 {
+		return
+	}
+	seq := int(c.entityDebugSent.Add(1))
+	if seq > 4 {
+		return
+	}
+	for i, packet := range packets {
+		if packet == nil {
+			continue
+		}
+		fmt.Printf("[net] entity snapshot debug conn=%d player=%d seq=%d packet=%d/%d amount=%d bytes=%d entries=%s\n",
+			c.id, c.playerID, seq, i+1, len(packets), packet.Amount, len(packet.Data),
+			strings.Join(s.describeEntitySnapshotPacket(packet), " | "))
+	}
+}
+
+func (s *Server) describeEntitySnapshotPacket(packet *protocol.Remote_NetClient_entitySnapshot_32) []string {
+	if s == nil || packet == nil {
+		return nil
+	}
+	r := protocol.NewReaderWithContext(packet.Data, s.TypeIO)
+	out := make([]string, 0, int(packet.Amount)+1)
+	for i := 0; i < int(packet.Amount); i++ {
+		entryStart := r.Remaining()
+		id, err := r.ReadInt32()
+		if err != nil {
+			out = append(out, fmt.Sprintf("entry=%d read_id_err=%v", i, err))
+			return out
+		}
+		classID, err := r.ReadByte()
+		if err != nil {
+			out = append(out, fmt.Sprintf("id=%d read_class_err=%v", id, err))
+			return out
+		}
+		switch classID {
+		case 12:
+			player := &protocol.PlayerEntity{IDValue: id}
+			if err := player.ReadSync(r); err != nil {
+				out = append(out, fmt.Sprintf("id=%d class=%d player_err=%v", id, classID, err))
+				return out
+			}
+			unitID := int32(0)
+			if player.Unit != nil {
+				unitID = player.Unit.ID()
+			}
+			out = append(out, fmt.Sprintf("id=%d class=%d player team=%d unit=%d name_bytes=%d len=%d",
+				id, classID, player.TeamID, unitID, len([]byte(player.Name)), entryStart-r.Remaining()))
+		default:
+			unit := &protocol.UnitEntitySync{IDValue: id, ClassIDValue: classID, ClassIDSet: true}
+			if err := unit.ReadSync(r); err != nil {
+				out = append(out, fmt.Sprintf("id=%d class=%d unit_err=%v", id, classID, err))
+				return out
+			}
+			out = append(out, fmt.Sprintf("id=%d class=%d unit type=%d team=%d len=%d",
+				id, classID, unit.TypeID, unit.TeamID, entryStart-r.Remaining()))
+		}
+	}
+	if rem := r.Remaining(); rem != 0 {
+		out = append(out, fmt.Sprintf("remaining=%d", rem))
+	}
+	return out
+}
+
+func cloneControllerState(src any) any {
+	state, ok := src.(*protocol.ControllerState)
+	if !ok || state == nil {
+		return src
+	}
+	copy := *state
+	return &copy
+}
+
+func cloneUnitEntitySync(src *protocol.UnitEntitySync) *protocol.UnitEntitySync {
+	if src == nil {
+		return nil
+	}
+	copy := *src
+	copy.Controller = cloneControllerState(src.Controller)
+	copy.Abilities = append([]protocol.Ability(nil), src.Abilities...)
+	copy.Mounts = append([]protocol.WeaponMount(nil), src.Mounts...)
+	copy.Payloads = append([]protocol.Payload(nil), src.Payloads...)
+	copy.Statuses = append([]protocol.StatusEntry(nil), src.Statuses...)
+	if src.Plans != nil {
+		copy.Plans = make([]*protocol.BuildPlan, len(src.Plans))
+		for i, plan := range src.Plans {
+			if plan == nil {
+				continue
+			}
+			planCopy := *plan
+			copy.Plans[i] = &planCopy
+		}
+	}
+	return &copy
 }
 
 func (s *Server) writePlayerSync(w *protocol.Writer, c *Conn) error {
@@ -3697,6 +4012,24 @@ func (s *Server) fallbackPlayerUnitTypeID() int16 {
 	return typeID
 }
 
+func (s *Server) unitTypeName(typeID int16) string {
+	if s == nil || typeID <= 0 || s.Content == nil {
+		return ""
+	}
+	unit := s.Content.UnitType(typeID)
+	if unit == nil {
+		return ""
+	}
+	return unit.Name()
+}
+
+func (s *Server) applyUnitEntityLayout(u *protocol.UnitEntitySync) {
+	if u == nil {
+		return
+	}
+	u.ApplyLayoutByName(s.unitTypeName(u.TypeID))
+}
+
 func (s *Server) normalizedUnitTypeID(typeID int16, controller protocol.UnitController) int16 {
 	if s.validUnitTypeID(typeID) {
 		return typeID
@@ -3710,6 +4043,13 @@ func (s *Server) normalizedUnitTypeID(typeID int16, controller protocol.UnitCont
 func (s *Server) hasValidPlayerUnitEntity(c *Conn) bool {
 	if s == nil || c == nil || c.unitID == 0 {
 		return false
+	}
+	if s.UnitInfoFn != nil {
+		info, ok := s.UnitInfoFn(c.unitID)
+		if !ok || info.Health <= 0 {
+			return false
+		}
+		return s.normalizedUnitTypeID(info.TypeID, &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}) > 0
 	}
 	s.entityMu.Lock()
 	defer s.entityMu.Unlock()
@@ -3731,6 +4071,7 @@ func (s *Server) prepareUnitEntitySnapshot(u *protocol.UnitEntitySync) bool {
 	s.syncUnitFromWorld(u)
 	if normalized := s.normalizedUnitTypeID(u.TypeID, u.Controller); normalized > 0 {
 		u.TypeID = normalized
+		s.applyUnitEntityLayout(u)
 		return true
 	}
 	return false
@@ -3844,6 +4185,7 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 			} else if info, ok := s.UnitInfoFn(c.unitID); !ok || !s.validUnitTypeID(info.TypeID) {
 				u.TypeID = playerTypeID
 			}
+			s.applyUnitEntityLayout(u)
 			u.Elevation = 1
 			if u.Health <= 0 {
 				u.Health = 100
@@ -3876,6 +4218,7 @@ func (s *Server) ensurePlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		Y:              c.snapY,
 	}
 	s.syncUnitFromWorld(u)
+	s.applyUnitEntityLayout(u)
 	s.entities[c.unitID] = u
 	return u
 }
@@ -3893,6 +4236,7 @@ func (s *Server) playerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 			if normalized := s.normalizedUnitTypeID(u.TypeID, u.Controller); normalized > 0 {
 				u.TypeID = normalized
 			}
+			s.applyUnitEntityLayout(u)
 			if u.X == 0 && u.Y == 0 {
 				u.X = c.snapX
 				u.Y = c.snapY
@@ -3901,6 +4245,81 @@ func (s *Server) playerUnitEntity(c *Conn) *protocol.UnitEntitySync {
 		}
 	}
 	return nil
+}
+
+func (s *Server) snapshotPlayerUnitEntity(c *Conn) *protocol.UnitEntitySync {
+	if s == nil || c == nil || c.playerID == 0 || c.unitID == 0 || c.dead {
+		return nil
+	}
+	var worldInfo UnitInfo
+	var hasWorldInfo bool
+	if s.UnitInfoFn != nil {
+		info, ok := s.UnitInfoFn(c.unitID)
+		if !ok || info.Health <= 0 {
+			return nil
+		}
+		if s.normalizedUnitTypeID(info.TypeID, &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}) <= 0 {
+			return nil
+		}
+		worldInfo = info
+		hasWorldInfo = true
+	}
+	s.entityMu.Lock()
+	defer s.entityMu.Unlock()
+	ent, ok := s.entities[c.unitID]
+	var u *protocol.UnitEntitySync
+	if ok {
+		u, _ = ent.(*protocol.UnitEntitySync)
+	}
+	if u == nil {
+		if !hasWorldInfo {
+			return nil
+		}
+		typeID := s.normalizedUnitTypeID(worldInfo.TypeID, &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID})
+		if typeID <= 0 {
+			return nil
+		}
+		u = &protocol.UnitEntitySync{
+			IDValue:        c.unitID,
+			Abilities:      []protocol.Ability{},
+			Ammo:           0,
+			Controller:     &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID},
+			Elevation:      1,
+			Flag:           0,
+			Health:         worldInfo.Health,
+			Shooting:       false,
+			MineTile:       nil,
+			Mounts:         []protocol.WeaponMount{},
+			Plans:          []*protocol.BuildPlan{},
+			Rotation:       90,
+			Shield:         0,
+			SpawnedByCore:  true,
+			Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 0, ItmName: ""}, Amount: 0},
+			Statuses:       []protocol.StatusEntry{},
+			TeamID:         worldInfo.TeamID,
+			TypeID:         typeID,
+			UpdateBuilding: false,
+			Vel:            protocol.Vec2{X: 0, Y: 0},
+			X:              worldInfo.X,
+			Y:              worldInfo.Y,
+		}
+		s.entities[c.unitID] = u
+	}
+	if u.Controller == nil {
+		u.Controller = &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}
+	}
+	s.syncUnitFromWorld(u)
+	if normalized := s.normalizedUnitTypeID(u.TypeID, u.Controller); normalized > 0 {
+		u.TypeID = normalized
+	} else {
+		return nil
+	}
+	s.applyUnitEntityLayout(u)
+	if u.X == 0 && u.Y == 0 {
+		u.X = c.snapX
+		u.Y = c.snapY
+	}
+	return cloneUnitEntitySync(u)
 }
 
 func (s *Server) SetConnUnitStack(c *Conn, itemID int16, amount int32) {
@@ -4081,11 +4500,21 @@ func (s *Server) broadcastEntitySync(entity protocol.UnitSyncEntity) {
 
 // serializeEntity 序列化实体为字节数组
 func (s *Server) serializeEntity(entity protocol.UnitSyncEntity) []byte {
-	w := protocol.NewWriter()
+	if entity == nil {
+		return nil
+	}
+	w := protocol.NewWriterWithContext(s.TypeIO)
+	if err := w.WriteInt32(entity.ID()); err != nil {
+		return nil
+	}
+	if err := w.WriteByte(entity.ClassID()); err != nil {
+		return nil
+	}
+	entity.BeforeWrite()
 	if err := entity.WriteSync(w); err != nil {
 		return nil
 	}
-	return w.Bytes()
+	return append([]byte(nil), w.Bytes()...)
 }
 
 // sendWorldHandshake pushes world stream data to the connected client.
@@ -4209,15 +4638,8 @@ func (s *Server) ReloadWorldLiveForAllLegacy() (reloaded int, failed int) {
 }
 
 func defaultWorldData(_ *Conn, _ *protocol.ConnectPacket) ([]byte, error) {
-	fileCandidates := []string{
-		filepath.Join("assets", "bootstrap-world.bin"),
-		filepath.Join("go-server", "assets", "bootstrap-world.bin"),
-	}
-	for _, p := range fileCandidates {
-		data, err := os.ReadFile(p)
-		if err == nil && len(data) > 0 {
-			return data, nil
-		}
+	if data, _, err := runtimeassets.LoadBootstrapWorld(""); err == nil {
+		return data, nil
 	}
 
 	var out bytes.Buffer
@@ -4536,23 +4958,32 @@ func (s *Server) unitControl(c *Conn, unitID int32) {
 		}
 		s.entities[unitID] = u
 	}
-	s.entityMu.Unlock()
-
 	// Basic validation: same team and reasonably close.
 	if info.TeamID != 0 && info.TeamID != c.TeamID() {
+		s.entityMu.Unlock()
 		return
 	}
 	dx := float64(info.X - c.snapX)
 	dy := float64(info.Y - c.snapY)
 	if dx*dx+dy*dy > 120*120 {
+		s.entityMu.Unlock()
 		return
 	}
 	if state, ok := u.Controller.(*protocol.ControllerState); ok && state != nil {
 		if state.Type == protocol.ControllerPlayer && state.PlayerID != c.playerID {
+			s.entityMu.Unlock()
 			return
 		}
 	}
 	u.Controller = &protocol.ControllerState{Type: protocol.ControllerPlayer, PlayerID: c.playerID}
+	if normalized := s.normalizedUnitTypeID(u.TypeID, u.Controller); normalized > 0 {
+		u.TypeID = normalized
+	} else {
+		delete(s.entities, unitID)
+		s.entityMu.Unlock()
+		return
+	}
+	s.entityMu.Unlock()
 	c.unitID = unitID
 }
 

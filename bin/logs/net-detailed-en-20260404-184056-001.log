@@ -1,0 +1,4 @@
+2026-04-04T10:40:59.0285905Z [NET] kind=tcp_accept packet= conn_id=1158910386 uuid= ip=127.0.0.1 name="" detail=
+2026-04-04T10:40:59.0371074Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="" detail=version=156 type=official mods=0
+2026-04-04T10:40:59.0966491Z [NET] kind=world_handshake_sent packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T10:40:59.1236976Z [NET] kind=tcp_closed packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=EOF

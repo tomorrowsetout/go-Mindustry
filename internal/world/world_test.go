@@ -2,11 +2,130 @@ package world
 
 import (
 	"errors"
+	"math"
 	"testing"
 	"time"
 
 	"mdt-server/internal/protocol"
 )
+
+type decodedBlockSyncBase struct {
+	Health             float32
+	Rotation           byte
+	Team               byte
+	Version            byte
+	Enabled            byte
+	ModuleBits         byte
+	Items              map[ItemID]int32
+	PowerLinks         []int32
+	PowerStatus        float32
+	Liquids            map[LiquidID]float32
+	Efficiency         byte
+	OptionalEfficiency byte
+}
+
+func decodeBlockSyncBase(t *testing.T, data []byte) (decodedBlockSyncBase, *protocol.Reader) {
+	t.Helper()
+	r := protocol.NewReader(data)
+	var out decodedBlockSyncBase
+	var err error
+	if out.Health, err = r.ReadFloat32(); err != nil {
+		t.Fatalf("read sync health failed: %v", err)
+	}
+	if out.Rotation, err = r.ReadByte(); err != nil {
+		t.Fatalf("read sync rotation failed: %v", err)
+	}
+	if out.Team, err = r.ReadByte(); err != nil {
+		t.Fatalf("read sync team failed: %v", err)
+	}
+	if out.Version, err = r.ReadByte(); err != nil {
+		t.Fatalf("read sync version failed: %v", err)
+	}
+	if out.Enabled, err = r.ReadByte(); err != nil {
+		t.Fatalf("read sync enabled failed: %v", err)
+	}
+	if out.ModuleBits, err = r.ReadByte(); err != nil {
+		t.Fatalf("read sync module bits failed: %v", err)
+	}
+	if (out.ModuleBits & 1) != 0 {
+		count, err := r.ReadInt16()
+		if err != nil {
+			t.Fatalf("read item module count failed: %v", err)
+		}
+		out.Items = make(map[ItemID]int32, count)
+		for i := 0; i < int(count); i++ {
+			id, err := r.ReadInt16()
+			if err != nil {
+				t.Fatalf("read item module id failed: %v", err)
+			}
+			amount, err := r.ReadInt32()
+			if err != nil {
+				t.Fatalf("read item module amount failed: %v", err)
+			}
+			out.Items[ItemID(id)] = amount
+		}
+	}
+	if (out.ModuleBits & (1 << 1)) != 0 {
+		count, err := r.ReadInt16()
+		if err != nil {
+			t.Fatalf("read power module link count failed: %v", err)
+		}
+		out.PowerLinks = make([]int32, 0, count)
+		for i := 0; i < int(count); i++ {
+			link, err := r.ReadInt32()
+			if err != nil {
+				t.Fatalf("read power module link failed: %v", err)
+			}
+			out.PowerLinks = append(out.PowerLinks, link)
+		}
+		if out.PowerStatus, err = r.ReadFloat32(); err != nil {
+			t.Fatalf("read power module status failed: %v", err)
+		}
+	}
+	if (out.ModuleBits & (1 << 2)) != 0 {
+		count, err := r.ReadInt16()
+		if err != nil {
+			t.Fatalf("read liquid module count failed: %v", err)
+		}
+		out.Liquids = make(map[LiquidID]float32, count)
+		for i := 0; i < int(count); i++ {
+			id, err := r.ReadInt16()
+			if err != nil {
+				t.Fatalf("read liquid module id failed: %v", err)
+			}
+			amount, err := r.ReadFloat32()
+			if err != nil {
+				t.Fatalf("read liquid module amount failed: %v", err)
+			}
+			out.Liquids[LiquidID(id)] = amount
+		}
+	}
+	if (out.ModuleBits & (1 << 4)) != 0 {
+		if _, err := r.ReadFloat32(); err != nil {
+			t.Fatalf("read timescale failed: %v", err)
+		}
+		if _, err := r.ReadFloat32(); err != nil {
+			t.Fatalf("read timescale duration failed: %v", err)
+		}
+	}
+	if (out.ModuleBits & (1 << 5)) != 0 {
+		if _, err := r.ReadInt32(); err != nil {
+			t.Fatalf("read last disabler failed: %v", err)
+		}
+	}
+	if out.Version <= 2 {
+		if _, err := r.ReadBool(); err != nil {
+			t.Fatalf("read legacy consume flag failed: %v", err)
+		}
+	}
+	if out.Efficiency, err = r.ReadByte(); err != nil {
+		t.Fatalf("read efficiency failed: %v", err)
+	}
+	if out.OptionalEfficiency, err = r.ReadByte(); err != nil {
+		t.Fatalf("read optional efficiency failed: %v", err)
+	}
+	return out, r
+}
 
 func placeTestBuilding(t *testing.T, w *World, x, y int, block int16, team TeamID, rotation int8) *Tile {
 	t.Helper()
@@ -80,6 +199,862 @@ func paintAreaFloor(t *testing.T, w *World, cx, cy, size int, floor int16) {
 			}
 			tile.Floor = FloorID(floor)
 		}
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeGenericCrafterRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		183: "silicon-smelter",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 10, 10, 183, 1, 2)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	tile.Build.Items = []ItemStack{
+		{Item: coalItemID, Amount: 2},
+		{Item: sandItemID, Amount: 4},
+	}
+	w.crafterStates[pos] = crafterRuntimeState{
+		Progress: 0.625,
+		Warmup:   0.5,
+	}
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one block sync snapshot, got %d", len(snaps))
+	}
+	if snaps[0].Pos != protocol.PackPoint2(10, 10) {
+		t.Fatalf("unexpected snapshot pos=%d", snaps[0].Pos)
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if base.Version != 3 {
+		t.Fatalf("expected sync base version 3, got %d", base.Version)
+	}
+	if (base.ModuleBits & 1) == 0 {
+		t.Fatalf("expected item module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	if (base.ModuleBits & (1 << 1)) == 0 {
+		t.Fatalf("expected power module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	if got := base.Items[coalItemID]; got != 2 {
+		t.Fatalf("expected coal amount 2, got %d", got)
+	}
+	if got := base.Items[sandItemID]; got != 4 {
+		t.Fatalf("expected sand amount 4, got %d", got)
+	}
+	progress, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read crafter progress failed: %v", err)
+	}
+	warmup, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read crafter warmup failed: %v", err)
+	}
+	if math.Abs(float64(progress-0.625)) > 0.0001 {
+		t.Fatalf("expected progress 0.625, got %f", progress)
+	}
+	if math.Abs(float64(warmup-0.5)) > 0.0001 {
+		t.Fatalf("expected warmup 0.5, got %f", warmup)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected crafter sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodePowerNodeRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		425: "power-node-large",
+		430: "laser-drill",
+	}
+	w.SetModel(model)
+	nodeTile := placeTestBuilding(t, w, 12, 10, 425, 1, 0)
+	placeTestBuilding(t, w, 6, 10, 430, 1, 0)
+	nodePos := int32(nodeTile.Y*w.Model().Width + nodeTile.X)
+	targetPos := int32(10*w.Model().Width + 6)
+	w.applyBuildingConfigLocked(nodePos, []protocol.Point2{{X: -6, Y: 0}}, true)
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) == 0 {
+		t.Fatal("expected at least one power-node snapshot")
+	}
+	var nodeSnap *BlockSyncSnapshot
+	for i := range snaps {
+		if snaps[i].Pos == protocol.PackPoint2(12, 10) {
+			nodeSnap = &snaps[i]
+			break
+		}
+	}
+	if nodeSnap == nil {
+		t.Fatalf("expected power-node snapshot at pos=%d, got %+v", protocol.PackPoint2(12, 10), snaps)
+	}
+	base, r := decodeBlockSyncBase(t, nodeSnap.Data)
+	if (base.ModuleBits & (1 << 1)) == 0 {
+		t.Fatalf("expected power module bit for power node, bits=%08b", base.ModuleBits)
+	}
+	if len(base.PowerLinks) != 1 || base.PowerLinks[0] != targetPos {
+		t.Fatalf("expected power-node runtime link to target %d, got %v", targetPos, base.PowerLinks)
+	}
+	if base.PowerStatus != 0 {
+		t.Fatalf("expected power-node to sync vanilla non-consumer power status 0, got %f", base.PowerStatus)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected power-node sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeConductivePowerLinks(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		421: "battery",
+		430: "laser-drill",
+	}
+	w.SetModel(model)
+	placeTestBuilding(t, w, 6, 10, 421, 1, 0)
+	placeTestBuilding(t, w, 7, 10, 430, 1, 0)
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 2 {
+		t.Fatalf("expected two conductive block snapshots, got %d", len(snaps))
+	}
+
+	var batterySnap *BlockSyncSnapshot
+	for i := range snaps {
+		if snaps[i].Pos == protocol.PackPoint2(6, 10) {
+			batterySnap = &snaps[i]
+			break
+		}
+	}
+	if batterySnap == nil {
+		t.Fatalf("expected battery snapshot at pos=%d", protocol.PackPoint2(6, 10))
+	}
+	base, r := decodeBlockSyncBase(t, batterySnap.Data)
+	if len(base.PowerLinks) != 0 {
+		t.Fatalf("expected conductive adjacency to stay out of PowerModule.links, got %v", base.PowerLinks)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected conductive power snapshot payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeReversePowerNodeLinksOnConsumers(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		422: "power-node",
+		421: "battery",
+	}
+	w.SetModel(model)
+	node := placeTestBuilding(t, w, 8, 10, 422, 1, 0)
+	battery := placeTestBuilding(t, w, 14, 10, 421, 1, 0)
+	nodePos := int32(node.Y*w.Model().Width + node.X)
+	batteryPos := int32(battery.Y*w.Model().Width + battery.X)
+	w.applyBuildingConfigLocked(nodePos, []protocol.Point2{{X: 6, Y: 0}}, true)
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 2 {
+		t.Fatalf("expected node and drill snapshots, got %d", len(snaps))
+	}
+
+	var batterySnap *BlockSyncSnapshot
+	for i := range snaps {
+		if snaps[i].Pos == protocol.PackPoint2(14, 10) {
+			batterySnap = &snaps[i]
+			break
+		}
+	}
+	if batterySnap == nil {
+		t.Fatalf("expected battery snapshot at pos=%d", protocol.PackPoint2(14, 10))
+	}
+	base, r := decodeBlockSyncBase(t, batterySnap.Data)
+	if len(base.PowerLinks) != 1 || base.PowerLinks[0] != nodePos {
+		t.Fatalf("expected battery power module to keep reverse node link %d, got %v", nodePos, base.PowerLinks)
+	}
+	if base.PowerStatus != 0 {
+		t.Fatalf("expected idle battery power status 0 without stored charge, got %f", base.PowerStatus)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected reverse node-link snapshot payload to be fully consumed, remaining=%d", rem)
+	}
+
+	var nodeSnap *BlockSyncSnapshot
+	for i := range snaps {
+		if snaps[i].Pos == protocol.PackPoint2(8, 10) {
+			nodeSnap = &snaps[i]
+			break
+		}
+	}
+	if nodeSnap == nil {
+		t.Fatalf("expected power-node snapshot at pos=%d", protocol.PackPoint2(8, 10))
+	}
+	nodeBase, rr := decodeBlockSyncBase(t, nodeSnap.Data)
+	if len(nodeBase.PowerLinks) != 1 || nodeBase.PowerLinks[0] != batteryPos {
+		t.Fatalf("expected power-node to keep forward battery link %d, got %v", batteryPos, nodeBase.PowerLinks)
+	}
+	if rem := rr.Remaining(); rem != 0 {
+		t.Fatalf("expected node snapshot payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeBeamNodeBufferedPowerStatus(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		474: "beam-node",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 9, 9, 474, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	w.powerStorageState[pos] = 500
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one beam-node block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if math.Abs(float64(base.PowerStatus-0.5)) > 0.0001 {
+		t.Fatalf("expected beam-node buffered power status 0.5, got %f", base.PowerStatus)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected beam-node sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeSolarPanelProductionEfficiency(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		404: "solar-panel",
+	}
+	w.SetModel(model)
+	placeTestBuilding(t, w, 9, 9, 404, 1, 0)
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one solar-panel block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	productionEfficiency, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read solar-panel production efficiency failed: %v", err)
+	}
+	generateTime, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read solar-panel generateTime failed: %v", err)
+	}
+	if base.PowerStatus != 0 {
+		t.Fatalf("expected solar-panel power status 0 for non-consumer producer, got %f", base.PowerStatus)
+	}
+	if math.Abs(float64(productionEfficiency-1)) > 0.0001 {
+		t.Fatalf("expected solar-panel production efficiency 1, got %f", productionEfficiency)
+	}
+	if math.Abs(float64(generateTime)) > 0.0001 {
+		t.Fatalf("expected solar-panel generateTime 0, got %f", generateTime)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected solar-panel sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeUnloaderConfig(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		270: "unloader",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 6, 7, 270, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	w.unloaderCfg[pos] = siliconItemID
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if (base.ModuleBits & 1) == 0 {
+		t.Fatalf("expected unloader item module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	itemID, err := r.ReadInt16()
+	if err != nil {
+		t.Fatalf("read unloader sort item failed: %v", err)
+	}
+	if itemID != int16(siliconItemID) {
+		t.Fatalf("expected unloader sort item %d, got %d", siliconItemID, itemID)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected unloader sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeLinkedStorageSharedInventory(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		339: "core-shard",
+		431: "vault",
+	}
+	w.SetModel(model)
+	placeTestBuilding(t, w, 5, 5, 339, 1, 0)
+	store := placeTestBuilding(t, w, 8, 5, 431, 1, 0)
+	store.Build.AddItem(copperItemID, 4)
+	w.rebuildBlockOccupancyLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one storage block sync snapshot, got %d", len(snaps))
+	}
+	if snaps[0].Pos != protocol.PackPoint2(8, 5) {
+		t.Fatalf("unexpected linked storage snapshot pos=%d", snaps[0].Pos)
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if got := base.Items[copperItemID]; got != 4 {
+		t.Fatalf("expected linked storage sync to expose shared core copper=4, got %d", got)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected linked storage sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeUnitFactoryRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+	}
+	model.UnitNames = map[int16]string{
+		7: "dagger",
+		8: "crawler",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 10, 10, 100, 1, 1)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	tile.Build.Items = []ItemStack{
+		{Item: siliconItemID, Amount: 8},
+		{Item: coalItemID, Amount: 10},
+	}
+	w.factoryStates[pos] = factoryState{
+		Progress:    123.5,
+		UnitType:    8,
+		CurrentPlan: 1,
+	}
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one unit factory block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if got := base.Items[siliconItemID]; got != 8 {
+		t.Fatalf("expected silicon amount 8, got %d", got)
+	}
+	if got := base.Items[coalItemID]; got != 10 {
+		t.Fatalf("expected coal amount 10, got %d", got)
+	}
+	payX, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read unit factory payVector.x failed: %v", err)
+	}
+	payY, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read unit factory payVector.y failed: %v", err)
+	}
+	payRotation, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read unit factory payRotation failed: %v", err)
+	}
+	payloadExists, err := r.ReadBool()
+	if err != nil {
+		t.Fatalf("read unit factory payload exists flag failed: %v", err)
+	}
+	progress, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read unit factory progress failed: %v", err)
+	}
+	currentPlan, err := r.ReadInt16()
+	if err != nil {
+		t.Fatalf("read unit factory current plan failed: %v", err)
+	}
+	commandPos, err := protocol.ReadVecNullable(r)
+	if err != nil {
+		t.Fatalf("read unit factory commandPos failed: %v", err)
+	}
+	command, err := protocol.ReadCommand(r, nil)
+	if err != nil {
+		t.Fatalf("read unit factory command failed: %v", err)
+	}
+	if math.Abs(float64(payX)) > 0.0001 || math.Abs(float64(payY)) > 0.0001 {
+		t.Fatalf("expected idle unit factory payload offset to stay at origin, got x=%f y=%f", payX, payY)
+	}
+	if math.Abs(float64(payRotation-90)) > 0.0001 {
+		t.Fatalf("expected unit factory payload rotation 90, got %f", payRotation)
+	}
+	if payloadExists {
+		t.Fatalf("expected empty unit factory payload")
+	}
+	if math.Abs(float64(progress-123.5)) > 0.0001 {
+		t.Fatalf("expected progress 123.5, got %f", progress)
+	}
+	if currentPlan != 1 {
+		t.Fatalf("expected current plan 1, got %d", currentPlan)
+	}
+	if commandPos != nil {
+		t.Fatalf("expected nil commandPos, got %+v", commandPos)
+	}
+	if command != nil {
+		t.Fatalf("expected nil command, got %+v", command)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected unit factory sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeDrillRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		430: "laser-drill",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 9, 9, 430, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	w.drillStates[pos] = drillRuntimeState{
+		Progress: 91.5,
+		Warmup:   0.75,
+	}
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one drill block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if (base.ModuleBits & (1 << 1)) == 0 {
+		t.Fatalf("expected drill power module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	progress, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read drill progress failed: %v", err)
+	}
+	warmup, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read drill warmup failed: %v", err)
+	}
+	if math.Abs(float64(progress-91.5)) > 0.0001 {
+		t.Fatalf("expected drill progress 91.5, got %f", progress)
+	}
+	if math.Abs(float64(warmup-0.75)) > 0.0001 {
+		t.Fatalf("expected drill warmup 0.75, got %f", warmup)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected drill sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodePumpRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		441: "rotary-pump",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 11, 7, 441, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	tile.Build.AddLiquid(waterLiquidID, 12.5)
+	w.pumpStates[pos] = pumpRuntimeState{
+		Warmup:   0.65,
+		Progress: 17,
+	}
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one pump block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if (base.ModuleBits & (1 << 1)) == 0 {
+		t.Fatalf("expected pump power module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	if (base.ModuleBits & (1 << 2)) == 0 {
+		t.Fatalf("expected pump liquid module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	if got := base.Liquids[waterLiquidID]; math.Abs(float64(got-12.5)) > 0.0001 {
+		t.Fatalf("expected pump liquid amount 12.5, got %f", got)
+	}
+	if base.Efficiency == 0 {
+		t.Fatalf("expected pump efficiency byte to reflect warmup, got 0")
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected pump sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeHeatProducerRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		461: "electric-heater",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 8, 8, 461, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	w.crafterStates[pos] = crafterRuntimeState{
+		Progress: 33.25,
+		Warmup:   0.5,
+	}
+	w.heatStates[pos] = 2.25
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one heat producer block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if (base.ModuleBits & (1 << 1)) == 0 {
+		t.Fatalf("expected heat producer power module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	progress, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read heat producer progress failed: %v", err)
+	}
+	warmup, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read heat producer warmup failed: %v", err)
+	}
+	heat, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read heat producer heat failed: %v", err)
+	}
+	if math.Abs(float64(progress-33.25)) > 0.0001 {
+		t.Fatalf("expected heat producer progress 33.25, got %f", progress)
+	}
+	if math.Abs(float64(warmup-0.5)) > 0.0001 {
+		t.Fatalf("expected heat producer warmup 0.5, got %f", warmup)
+	}
+	if math.Abs(float64(heat-2.25)) > 0.0001 {
+		t.Fatalf("expected heat producer heat 2.25, got %f", heat)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected heat producer sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncSnapshotsEncodeVariableReactorRuntime(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		473: "flux-reactor",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 9, 9, 473, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	tile.Build.AddLiquid(cyanogenLiquidID, 30)
+	w.heatStates[pos] = 75
+	w.powerGeneratorState[pos] = &powerGeneratorState{
+		Warmup:      0.6,
+		Instability: 0.2,
+	}
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one variable reactor block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if (base.ModuleBits & (1 << 1)) == 0 {
+		t.Fatalf("expected variable reactor power module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	if (base.ModuleBits & (1 << 2)) == 0 {
+		t.Fatalf("expected variable reactor liquid module bit to be present, bits=%08b", base.ModuleBits)
+	}
+	productionEfficiency, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read variable reactor production efficiency failed: %v", err)
+	}
+	generateTime, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read variable reactor generateTime failed: %v", err)
+	}
+	heat, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read variable reactor heat failed: %v", err)
+	}
+	instability, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read variable reactor instability failed: %v", err)
+	}
+	warmup, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read variable reactor warmup failed: %v", err)
+	}
+	if math.Abs(float64(productionEfficiency-0.5)) > 0.0001 {
+		t.Fatalf("expected variable reactor production efficiency 0.5, got %f", productionEfficiency)
+	}
+	if math.Abs(float64(generateTime)) > 0.0001 {
+		t.Fatalf("expected variable reactor generateTime 0, got %f", generateTime)
+	}
+	if math.Abs(float64(heat-75)) > 0.0001 {
+		t.Fatalf("expected variable reactor heat 75, got %f", heat)
+	}
+	if math.Abs(float64(instability-0.2)) > 0.0001 {
+		t.Fatalf("expected variable reactor instability 0.2, got %f", instability)
+	}
+	if math.Abs(float64(warmup-0.6)) > 0.0001 {
+		t.Fatalf("expected variable reactor warmup 0.6, got %f", warmup)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected variable reactor sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestBlockSyncPowerStatusTracksActualSupplyRatioPerBuilding(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		404: "solar-panel",
+		422: "power-node",
+		430: "laser-drill",
+	}
+	w.SetModel(model)
+	placeTestBuilding(t, w, 4, 8, 404, 1, 0)
+	placeTestBuilding(t, w, 8, 8, 430, 1, 0)
+	placeTestBuilding(t, w, 6, 8, 422, 1, 0)
+	w.Step(time.Second)
+
+	snaps := w.BlockSyncSnapshots()
+	var drillSnap *BlockSyncSnapshot
+	for i := range snaps {
+		if snaps[i].Pos == protocol.PackPoint2(8, 8) {
+			drillSnap = &snaps[i]
+			break
+		}
+	}
+	if drillSnap == nil {
+		t.Fatal("expected laser drill block sync snapshot")
+	}
+	base, _ := decodeBlockSyncBase(t, drillSnap.Data)
+	if base.PowerStatus != 0 {
+		t.Fatalf("expected underpowered laser drill to sync power status 0, got %f", base.PowerStatus)
+	}
+}
+
+func TestBlockSyncUnitFactoryEfficiencyTracksSyncedPowerCoverage(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+	}
+	model.UnitNames = map[int16]string{
+		7: "dagger",
+	}
+	w.SetModel(model)
+	tile := placeTestBuilding(t, w, 5, 5, 100, 1, 0)
+	pos := int32(tile.Y*w.Model().Width + tile.X)
+	tile.Build.AddItem(siliconItemID, 10)
+	tile.Build.AddItem(leadItemID, 10)
+	w.factoryStates[pos] = factoryState{
+		Progress:    60,
+		CurrentPlan: 0,
+		UnitType:    7,
+	}
+	w.powerRequested[pos] = 12
+	w.powerSupplied[pos] = 6
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	if len(snaps) != 1 {
+		t.Fatalf("expected one unit factory block sync snapshot, got %d", len(snaps))
+	}
+	base, r := decodeBlockSyncBase(t, snaps[0].Data)
+	if math.Abs(float64(base.PowerStatus-0.5)) > 0.0001 {
+		t.Fatalf("expected unit factory power status 0.5, got %f", base.PowerStatus)
+	}
+	if math.Abs(float64(float32(base.Efficiency)/255-0.5)) > 0.02 {
+		t.Fatalf("expected unit factory efficiency byte to track power coverage ~=0.5, got raw=%d", base.Efficiency)
+	}
+	if math.Abs(float64(float32(base.OptionalEfficiency)/255-0.5)) > 0.02 {
+		t.Fatalf("expected unit factory optional efficiency byte to track power coverage ~=0.5, got raw=%d", base.OptionalEfficiency)
+	}
+	_ = r
+}
+
+func TestBlockSyncAirFactoryKeepsReversePowerNodeLink(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		101: "air-factory",
+		422: "power-node",
+	}
+	w.SetModel(model)
+	factory := placeTestBuilding(t, w, 12, 10, 101, 1, 1)
+	node := placeTestBuilding(t, w, 6, 10, 422, 1, 0)
+	factoryPos := int32(factory.Y*w.Model().Width + factory.X)
+	nodePos := int32(node.Y*w.Model().Width + node.X)
+	factory.Build.AddItem(siliconItemID, 15)
+	w.factoryStates[factoryPos] = factoryState{
+		Progress:    180,
+		CurrentPlan: 0,
+	}
+	w.applyBuildingConfigLocked(nodePos, []protocol.Point2{{X: 6, Y: 0}}, true)
+	w.rebuildActiveTilesLocked()
+
+	snaps := w.BlockSyncSnapshots()
+	var factorySnap *BlockSyncSnapshot
+	for i := range snaps {
+		if snaps[i].Pos == protocol.PackPoint2(12, 10) {
+			factorySnap = &snaps[i]
+			break
+		}
+	}
+	if factorySnap == nil {
+		t.Fatal("expected air-factory block sync snapshot")
+	}
+	base, r := decodeBlockSyncBase(t, factorySnap.Data)
+	if len(base.PowerLinks) != 1 || base.PowerLinks[0] != nodePos {
+		t.Fatalf("expected air-factory power module to keep reverse node link %d, got %v", nodePos, base.PowerLinks)
+	}
+	if _, err := r.ReadFloat32(); err != nil {
+		t.Fatalf("read air-factory payVector.x failed: %v", err)
+	}
+	if _, err := r.ReadFloat32(); err != nil {
+		t.Fatalf("read air-factory payVector.y failed: %v", err)
+	}
+	if _, err := r.ReadFloat32(); err != nil {
+		t.Fatalf("read air-factory payRotation failed: %v", err)
+	}
+	payloadExists, err := r.ReadBool()
+	if err != nil {
+		t.Fatalf("read air-factory payload flag failed: %v", err)
+	}
+	if payloadExists {
+		t.Fatal("expected air-factory payload to stay empty in this snapshot")
+	}
+	progress, err := r.ReadFloat32()
+	if err != nil {
+		t.Fatalf("read air-factory progress failed: %v", err)
+	}
+	if math.Abs(float64(progress-180)) > 0.0001 {
+		t.Fatalf("expected air-factory progress 180, got %f", progress)
+	}
+	currentPlan, err := r.ReadInt16()
+	if err != nil {
+		t.Fatalf("read air-factory current plan failed: %v", err)
+	}
+	if currentPlan != 0 {
+		t.Fatalf("expected air-factory current plan 0, got %d", currentPlan)
+	}
+	commandPos, err := protocol.ReadVecNullable(r)
+	if err != nil {
+		t.Fatalf("read air-factory commandPos failed: %v", err)
+	}
+	if commandPos != nil {
+		t.Fatalf("expected nil air-factory commandPos, got %+v", commandPos)
+	}
+	command, err := protocol.ReadCommand(r, nil)
+	if err != nil {
+		t.Fatalf("read air-factory command failed: %v", err)
+	}
+	if command != nil {
+		t.Fatalf("expected nil air-factory command, got %+v", command)
+	}
+	if rem := r.Remaining(); rem != 0 {
+		t.Fatalf("expected air-factory sync payload to be fully consumed, remaining=%d", rem)
+	}
+}
+
+func TestUnitFactoryConfigAndAcceptedInputsMatchCurrentPlan(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+		418: "router",
+	}
+	model.UnitNames = map[int16]string{
+		7: "dagger",
+		8: "crawler",
+	}
+	w.SetModel(model)
+	src := placeTestBuilding(t, w, 2, 2, 418, 1, 0)
+	factory := placeTestBuilding(t, w, 3, 2, 100, 1, 0)
+	srcPos := int32(src.Y*w.Model().Width + src.X)
+	factoryPos := int32(factory.Y*w.Model().Width + factory.X)
+
+	if got, ok := w.BuildingConfigPacked(protocol.PackPoint2(3, 2)); !ok {
+		t.Fatalf("expected default unit factory config to be present")
+	} else if got != int32(0) {
+		t.Fatalf("expected default unit factory plan 0, got %#v", got)
+	}
+	if !w.canAcceptItemLocked(srcPos, factoryPos, siliconItemID, 0) {
+		t.Fatalf("expected default dagger plan to accept silicon")
+	}
+	if !w.canAcceptItemLocked(srcPos, factoryPos, leadItemID, 0) {
+		t.Fatalf("expected default dagger plan to accept lead")
+	}
+	if w.canAcceptItemLocked(srcPos, factoryPos, coalItemID, 0) {
+		t.Fatalf("expected default dagger plan to reject coal")
+	}
+
+	w.applyBuildingConfigLocked(factoryPos, int32(1), true)
+
+	if got, ok := w.BuildingConfigPacked(protocol.PackPoint2(3, 2)); !ok {
+		t.Fatalf("expected configured unit factory config to be present")
+	} else if got != int32(1) {
+		t.Fatalf("expected configured unit factory plan 1, got %#v", got)
+	}
+	if !w.canAcceptItemLocked(srcPos, factoryPos, coalItemID, 0) {
+		t.Fatalf("expected crawler plan to accept coal")
+	}
+	if !w.canAcceptItemLocked(srcPos, factoryPos, siliconItemID, 0) {
+		t.Fatalf("expected crawler plan to accept silicon")
+	}
+	if w.canAcceptItemLocked(srcPos, factoryPos, leadItemID, 0) {
+		t.Fatalf("expected crawler plan to reject lead")
+	}
+}
+
+func TestTryInsertItemLockedRejectsUnrelatedCrafterInputs(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		183: "silicon-smelter",
+		418: "router",
+	}
+	w.SetModel(model)
+	src := placeTestBuilding(t, w, 2, 2, 418, 1, 0)
+	dst := placeTestBuilding(t, w, 3, 2, 183, 1, 0)
+	srcPos := int32(src.Y*w.Model().Width + src.X)
+	dstPos := int32(dst.Y*w.Model().Width + dst.X)
+
+	if !w.canAcceptItemLocked(srcPos, dstPos, coalItemID, 0) {
+		t.Fatalf("expected silicon smelter to accept required coal input")
+	}
+	if !w.canAcceptItemLocked(srcPos, dstPos, sandItemID, 0) {
+		t.Fatalf("expected silicon smelter to accept required sand input")
+	}
+	if w.canAcceptItemLocked(srcPos, dstPos, leadItemID, 0) {
+		t.Fatalf("expected silicon smelter to reject unrelated lead input")
+	}
+	if w.tryInsertItemLocked(srcPos, dstPos, leadItemID, 0) {
+		t.Fatalf("expected tryInsertItemLocked to reject unrelated crafter input")
+	}
+	if got := dst.Build.ItemAmount(leadItemID); got != 0 {
+		t.Fatalf("expected rejected lead input to leave crafter inventory unchanged, got %d", got)
+	}
+	if !w.tryInsertItemLocked(srcPos, dstPos, coalItemID, 0) {
+		t.Fatalf("expected tryInsertItemLocked to insert required coal input")
+	}
+	if got := dst.Build.ItemAmount(coalItemID); got != 1 {
+		t.Fatalf("expected inserted coal amount 1, got %d", got)
 	}
 }
 
@@ -158,6 +1133,161 @@ func TestApplyBuildPlansIsAsync(t *testing.T) {
 	if !placed {
 		tile, _ = w.Model().TileAt(2, 3)
 		t.Fatalf("expected placed block after progress, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+}
+
+func TestBuildPlanWaitsForMaterialsInsteadOfRejecting(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	pos := int32(2 + 2*model.Width)
+
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+	if _, ok := w.pendingBuilds[pos]; !ok {
+		t.Fatalf("expected duo plan to stay queued without materials")
+	}
+
+	stepForSeconds(w, 1)
+	st, ok := w.pendingBuilds[pos]
+	if !ok {
+		t.Fatalf("expected queued plan to remain pending while missing all copper")
+	}
+	if st.VisualPlaced {
+		t.Fatalf("expected build to wait for first material before beginPlace semantics")
+	}
+
+	core.Build.AddItem(0, 1)
+	stepForSeconds(w, 0.2)
+	st, ok = w.pendingBuilds[pos]
+	if !ok {
+		t.Fatalf("expected pending build after only 1 copper")
+	}
+	if !st.VisualPlaced {
+		t.Fatalf("expected build to begin once one copper became available")
+	}
+
+	core.Build.AddItem(0, 34)
+	built := false
+	for i := 0; i < 40; i++ {
+		w.Step(200 * time.Millisecond)
+		tile, _ := w.Model().TileAt(2, 2)
+		if tile.Block == 45 && tile.Build != nil {
+			built = true
+			break
+		}
+	}
+	if !built {
+		tile, _ := w.Model().TileAt(2, 2)
+		t.Fatalf("expected duo to finish after remaining copper arrived, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+}
+
+func TestCancelPendingBuildRefundsOnlyConsumedItems(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 10)
+
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+
+	spent := false
+	for i := 0; i < 120; i++ {
+		w.Step(time.Second / 60)
+		if core.Build.ItemAmount(0) < 10 {
+			spent = true
+			break
+		}
+	}
+	if !spent {
+		t.Fatalf("expected partial duo build to consume some copper before cancellation")
+	}
+	beforeCancel := core.Build.ItemAmount(0)
+	if beforeCancel <= 0 || beforeCancel >= 10 {
+		t.Fatalf("expected only a partial spend before cancel, got %d", beforeCancel)
+	}
+
+	w.CancelBuildAt(2, 2, false)
+
+	if _, ok := w.pendingBuilds[int32(2+2*model.Width)]; ok {
+		t.Fatalf("expected pending build removed after cancel")
+	}
+	if got := core.Build.ItemAmount(0); got != 10 {
+		t.Fatalf("expected cancel to refund only consumed copper back to original 10, got %d", got)
+	}
+}
+
+func TestLaterBuildPlansStayQueuedWhenItemsRunOut(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	w.SetModel(model)
+	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core.Build.AddItem(0, 35)
+
+	posA := int32(2 + 2*model.Width)
+	posB := int32(3 + 2*model.Width)
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{
+		{X: 2, Y: 2, BlockID: 45},
+		{X: 3, Y: 2, BlockID: 45},
+	})
+
+	if len(w.pendingBuilds) != 2 {
+		t.Fatalf("expected both build plans queued instead of rejecting the later one, pending=%d", len(w.pendingBuilds))
+	}
+	if _, ok := w.pendingBuilds[posA]; !ok {
+		t.Fatalf("expected first pending build to exist")
+	}
+	if _, ok := w.pendingBuilds[posB]; !ok {
+		t.Fatalf("expected second pending build to remain queued")
+	}
+
+	firstBuilt := false
+	for i := 0; i < 40; i++ {
+		w.Step(200 * time.Millisecond)
+		tile, _ := w.Model().TileAt(2, 2)
+		if tile.Block == 45 && tile.Build != nil {
+			firstBuilt = true
+			break
+		}
+	}
+	if !firstBuilt {
+		tile, _ := w.Model().TileAt(2, 2)
+		t.Fatalf("expected first duo to finish, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if _, ok := w.pendingBuilds[posB]; !ok {
+		t.Fatalf("expected second plan to still be queued after first consumed all copper")
+	}
+
+	core.Build.AddItem(0, 35)
+	secondBuilt := false
+	for i := 0; i < 40; i++ {
+		w.Step(200 * time.Millisecond)
+		tile, _ := w.Model().TileAt(3, 2)
+		if tile.Block == 45 && tile.Build != nil {
+			secondBuilt = true
+			break
+		}
+	}
+	if !secondBuilt {
+		tile, _ := w.Model().TileAt(3, 2)
+		t.Fatalf("expected second duo to finish after copper refill, got block=%d build=%v", tile.Block, tile.Build != nil)
 	}
 }
 
@@ -259,6 +1389,28 @@ func TestSetModelAppliesEditorDefaultsBeforeRuleOverlay(t *testing.T) {
 	}
 }
 
+func TestSetModelPrefersExplicitMapModeBeforeOverlayHeuristics(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.Tags = map[string]string{
+		"mode":  "survival",
+		"rules": `{"infiniteResources":true}`,
+	}
+
+	w.SetModel(model)
+
+	rules := w.GetRulesManager().Get()
+	if rules.ModeName != "survival" {
+		t.Fatalf("expected explicit map mode survival, got %q", rules.ModeName)
+	}
+	if !rules.InfiniteResources {
+		t.Fatalf("expected overlay infiniteResources to remain enabled")
+	}
+	if !rules.Waves || !rules.WaveTimer {
+		t.Fatalf("expected survival defaults to remain active, got waves=%v timer=%v", rules.Waves, rules.WaveTimer)
+	}
+}
+
 func TestDeconstructRefund(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(8, 8)
@@ -282,10 +1434,125 @@ func TestDeconstructRefund(t *testing.T) {
 	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
 		Breaking: true, X: 2, Y: 2,
 	}})
-	w.Step(3 * time.Second)
+	tile, _ := w.Model().TileAt(2, 2)
+	_, refundStacks := w.deconstructRefundStacks(tile, TeamID(1))
+	expectedRefund := int32(0)
+	for _, stack := range refundStacks {
+		if stack.Item == 0 {
+			expectedRefund = stack.Amount
+			break
+		}
+	}
+	if expectedRefund <= 0 {
+		t.Fatalf("expected duo deconstruct to refund copper, refund=%v", refundStacks)
+	}
+	breakDuration := w.buildDurationSecondsForTeam(45, TeamID(1), w.GetRulesManager().Get())
+	stepForSeconds(w, breakDuration*0.6)
+	during := w.TeamItems(TeamID(1))[0]
+	if during <= mid {
+		t.Fatalf("expected deconstruct progress to refund during dismantle, mid=%d during=%d", mid, during)
+	}
+	if during >= mid+expectedRefund {
+		t.Fatalf("expected partial refund before dismantle completion, mid=%d during=%d expected_final=%d", mid, during, mid+expectedRefund)
+	}
+
+	stepForSeconds(w, breakDuration)
 	after := w.TeamItems(TeamID(1))[0]
-	if after <= mid {
-		t.Fatalf("expected deconstruct refund, mid=%d after=%d", mid, after)
+	if after != mid+expectedRefund {
+		t.Fatalf("expected exact final refund after deconstruct, mid=%d during=%d after=%d expected=%d", mid, during, after, mid+expectedRefund)
+	}
+}
+
+func TestBuilderDurationUsesOwnerUnitSpeedAndIgnoresUnitBuildSpeedRule(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45: "duo",
+	}
+	model.UnitNames = map[int16]string{
+		35: "alpha",
+		37: "gamma",
+	}
+	w.SetModel(model)
+	w.blockBuildTimesByName = map[string]float32{"duo": 2}
+
+	rules := DefaultRules()
+	rules.UnitBuildSpeedMultiplier = 4
+	rules.BuildSpeedMultiplier = 1
+	w.GetRulesManager().Set(rules)
+	w.SetTeamBuilderSpeed(1, 0.5)
+
+	if _, err := w.AddEntityWithID(37, 9001, 20, 20, 1); err != nil {
+		t.Fatalf("add gamma entity: %v", err)
+	}
+	w.UpdateBuilderState(101, 1, 9001, 20, 20, true, 220)
+
+	got := w.buildDurationSecondsForOwnerLocked(45, 101, 1, w.GetRulesManager().Get())
+	want := w.blockBuildTimesByName["duo"]
+	if want <= 0 {
+		t.Fatalf("expected duo build time metadata")
+	}
+	want /= 1.0 // gamma buildSpeed
+	if math.Abs(float64(got-want)) > 0.0001 {
+		t.Fatalf("expected owner gamma build speed to decide duration and ignore unitBuildSpeedMultiplier, want=%f got=%f", want, got)
+	}
+}
+
+func TestBuildAndDeconstructProgressHealthUseConstructBlockScale(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	model.UnitNames = map[int16]string{
+		35: "alpha",
+	}
+	w.SetModel(model)
+	w.blockBuildTimesByName = map[string]float32{"duo": 1.5}
+
+	core := placeTestBuilding(t, w, 0, 0, 339, 1, 0)
+	core.Build.AddItem(0, 100)
+	owner := int32(101)
+	team := TeamID(1)
+	if _, err := w.AddEntityWithID(35, 9001, 20, 20, 1); err != nil {
+		t.Fatalf("add alpha entity: %v", err)
+	}
+	w.UpdateBuilderState(owner, team, 9001, float32(2*8+4), float32(2*8+4), true, 220)
+
+	w.ApplyBuildPlanSnapshotForOwner(owner, team, []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+
+	for i := 0; i < 200; i++ {
+		w.Step(time.Second / 60)
+		tile, _ := w.Model().TileAt(2, 2)
+		if tile.Block != 0 || tile.Build != nil {
+			break
+		}
+		for _, ev := range w.DrainEntityEvents() {
+			if ev.Kind == EntityEventBuildHealth && ev.BuildHP > constructBlockHealthMax {
+				t.Fatalf("expected in-progress build health to stay on construct scale <= %.0f, got=%f", constructBlockHealthMax, ev.BuildHP)
+			}
+		}
+	}
+	_ = w.DrainEntityEvents()
+
+	w.ApplyBuildPlanSnapshotForOwner(owner, team, []BuildPlanOp{{
+		Breaking: true, X: 2, Y: 2,
+	}})
+
+	for i := 0; i < 200; i++ {
+		w.Step(time.Second / 60)
+		tile, _ := w.Model().TileAt(2, 2)
+		if tile.Block == 0 && tile.Build == nil {
+			break
+		}
+		for _, ev := range w.DrainEntityEvents() {
+			if ev.Kind == EntityEventBuildHealth && ev.BuildHP > constructBlockHealthMax {
+				t.Fatalf("expected in-progress deconstruct health to stay on construct scale <= %.0f, got=%f", constructBlockHealthMax, ev.BuildHP)
+			}
+		}
 	}
 }
 
@@ -300,15 +1567,17 @@ func TestFactoryProductionSpawnsUnit(t *testing.T) {
 	}
 	model.UnitNames = map[int16]string{7: "dagger"}
 	w.SetModel(model)
-	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
-	core.Build.AddItem(0, 200)
-	core.Build.AddItem(1, 200)
-	core.Build.AddItem(2, 200)
+	core := placeTestBuilding(t, w, 1, 10, 339, 1, 0)
+	core.Build.AddItem(copperItemID, 200)
+	core.Build.AddItem(leadItemID, 200)
+	core.Build.AddItem(siliconItemID, 200)
 	placeTestBuilding(t, w, 3, 8, 421, 1, 0)
 	placeTestBuilding(t, w, 3, 6, 422, 1, 0)
 	w.powerStorageState[int32(8*model.Width+3)] = 4000
 
-	placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factory := placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factory.Build.AddItem(siliconItemID, 10)
+	factory.Build.AddItem(leadItemID, 10)
 	linkPowerNode(t, w, 3, 6, protocol.Point2{X: 0, Y: -3}, protocol.Point2{X: 0, Y: 2})
 	nodePos := int32(6*model.Width + 3)
 	if got := len(w.powerNodeLinks[nodePos]); got != 2 {
@@ -322,13 +1591,19 @@ func TestFactoryProductionSpawnsUnit(t *testing.T) {
 	if len(w.Model().Entities) != 0 {
 		t.Fatalf("expected no unit before factory cycle, got=%d", len(w.Model().Entities))
 	}
-	stepForSeconds(w, 6)
+	stepForSeconds(w, 7)
 	if len(w.Model().Entities) == 0 {
 		t.Fatalf("expected produced unit, got=%d", len(w.Model().Entities))
 	}
 	factoryPos := int32(3 + 3*model.Width)
 	if got := w.payloadStateLocked(factoryPos).Payload; got != nil {
 		t.Fatalf("expected factory payload to dump after spawning, got=%+v", got)
+	}
+	if got := core.Build.ItemAmount(siliconItemID); got != 200 {
+		t.Fatalf("expected factory production to keep core silicon unchanged, got=%d", got)
+	}
+	if got := core.Build.ItemAmount(leadItemID); got != 200 {
+		t.Fatalf("expected factory production to keep core lead unchanged, got=%d", got)
 	}
 }
 
@@ -341,12 +1616,14 @@ func TestFactoryProductionStallsWithoutPower(t *testing.T) {
 	}
 	model.UnitNames = map[int16]string{7: "dagger"}
 	w.SetModel(model)
-	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	core := placeTestBuilding(t, w, 1, 10, 339, 1, 0)
 	core.Build.AddItem(0, 200)
 	core.Build.AddItem(1, 200)
 	core.Build.AddItem(2, 200)
 
-	placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factory := placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factory.Build.AddItem(siliconItemID, 10)
+	factory.Build.AddItem(leadItemID, 10)
 	stepForSeconds(w, 20)
 
 	if got := len(w.Model().Entities); got != 0 {
@@ -366,7 +1643,10 @@ func TestFactoryProductionOutputsUnitPayloadToPayloadConveyor(t *testing.T) {
 	}
 	model.UnitNames = map[int16]string{7: "dagger"}
 	w.SetModel(model)
-	core := placeTestBuilding(t, w, 1, 1, 339, 1, 0)
+	rules := DefaultRules()
+	rules.Waves = false
+	w.GetRulesManager().Set(rules)
+	core := placeTestBuilding(t, w, 1, 10, 339, 1, 0)
 	core.Build.AddItem(0, 2000)
 	core.Build.AddItem(1, 2000)
 	core.Build.AddItem(2, 2000)
@@ -375,7 +1655,9 @@ func TestFactoryProductionOutputsUnitPayloadToPayloadConveyor(t *testing.T) {
 	w.powerStorageState[int32(8*model.Width+3)] = 4000
 	placeTestBuilding(t, w, 5, 3, 700, 1, 0)
 
-	placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factory := placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factory.Build.AddItem(siliconItemID, 10)
+	factory.Build.AddItem(leadItemID, 10)
 	linkPowerNode(t, w, 3, 6, protocol.Point2{X: 0, Y: -3}, protocol.Point2{X: 0, Y: 2})
 	stepForSeconds(w, 17)
 
@@ -386,6 +1668,53 @@ func TestFactoryProductionOutputsUnitPayloadToPayloadConveyor(t *testing.T) {
 	payload := w.payloadStateLocked(conveyorPos).Payload
 	if payload == nil || payload.Kind != payloadKindUnit || payload.UnitTypeID != 7 {
 		t.Fatalf("expected conveyor to receive dagger unit payload, got=%+v", payload)
+	}
+}
+
+func TestFactoryUnitPayloadUsesOfficialEntityWriteHeader(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		100: "ground-factory",
+	}
+	model.UnitNames = map[int16]string{
+		7: "dagger",
+	}
+	w.SetModel(model)
+	factory := placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+
+	payload := w.newFactoryUnitPayloadLocked(factory, 7)
+	if payload == nil {
+		t.Fatal("expected factory unit payload")
+	}
+	r := protocol.NewReader(payload.Serialized)
+	exists, err := r.ReadBool()
+	if err != nil {
+		t.Fatalf("read payload exists failed: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected payload exists flag to be true")
+	}
+	kind, err := r.ReadByte()
+	if err != nil {
+		t.Fatalf("read payload kind failed: %v", err)
+	}
+	if kind != protocol.PayloadUnit {
+		t.Fatalf("expected payload kind unit, got %d", kind)
+	}
+	classID, err := r.ReadByte()
+	if err != nil {
+		t.Fatalf("read unit payload class id failed: %v", err)
+	}
+	if classID != 4 {
+		t.Fatalf("expected dagger payload class id 4, got %d", classID)
+	}
+	revision, err := r.ReadInt16()
+	if err != nil {
+		t.Fatalf("read unit payload revision failed: %v", err)
+	}
+	if revision != 7 {
+		t.Fatalf("expected dagger payload revision 7, got %d", revision)
 	}
 }
 
@@ -409,6 +1738,7 @@ func TestFactoryProductionHonorsCoreUnitCap(t *testing.T) {
 	w.powerStorageState[int32(8*model.Width+3)] = 4000
 
 	placeTestBuilding(t, w, 3, 3, 100, 1, 0)
+	factoryPos := int32(3 + 3*model.Width)
 	linkPowerNode(t, w, 3, 6, protocol.Point2{X: 0, Y: -3}, protocol.Point2{X: 0, Y: 2})
 
 	countUnits := func() int {
@@ -422,17 +1752,22 @@ func TestFactoryProductionHonorsCoreUnitCap(t *testing.T) {
 	}
 
 	for i := 0; i < 8; i++ {
-		stepForSeconds(w, 17)
+		w.Model().AddEntity(w.newProducedUnitEntityLocked(7, 1, 60+float32(i*4), 80, 0))
 	}
 	if got := countUnits(); got != 8 {
-		t.Fatalf("expected shard cap to allow 8 dumped daggers, got=%d", got)
+		t.Fatalf("expected preseeded shard cap count 8, got=%d", got)
 	}
 
+	factoryTile := &w.Model().Tiles[factoryPos]
+	if factoryTile.Build == nil || factoryTile.Block == 0 {
+		t.Fatalf("expected factory to remain placed before capped cycle, block=%d build=%v entities=%d", factoryTile.Block, factoryTile.Build != nil, len(w.Model().Entities))
+	}
+	factoryTile.Build.AddItem(siliconItemID, 10)
+	factoryTile.Build.AddItem(leadItemID, 10)
 	stepForSeconds(w, 17)
 	if got := countUnits(); got != 8 {
 		t.Fatalf("expected 9th unit to remain blocked by cap, got=%d", got)
 	}
-	factoryPos := int32(3 + 3*model.Width)
 	if payload := w.payloadStateLocked(factoryPos).Payload; payload == nil || payload.Kind != payloadKindUnit {
 		t.Fatalf("expected capped factory to hold a unit payload, got=%+v", payload)
 	}
@@ -733,6 +2068,287 @@ func TestCustomCombatDoesNotDamagePlayerControlledUnit(t *testing.T) {
 	}
 	if ent.Health != 220 {
 		t.Fatalf("expected custom combat to ignore player-controlled unit health, got=%f", ent.Health)
+	}
+}
+
+func TestUnitBeamUsesBuildingDamageMultiplier(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		600: "test-wall",
+	}
+	w.SetModel(model)
+
+	tile := placeTestBuilding(t, w, 12, 12, 600, 2, 0)
+	tile.Build.Health = 100
+	tile.Build.MaxHealth = 100
+
+	model.Entities = append(model.Entities, RawEntity{
+		ID:                   1,
+		TypeID:               35,
+		Team:                 1,
+		X:                    float32(12*8 - 32),
+		Y:                    float32(12*8 + 4),
+		Health:               100,
+		MaxHealth:            100,
+		AttackDamage:         20,
+		AttackBuildingDamage: 0.25,
+		AttackInterval:       0.05,
+		AttackRange:          120,
+		AttackFireMode:       "beam",
+		AttackBuildings:      true,
+		AttackTargetGround:   true,
+		SlowMul:              1,
+		StatusDamageMul:      1,
+		StatusHealthMul:      1,
+		StatusSpeedMul:       1,
+		StatusReloadMul:      1,
+		StatusBuildSpeedMul:  1,
+		StatusDragMul:        1,
+		StatusArmorOverride:  -1,
+		RuntimeInit:          true,
+	})
+
+	w.Step(time.Second / 60)
+
+	if got := tile.Build.Health; math.Abs(float64(got-95)) > 0.01 {
+		t.Fatalf("expected beam to deal 5 building damage, got health=%f", got)
+	}
+}
+
+func TestProjectileUsesBuildingDamageMultiplierBelowOne(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		600: "test-wall",
+	}
+	w.SetModel(model)
+
+	tile := placeTestBuilding(t, w, 12, 12, 600, 2, 0)
+	tile.Build.Health = 100
+	tile.Build.MaxHealth = 100
+
+	w.bullets = append(w.bullets, simBullet{
+		ID:             1,
+		Team:           1,
+		X:              float32(12*8 + 4),
+		Y:              float32(12*8 + 4),
+		Damage:         20,
+		Radius:         8,
+		HitBuilds:      true,
+		TargetGround:   true,
+		BuildingDamage: 0.25,
+	})
+	w.stepBullets(0, map[int32]int{}, nil, nil)
+
+	if got := tile.Build.Health; math.Abs(float64(got-95)) > 0.01 {
+		t.Fatalf("expected projectile to deal 5 building damage, got health=%f", got)
+	}
+}
+
+func TestProjectileCanDealZeroBuildingDamage(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		600: "test-wall",
+	}
+	w.SetModel(model)
+
+	tile := placeTestBuilding(t, w, 12, 12, 600, 2, 0)
+	tile.Build.Health = 100
+	tile.Build.MaxHealth = 100
+
+	w.bullets = append(w.bullets, simBullet{
+		ID:             1,
+		Team:           1,
+		X:              float32(12*8 + 4),
+		Y:              float32(12*8 + 4),
+		Damage:         20,
+		Radius:         8,
+		HitBuilds:      true,
+		TargetGround:   true,
+		BuildingDamage: 0,
+	})
+	w.stepBullets(0, map[int32]int{}, nil, nil)
+
+	if got := tile.Build.Health; math.Abs(float64(got-100)) > 0.01 {
+		t.Fatalf("expected zero building multiplier to deal no building damage, got health=%f", got)
+	}
+}
+
+func TestBurningStatusDamagesAndExpires(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	w.SetModel(model)
+	w.statusProfilesByID[1] = statusEffectProfile{
+		ID:                   1,
+		Name:                 "burning",
+		DamageMultiplier:     1,
+		HealthMultiplier:     1,
+		SpeedMultiplier:      1,
+		ReloadMultiplier:     1,
+		BuildSpeedMultiplier: 1,
+		DragMultiplier:       1,
+		Damage:               0.167 * 60,
+	}
+	w.statusProfilesByName["burning"] = w.statusProfilesByID[1]
+
+	model.Entities = append(model.Entities, RawEntity{
+		ID:                  1,
+		TypeID:              35,
+		Team:                1,
+		X:                   16,
+		Y:                   16,
+		Health:              100,
+		MaxHealth:           100,
+		SlowMul:             1,
+		StatusDamageMul:     1,
+		StatusHealthMul:     1,
+		StatusSpeedMul:      1,
+		StatusReloadMul:     1,
+		StatusBuildSpeedMul: 1,
+		StatusDragMul:       1,
+		StatusArmorOverride: -1,
+		RuntimeInit:         true,
+	})
+	w.applyStatusToEntity(&model.Entities[0], 1, "burning", 1)
+
+	stepForSeconds(w, 1.2)
+
+	if got := model.Entities[0].Health; got >= 95 {
+		t.Fatalf("expected burning DOT to reduce health, got=%f", got)
+	}
+	if len(model.Entities[0].Statuses) != 0 {
+		t.Fatalf("expected burning to expire, statuses=%v", model.Entities[0].Statuses)
+	}
+}
+
+func TestWetAndShockedUseOfficialReactiveDamage(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(8, 8)
+	w.SetModel(model)
+	w.statusProfilesByID[2] = statusEffectProfile{
+		ID:                   2,
+		Name:                 "wet",
+		DamageMultiplier:     1,
+		HealthMultiplier:     1,
+		SpeedMultiplier:      0.94,
+		ReloadMultiplier:     1,
+		BuildSpeedMultiplier: 1,
+		DragMultiplier:       1,
+		TransitionDamage:     14,
+	}
+	w.statusProfilesByName["wet"] = w.statusProfilesByID[2]
+	w.statusProfilesByID[3] = statusEffectProfile{
+		ID:                   3,
+		Name:                 "shocked",
+		DamageMultiplier:     1,
+		HealthMultiplier:     1,
+		SpeedMultiplier:      1,
+		ReloadMultiplier:     1,
+		BuildSpeedMultiplier: 1,
+		DragMultiplier:       1,
+		Reactive:             true,
+	}
+	w.statusProfilesByName["shocked"] = w.statusProfilesByID[3]
+
+	entity := RawEntity{
+		ID:                  1,
+		TypeID:              35,
+		Team:                1,
+		Health:              100,
+		MaxHealth:           100,
+		Shield:              0,
+		ShieldMax:           0,
+		Armor:               0,
+		SlowMul:             1,
+		StatusDamageMul:     1,
+		StatusHealthMul:     1,
+		StatusSpeedMul:      1,
+		StatusReloadMul:     1,
+		StatusBuildSpeedMul: 1,
+		StatusDragMul:       1,
+		StatusArmorOverride: -1,
+		RuntimeInit:         true,
+	}
+	w.applyStatusToEntity(&entity, 2, "wet", 2)
+	w.applyStatusToEntity(&entity, 3, "shocked", 1)
+
+	if math.Abs(float64(entity.Health-86)) > 0.01 {
+		t.Fatalf("expected wet+shocked transition damage=14, got health=%f", entity.Health)
+	}
+	if len(entity.Statuses) != 1 || entity.Statuses[0].Name != "wet" {
+		t.Fatalf("expected reactive shocked to not persist, statuses=%v", entity.Statuses)
+	}
+}
+
+func TestDisarmedStatusPreventsAttacking(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	w.SetModel(model)
+	w.statusProfilesByID[4] = statusEffectProfile{
+		ID:                   4,
+		Name:                 "disarmed",
+		DamageMultiplier:     1,
+		HealthMultiplier:     1,
+		SpeedMultiplier:      1,
+		ReloadMultiplier:     1,
+		BuildSpeedMultiplier: 1,
+		DragMultiplier:       1,
+		Disarm:               true,
+	}
+	w.statusProfilesByName["disarmed"] = w.statusProfilesByID[4]
+
+	model.Entities = append(model.Entities,
+		RawEntity{
+			ID:                  1,
+			TypeID:              35,
+			Team:                1,
+			X:                   40,
+			Y:                   40,
+			Health:              100,
+			MaxHealth:           100,
+			AttackDamage:        20,
+			AttackInterval:      0.05,
+			AttackRange:         80,
+			AttackFireMode:      "beam",
+			AttackTargetAir:     true,
+			AttackTargetGround:  true,
+			SlowMul:             1,
+			StatusDamageMul:     1,
+			StatusHealthMul:     1,
+			StatusSpeedMul:      1,
+			StatusReloadMul:     1,
+			StatusBuildSpeedMul: 1,
+			StatusDragMul:       1,
+			StatusArmorOverride: -1,
+			RuntimeInit:         true,
+		},
+		RawEntity{
+			ID:                  2,
+			TypeID:              35,
+			Team:                2,
+			X:                   72,
+			Y:                   40,
+			Health:              100,
+			MaxHealth:           100,
+			SlowMul:             1,
+			StatusDamageMul:     1,
+			StatusHealthMul:     1,
+			StatusSpeedMul:      1,
+			StatusReloadMul:     1,
+			StatusBuildSpeedMul: 1,
+			StatusDragMul:       1,
+			StatusArmorOverride: -1,
+			RuntimeInit:         true,
+		},
+	)
+	w.applyStatusToEntity(&model.Entities[0], 4, "disarmed", 2)
+
+	stepForSeconds(w, 0.5)
+
+	if got := model.Entities[1].Health; got != 100 {
+		t.Fatalf("expected disarmed attacker to deal no damage, target health=%f", got)
 	}
 }
 
@@ -2400,6 +4016,79 @@ func TestPowerNodeLargeAutoLinksNearbyConsumerOnPlacement(t *testing.T) {
 	}
 }
 
+func TestPowerNodeLargeAutoLinkAvoidsDuplicateConductingGraph(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		421: "battery",
+		425: "power-node-large",
+		430: "laser-drill",
+	}
+	w.SetModel(model)
+
+	batteryTile, err := model.TileAt(6, 10)
+	if err != nil || batteryTile == nil {
+		t.Fatalf("battery tile lookup failed: %v", err)
+	}
+	w.placeTileLocked(batteryTile, 1, 421, 0, nil, 0)
+
+	drillTile, err := model.TileAt(7, 10)
+	if err != nil || drillTile == nil {
+		t.Fatalf("drill tile lookup failed: %v", err)
+	}
+	w.placeTileLocked(drillTile, 1, 430, 0, nil, 0)
+
+	nodeTile, err := model.TileAt(12, 10)
+	if err != nil || nodeTile == nil {
+		t.Fatalf("node tile lookup failed: %v", err)
+	}
+	w.placeTileLocked(nodeTile, 1, 425, 0, nil, 0)
+
+	nodePos := int32(10*model.Width + 12)
+	drillPos := int32(10*model.Width + 7)
+	links := w.powerNodeLinks[nodePos]
+	if len(links) != 1 {
+		t.Fatalf("expected one autolink target for the shared conducting graph, got %v", links)
+	}
+	if links[0] != drillPos {
+		t.Fatalf("expected nearer drill %d to represent the shared conducting graph, got %v", drillPos, links)
+	}
+}
+
+func TestPowerNodeLargeAutoLinkBlockedByPlastaniumWall(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(24, 24)
+	model.BlockNames = map[int16]string{
+		425: "power-node-large",
+		430: "laser-drill",
+		475: "plastanium-wall",
+	}
+	w.SetModel(model)
+
+	consumerTile, err := model.TileAt(6, 10)
+	if err != nil || consumerTile == nil {
+		t.Fatalf("consumer tile lookup failed: %v", err)
+	}
+	w.placeTileLocked(consumerTile, 1, 430, 0, nil, 0)
+
+	wallTile, err := model.TileAt(9, 10)
+	if err != nil || wallTile == nil {
+		t.Fatalf("wall tile lookup failed: %v", err)
+	}
+	w.placeTileLocked(wallTile, 1, 475, 0, nil, 0)
+
+	nodeTile, err := model.TileAt(12, 10)
+	if err != nil || nodeTile == nil {
+		t.Fatalf("node tile lookup failed: %v", err)
+	}
+	w.placeTileLocked(nodeTile, 1, 425, 0, nil, 0)
+
+	nodePos := int32(10*model.Width + 12)
+	if links := w.powerNodeLinks[nodePos]; len(links) != 0 {
+		t.Fatalf("expected plastanium wall to block power-node autolink, links=%v", links)
+	}
+}
+
 func TestAutoLinkedPowerNodeEmitsConfigEvent(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(24, 24)
@@ -3149,7 +4838,7 @@ func TestUnderflowRoutesIntoConsumeGeneratorBeforeCore(t *testing.T) {
 
 	sourcePos := int32(5*model.Width + 2)
 	gatePos := int32(5*model.Width + 3)
-	item := ItemID(1)
+	item := coalItemID
 
 	if !w.tryInsertItemLocked(sourcePos, gatePos, item, 0) {
 		t.Fatalf("expected underflow gate to route item into combustion generator")
@@ -3439,7 +5128,7 @@ func TestTeamCoreItemSnapshotsDoNotFallbackToTeamInventoryWhenCoreEmpty(t *testi
 	}
 }
 
-func TestTeamCoreItemSnapshotsFallbackToTeamInventoryForFillItemsTeam(t *testing.T) {
+func TestFillItemsTeamFillsRealCoreInventoryOnStep(t *testing.T) {
 	w := New(Config{TPS: 60})
 	model := NewWorldModel(12, 12)
 	model.BlockNames = map[int16]string{
@@ -3447,13 +5136,20 @@ func TestTeamCoreItemSnapshotsFallbackToTeamInventoryForFillItemsTeam(t *testing
 	}
 	w.SetModel(model)
 
-	placeTestBuilding(t, w, 5, 5, 343, 1, 0)
+	core := placeTestBuilding(t, w, 5, 5, 343, 1, 0)
 	rules := w.GetRulesManager().Get()
 	rules.setTeamRule(1, TeamRule{FillItems: true})
-	w.teamItems[1] = map[ItemID]int32{
-		0: 120,
-		4: 45,
+
+	pos := int32(core.Y*model.Width + core.X)
+	capacity := w.itemCapacityAtLocked(pos)
+	if capacity <= 0 {
+		t.Fatalf("expected positive shared core capacity, got %d", capacity)
 	}
+	if got := core.Build.ItemAmount(copperItemID); got != 0 {
+		t.Fatalf("expected empty core before fill step, got copper=%d", got)
+	}
+
+	w.Step(time.Second / 60)
 
 	snapshots := w.TeamCoreItemSnapshots()
 	if len(snapshots) != 1 {
@@ -3462,14 +5158,21 @@ func TestTeamCoreItemSnapshotsFallbackToTeamInventoryForFillItemsTeam(t *testing
 	if snapshots[0].Team != 1 {
 		t.Fatalf("expected team 1 snapshot, got team %d", snapshots[0].Team)
 	}
-	if len(snapshots[0].Items) != 2 {
-		t.Fatalf("expected fallback team inventory to be exposed, got %d items", len(snapshots[0].Items))
+	if got := core.Build.ItemAmount(copperItemID); got != capacity {
+		t.Fatalf("expected fillItems step to fill copper to %d, got %d", capacity, got)
 	}
-	if snapshots[0].Items[0].Item != 0 || snapshots[0].Items[0].Amount != 120 {
-		t.Fatalf("expected copper amount 120, got item=%d amount=%d", snapshots[0].Items[0].Item, snapshots[0].Items[0].Amount)
+	if got := core.Build.ItemAmount(titaniumItemID); got != capacity {
+		t.Fatalf("expected fillItems step to fill titanium to %d, got %d", capacity, got)
 	}
-	if snapshots[0].Items[1].Item != 4 || snapshots[0].Items[1].Amount != 45 {
-		t.Fatalf("expected titanium amount 45, got item=%d amount=%d", snapshots[0].Items[1].Item, snapshots[0].Items[1].Amount)
+	itemAmounts := make(map[ItemID]int32, len(snapshots[0].Items))
+	for _, stack := range snapshots[0].Items {
+		itemAmounts[stack.Item] = stack.Amount
+	}
+	if got := itemAmounts[copperItemID]; got != capacity {
+		t.Fatalf("expected core snapshot copper=%d after fill step, got %d", capacity, got)
+	}
+	if got := itemAmounts[titaniumItemID]; got != capacity {
+		t.Fatalf("expected core snapshot titanium=%d after fill step, got %d", capacity, got)
 	}
 }
 
@@ -3566,6 +5269,163 @@ func TestBuildCostConsumesCoreInventoryWhenCorePresent(t *testing.T) {
 
 	if core.Build.ItemAmount(0) != 5 {
 		t.Fatalf("expected duo build to consume real core copper, got %d", core.Build.ItemAmount(0))
+	}
+}
+
+func TestFillItemsTeamBuildUsesRealCoreInventory(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		343: "core-citadel",
+	}
+	w.SetModel(model)
+
+	core := placeTestBuilding(t, w, 5, 5, 343, 1, 0)
+	rules := w.GetRulesManager().Get()
+	rules.setTeamRule(1, TeamRule{FillItems: true})
+	pos := int32(core.Y*model.Width + core.X)
+	capacity := w.itemCapacityAtLocked(pos)
+	if capacity <= 0 {
+		t.Fatalf("expected positive shared core capacity, got %d", capacity)
+	}
+
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+	stepForSeconds(w, 3)
+
+	tile, err := w.Model().TileAt(2, 2)
+	if err != nil || tile == nil {
+		t.Fatalf("built tile lookup failed: %v", err)
+	}
+	if tile.Block != 45 || tile.Build == nil {
+		t.Fatalf("expected duo to be fully constructed from fillItems core, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if got := core.Build.ItemAmount(copperItemID); got != capacity {
+		t.Fatalf("expected fillItems core copper to refill back to %d after build, got %d", capacity, got)
+	}
+}
+
+func TestSandboxModeBuildIgnoresResourceCost(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	model.Tags = map[string]string{
+		"mode": "sandbox",
+	}
+	w.SetModel(model)
+
+	core := placeTestBuilding(t, w, 5, 5, 339, 1, 0)
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+	stepForSeconds(w, 3)
+
+	tile, err := w.Model().TileAt(2, 2)
+	if err != nil || tile == nil {
+		t.Fatalf("built tile lookup failed: %v", err)
+	}
+	if tile.Block != 45 || tile.Build == nil {
+		t.Fatalf("expected sandbox build to finish without materials, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if got := core.Build.ItemAmount(copperItemID); got != 0 {
+		t.Fatalf("expected sandbox build to consume no core copper, got %d", got)
+	}
+}
+
+func TestAttackModeWaveTeamBuildIgnoresResourceCost(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	model.Tags = map[string]string{
+		"mode": "attack",
+	}
+	w.SetModel(model)
+
+	core := placeTestBuilding(t, w, 5, 5, 339, 2, 0)
+	w.ApplyBuildPlans(TeamID(2), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+	stepForSeconds(w, 3)
+
+	tile, err := w.Model().TileAt(2, 2)
+	if err != nil || tile == nil {
+		t.Fatalf("built tile lookup failed: %v", err)
+	}
+	if tile.Block != 45 || tile.Build == nil {
+		t.Fatalf("expected attack wave team build to finish without materials, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if got := core.Build.ItemAmount(copperItemID); got != 0 {
+		t.Fatalf("expected attack wave team build to consume no core copper, got %d", got)
+	}
+}
+
+func TestSurvivalModeBuildStillWaitsForResources(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	model.Tags = map[string]string{
+		"mode": "survival",
+	}
+	w.SetModel(model)
+
+	placeTestBuilding(t, w, 5, 5, 339, 1, 0)
+	pos := int32(2 + 2*model.Width)
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+	stepForSeconds(w, 3)
+
+	tile, err := w.Model().TileAt(2, 2)
+	if err != nil || tile == nil {
+		t.Fatalf("built tile lookup failed: %v", err)
+	}
+	if tile.Block != 0 || tile.Build != nil {
+		t.Fatalf("expected survival build without copper to stay pending, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if _, ok := w.pendingBuilds[pos]; !ok {
+		t.Fatalf("expected survival build to remain queued while missing materials")
+	}
+}
+
+func TestPvpModeBuildStillWaitsForResources(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(12, 12)
+	model.BlockNames = map[int16]string{
+		45:  "duo",
+		339: "core-shard",
+	}
+	model.Tags = map[string]string{
+		"mode": "pvp",
+	}
+	w.SetModel(model)
+
+	placeTestBuilding(t, w, 5, 5, 339, 1, 0)
+	pos := int32(2 + 2*model.Width)
+	w.ApplyBuildPlans(TeamID(1), []BuildPlanOp{{
+		X: 2, Y: 2, BlockID: 45,
+	}})
+	stepForSeconds(w, 3)
+
+	tile, err := w.Model().TileAt(2, 2)
+	if err != nil || tile == nil {
+		t.Fatalf("built tile lookup failed: %v", err)
+	}
+	if tile.Block != 0 || tile.Build != nil {
+		t.Fatalf("expected pvp build without copper to stay pending, got block=%d build=%v", tile.Block, tile.Build != nil)
+	}
+	if _, ok := w.pendingBuilds[pos]; !ok {
+		t.Fatalf("expected pvp build to remain queued while missing materials")
 	}
 }
 

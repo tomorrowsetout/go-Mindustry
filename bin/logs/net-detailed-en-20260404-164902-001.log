@@ -1,0 +1,54 @@
+2026-04-04T08:49:05.0995795Z [NET] kind=tcp_accept packet= conn_id=649645528 uuid= ip=10.147.17.101 name="" detail=
+2026-04-04T08:49:05.1035918Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-04-04T08:49:05.1604385Z [NET] kind=world_handshake_sent packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T08:49:05.3731729Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T16:49:05.4214908+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:05.4310765+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:06.0089874+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:06.0178499+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:06.6077153+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:06.6163668+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:07.2062372+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:07.2158442+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:07.8100159+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:07.8216829+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:08.3919352+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:08.4020564+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:08.9853405+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:08.9939337+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:09.6604044+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:09.6729374+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:10.3065115+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:10.3156635+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:10.9031316+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:10.9117257+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:11.4862464+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:11.4949776+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:12.0573942+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:12.0675652+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:12.6595972+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:12.6722096+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:13.2549264+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:13.2665523+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:13.8245+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:13.8368609+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:14.4463765+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:14.4554811+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:15.0047672+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:15.015026+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:15.5692014+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:15.5803988+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:16.1393896+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:16.1508931+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:16.7861243+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:16.7987163+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:17.3476766+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:17.358+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:17.9686107+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:17.9777643+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:18.520511+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:18.5319012+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:19.124022+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:19.1355898+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:49:19.7383633+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:49:19.7512929+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148

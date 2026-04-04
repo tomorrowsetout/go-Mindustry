@@ -1,10 +1,10 @@
 {
-  "map_path": "assets\\worlds\\maps\\serpulo\\hidden\\0.msav",
-  "wave_time": 71.222916,
-  "wave": 124,
-  "tick": 730126,
-  "time_data": 17836,
+  "map_path": "assets\\worlds\\maps\\serpulo\\coastline.msav",
+  "wave_time": 24.995045,
+  "wave": 192,
+  "tick": 1172100,
+  "time_data": 26722,
   "rand0": 0,
   "rand1": 0,
-  "saved_at": "2026-04-01T16:18:23Z"
+  "saved_at": "2026-04-04T14:51:19Z"
 }

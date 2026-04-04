@@ -160,6 +160,16 @@ type PersonalizationConfig struct {
 	PlayerConnIDSuffixFormat      string
 }
 
+type JoinPopupConfig struct {
+	Enabled          bool
+	DelayMs          int
+	Title            string
+	Message          string
+	AnnouncementText string
+	LinkURL          string
+	HelpText         string
+}
+
 type StatusBarConfig struct {
 	Enabled              bool
 	RefreshIntervalSec   int
@@ -192,6 +202,18 @@ type StatusBarConfig struct {
 	CustomMessageFormat  string
 }
 
+type MapVoteConfig struct {
+	DurationSec     int
+	StatusRefreshMs int
+	PopupDurationMs int
+	HomeLinkURL     string
+	Align           string
+	Top             int
+	Left            int
+	Bottom          int
+	Right           int
+}
+
 type BuildingLogConfig struct {
 	Enabled    bool
 	Translated bool
@@ -202,7 +224,9 @@ type Config struct {
 	Control         ControlConfig
 	Development     DevelopmentConfig
 	Personalization PersonalizationConfig
+	JoinPopup       JoinPopupConfig
 	StatusBar       StatusBarConfig
+	MapVote         MapVoteConfig
 	Building        BuildingLogConfig
 	Sundries        SundriesConfig
 	Runtime         RuntimeConfig
@@ -323,6 +347,19 @@ func stripINIComment(s string) string {
 		}
 	}
 	return strings.TrimSpace(s)
+}
+
+func decodeINIInlineText(v string) string {
+	v = strings.ReplaceAll(v, "\r\n", "\n")
+	v = strings.ReplaceAll(v, `\r\n`, "\n")
+	v = strings.ReplaceAll(v, `\n`, "\n")
+	return v
+}
+
+func encodeINIInlineText(v string) string {
+	v = strings.ReplaceAll(v, "\r\n", "\n")
+	v = strings.ReplaceAll(v, "\n", `\n`)
+	return v
 }
 
 func boolToIni(v bool) string {
@@ -514,6 +551,27 @@ func applyINI(cfg *Config, d iniData) {
 	if v, ok := d.get("personalization", "player_conn_id_suffix_format"); ok {
 		cfg.Personalization.PlayerConnIDSuffixFormat = v
 	}
+	if v, ok := d.get("personalization", "join_popup_enabled"); ok {
+		cfg.JoinPopup.Enabled = asBool(v, cfg.JoinPopup.Enabled)
+	}
+	if v, ok := d.get("personalization", "join_popup_delay_ms"); ok {
+		cfg.JoinPopup.DelayMs = asInt(v, cfg.JoinPopup.DelayMs)
+	}
+	if v, ok := d.get("personalization", "join_popup_title"); ok {
+		cfg.JoinPopup.Title = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("personalization", "join_popup_message"); ok {
+		cfg.JoinPopup.Message = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("personalization", "join_popup_announcement_text"); ok {
+		cfg.JoinPopup.AnnouncementText = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("personalization", "join_popup_link_url"); ok {
+		cfg.JoinPopup.LinkURL = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("personalization", "join_popup_help_text"); ok {
+		cfg.JoinPopup.HelpText = decodeINIInlineText(v)
+	}
 	if v, ok := d.get("status_bar", "enabled"); ok {
 		cfg.StatusBar.Enabled = asBool(v, cfg.StatusBar.Enabled)
 	}
@@ -600,6 +658,33 @@ func applyINI(cfg *Config, d iniData) {
 	}
 	if v, ok := d.get("status_bar", "custom_message_format"); ok {
 		cfg.StatusBar.CustomMessageFormat = v
+	}
+	if v, ok := d.get("map_vote", "duration_sec"); ok {
+		cfg.MapVote.DurationSec = asInt(v, cfg.MapVote.DurationSec)
+	}
+	if v, ok := d.get("map_vote", "status_refresh_ms"); ok {
+		cfg.MapVote.StatusRefreshMs = asInt(v, cfg.MapVote.StatusRefreshMs)
+	}
+	if v, ok := d.get("map_vote", "popup_duration_ms"); ok {
+		cfg.MapVote.PopupDurationMs = asInt(v, cfg.MapVote.PopupDurationMs)
+	}
+	if v, ok := d.get("map_vote", "home_link_url"); ok {
+		cfg.MapVote.HomeLinkURL = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("map_vote", "align"); ok && strings.TrimSpace(v) != "" {
+		cfg.MapVote.Align = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("map_vote", "top"); ok {
+		cfg.MapVote.Top = asInt(v, cfg.MapVote.Top)
+	}
+	if v, ok := d.get("map_vote", "left"); ok {
+		cfg.MapVote.Left = asInt(v, cfg.MapVote.Left)
+	}
+	if v, ok := d.get("map_vote", "bottom"); ok {
+		cfg.MapVote.Bottom = asInt(v, cfg.MapVote.Bottom)
+	}
+	if v, ok := d.get("map_vote", "right"); ok {
+		cfg.MapVote.Right = asInt(v, cfg.MapVote.Right)
 	}
 	if v, ok := d.get("config", "api_file"); ok && strings.TrimSpace(v) != "" {
 		cfg.API.ConfigFile = strings.TrimSpace(v)
@@ -869,6 +954,15 @@ func makeINI(cfg Config) iniData {
 	d.set("status_bar", "custom_message_enabled", boolToIni(cfg.StatusBar.CustomMessageEnabled))
 	d.set("status_bar", "custom_message_text", cfg.StatusBar.CustomMessageText)
 	d.set("status_bar", "custom_message_format", cfg.StatusBar.CustomMessageFormat)
+	d.set("map_vote", "duration_sec", strconv.Itoa(cfg.MapVote.DurationSec))
+	d.set("map_vote", "status_refresh_ms", strconv.Itoa(cfg.MapVote.StatusRefreshMs))
+	d.set("map_vote", "popup_duration_ms", strconv.Itoa(cfg.MapVote.PopupDurationMs))
+	d.set("map_vote", "home_link_url", cfg.MapVote.HomeLinkURL)
+	d.set("map_vote", "align", cfg.MapVote.Align)
+	d.set("map_vote", "top", strconv.Itoa(cfg.MapVote.Top))
+	d.set("map_vote", "left", strconv.Itoa(cfg.MapVote.Left))
+	d.set("map_vote", "bottom", strconv.Itoa(cfg.MapVote.Bottom))
+	d.set("map_vote", "right", strconv.Itoa(cfg.MapVote.Right))
 	d.set("building", "log_enabled", boolToIni(cfg.Building.Enabled))
 	d.set("building", "translated_enabled", boolToIni(cfg.Building.Translated))
 	d.set("sundries", "detailed_log_max_mb", strconv.Itoa(cfg.Sundries.DetailedLogMaxMB))
@@ -1078,6 +1172,128 @@ func writePersonalizationINI(path string, cfg Config) error {
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
+func parseJoinPopupSectionHeader(line string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "[join_popup]", "[popup]":
+		return "popup", true
+	case "[title]":
+		return "title", true
+	case "[message]":
+		return "message", true
+	case "[announcement]":
+		return "announcement", true
+	case "[link_url]", "[link]":
+		return "link_url", true
+	case "[help]":
+		return "help", true
+	default:
+		return "", false
+	}
+}
+
+func trimJoinPopupBlock(v string) string {
+	v = strings.ReplaceAll(v, "\r\n", "\n")
+	v = strings.ReplaceAll(v, "\r", "\n")
+	return strings.Trim(v, "\n")
+}
+
+func parseJoinPopupINI(path string, cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n"), "\n")
+	blocks := map[string][]string{}
+	section := ""
+	for _, line := range lines {
+		if next, ok := parseJoinPopupSectionHeader(strings.TrimSpace(line)); ok {
+			section = next
+			continue
+		}
+		switch section {
+		case "":
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, ";") || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+		case "popup":
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, ";") || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			entry := stripINIComment(trimmed)
+			if entry == "" {
+				continue
+			}
+			eq := strings.Index(entry, "=")
+			if eq <= 0 {
+				continue
+			}
+			key := strings.ToLower(strings.TrimSpace(entry[:eq]))
+			value := strings.TrimSpace(entry[eq+1:])
+			switch key {
+			case "enabled":
+				cfg.JoinPopup.Enabled = asBool(value, cfg.JoinPopup.Enabled)
+			case "delay_ms":
+				cfg.JoinPopup.DelayMs = asInt(value, cfg.JoinPopup.DelayMs)
+			}
+		default:
+			blocks[section] = append(blocks[section], line)
+		}
+	}
+	if lines, ok := blocks["title"]; ok {
+		cfg.JoinPopup.Title = trimJoinPopupBlock(strings.Join(lines, "\n"))
+	}
+	if lines, ok := blocks["message"]; ok {
+		cfg.JoinPopup.Message = trimJoinPopupBlock(strings.Join(lines, "\n"))
+	}
+	if lines, ok := blocks["announcement"]; ok {
+		cfg.JoinPopup.AnnouncementText = trimJoinPopupBlock(strings.Join(lines, "\n"))
+	}
+	if lines, ok := blocks["link_url"]; ok {
+		cfg.JoinPopup.LinkURL = trimJoinPopupBlock(strings.Join(lines, "\n"))
+	}
+	if lines, ok := blocks["help"]; ok {
+		cfg.JoinPopup.HelpText = trimJoinPopupBlock(strings.Join(lines, "\n"))
+	}
+	return nil
+}
+
+func writeJoinPopupBlock(buf *bytes.Buffer, name, value string) {
+	buf.WriteString("[")
+	buf.WriteString(name)
+	buf.WriteString("]\n")
+	value = trimJoinPopupBlock(value)
+	if value != "" {
+		buf.WriteString(value)
+		buf.WriteString("\n")
+	}
+	buf.WriteString("\n")
+}
+
+func writeJoinPopupINI(path string, cfg Config) error {
+	var buf bytes.Buffer
+	buf.WriteString("; 入服公告菜单配置\n")
+	buf.WriteString("; [join_popup] 段使用键值对，其余段落按原样保留多行文本\n")
+	buf.WriteString("; 文本支持 Mindustry 颜色标签和占位符: {server_name} {player_name} {current_map} {players} {link_url}\n")
+	buf.WriteString("; 如果文本里直接换行，游戏内也会按换行显示\n\n")
+	buf.WriteString("[join_popup]\n")
+	fmt.Fprintf(&buf, "enabled = %s ; 1 = 开启，0 = 关闭\n", boolToIni(cfg.JoinPopup.Enabled))
+	fmt.Fprintf(&buf, "delay_ms = %d ; 玩家完成入服同步后延迟多少毫秒再弹出\n\n", cfg.JoinPopup.DelayMs)
+	writeJoinPopupBlock(&buf, "title", cfg.JoinPopup.Title)
+	writeJoinPopupBlock(&buf, "message", cfg.JoinPopup.Message)
+	writeJoinPopupBlock(&buf, "announcement", cfg.JoinPopup.AnnouncementText)
+	writeJoinPopupBlock(&buf, "link_url", cfg.JoinPopup.LinkURL)
+	writeJoinPopupBlock(&buf, "help", cfg.JoinPopup.HelpText)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
+}
+
 func writeStatusBarINI(path string, cfg Config) error {
 	var buf bytes.Buffer
 	buf.WriteString("; 服务器状态栏配置\n")
@@ -1114,6 +1330,27 @@ func writeStatusBarINI(path string, cfg Config) error {
 	fmt.Fprintf(&buf, "custom_message_enabled = %s ; 自定义文案行开关\n", boolToIni(cfg.StatusBar.CustomMessageEnabled))
 	fmt.Fprintf(&buf, "custom_message_text = %s ; 自定义文案内容\n", cfg.StatusBar.CustomMessageText)
 	fmt.Fprintf(&buf, "custom_message_format = %s ; 自定义文案行模板\n", cfg.StatusBar.CustomMessageFormat)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
+}
+
+func writeMapVoteINI(path string, cfg Config) error {
+	var buf bytes.Buffer
+	buf.WriteString("; 投票换图配置\n")
+	buf.WriteString("; 控制换图投票持续时间，以及左侧投票状态弹窗刷新频率与位置\n")
+	buf.WriteString("; 颜色标签可直接写到聊天文案里，状态弹窗内容由服务端按当前投票实时生成\n\n")
+	buf.WriteString("[map_vote]\n")
+	fmt.Fprintf(&buf, "duration_sec = %d ; 单次投票持续时间（秒）\n", cfg.MapVote.DurationSec)
+	fmt.Fprintf(&buf, "status_refresh_ms = %d ; 左侧投票状态刷新间隔（毫秒）\n", cfg.MapVote.StatusRefreshMs)
+	fmt.Fprintf(&buf, "popup_duration_ms = %d ; 单次投票状态弹窗持续时间（毫秒），建议略大于刷新间隔\n", cfg.MapVote.PopupDurationMs)
+	fmt.Fprintf(&buf, "home_link_url = %s ; 换图首页“打开链接”按钮跳转地址，留空则隐藏按钮\n", cfg.MapVote.HomeLinkURL)
+	fmt.Fprintf(&buf, "align = %s ; 对齐方式：top_left / top / left / center / bottom_right 等\n", cfg.MapVote.Align)
+	fmt.Fprintf(&buf, "top = %d ; 顶部偏移\n", cfg.MapVote.Top)
+	fmt.Fprintf(&buf, "left = %d ; 左侧偏移\n", cfg.MapVote.Left)
+	fmt.Fprintf(&buf, "bottom = %d ; 底部偏移\n", cfg.MapVote.Bottom)
+	fmt.Fprintf(&buf, "right = %d ; 右侧偏移\n", cfg.MapVote.Right)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -1176,6 +1413,9 @@ func normalize(cfg *Config) {
 	}
 	cfg.Personalization.PlayerBoundPrefix = normalizeWrappedMindustryLiteral(cfg.Personalization.PlayerBoundPrefix)
 	cfg.Personalization.PlayerUnboundPrefix = normalizeWrappedMindustryLiteral(cfg.Personalization.PlayerUnboundPrefix)
+	if cfg.JoinPopup.DelayMs < 0 {
+		cfg.JoinPopup.DelayMs = 0
+	}
 	if cfg.StatusBar.RefreshIntervalSec <= 0 {
 		cfg.StatusBar.RefreshIntervalSec = 2
 	}
@@ -1214,6 +1454,22 @@ func normalize(cfg *Config) {
 	}
 	if strings.TrimSpace(cfg.StatusBar.CustomMessageFormat) == "" {
 		cfg.StatusBar.CustomMessageFormat = "[gold]{message}[]"
+	}
+	if cfg.MapVote.DurationSec <= 0 {
+		cfg.MapVote.DurationSec = 15
+	}
+	if cfg.MapVote.StatusRefreshMs <= 0 {
+		cfg.MapVote.StatusRefreshMs = 1500
+	}
+	if cfg.MapVote.PopupDurationMs <= 0 {
+		cfg.MapVote.PopupDurationMs = cfg.MapVote.StatusRefreshMs + 300
+	}
+	if cfg.MapVote.PopupDurationMs < cfg.MapVote.StatusRefreshMs {
+		cfg.MapVote.PopupDurationMs = cfg.MapVote.StatusRefreshMs + 300
+	}
+	cfg.MapVote.HomeLinkURL = strings.TrimSpace(cfg.MapVote.HomeLinkURL)
+	if strings.TrimSpace(cfg.MapVote.Align) == "" {
+		cfg.MapVote.Align = "top_left"
 	}
 	if cfg.Sundries.DetailedLogMaxMB <= 0 {
 		cfg.Sundries.DetailedLogMaxMB = 2
@@ -1264,7 +1520,9 @@ func sidecarPaths(cfgPath string, cfg Config) map[string]string {
 		"sundries":        filepath.Join(dir, "Sundries.ini"),
 		"development":     filepath.Join(dir, "Development mode.ini"),
 		"personalization": filepath.Join(dir, "Personalization.ini"),
+		"join_popup":      filepath.Join(dir, "Join popup.ini"),
 		"status_bar":      filepath.Join(dir, "Status bar.ini"),
+		"map_vote":        filepath.Join(dir, "Vote map.ini"),
 		"data":            filepath.Join(dir, "data.ini"),  // backward compatibility
 		"paths":           filepath.Join(dir, "paths.ini"), // backward compatibility
 		"api":             apiPath,
@@ -1291,10 +1549,28 @@ func loadSidecars(cfgPath string, cfg *Config) error {
 		applyINI(cfg, d)
 		return nil
 	}
-	for _, key := range []string{"core", "server", "sync", "misc", "sundries", "development", "personalization", "status_bar", "data", "paths", "api"} {
+	for _, key := range []string{"core", "server", "sync", "misc", "sundries", "development", "personalization", "status_bar", "map_vote", "data", "paths", "api"} {
 		if err := loadOne(paths[key]); err != nil {
 			return err
 		}
+	}
+	if err := func(path string) error {
+		st, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if st.IsDir() {
+			return nil
+		}
+		if err := parseJoinPopupINI(path, cfg); err != nil {
+			return fmt.Errorf("parse join popup ini %s: %w", path, err)
+		}
+		return nil
+	}(paths["join_popup"]); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1322,7 +1598,13 @@ func saveSidecars(cfgPath string, cfg Config, d iniData) error {
 	if err := writePersonalizationINI(paths["personalization"], cfg); err != nil {
 		return err
 	}
+	if err := writeJoinPopupINI(paths["join_popup"], cfg); err != nil {
+		return err
+	}
 	if err := writeStatusBarINI(paths["status_bar"], cfg); err != nil {
+		return err
+	}
+	if err := writeMapVoteINI(paths["map_vote"], cfg); err != nil {
 		return err
 	}
 	if err := writeINI(paths["api"], []string{"api"}, d, "api settings"); err != nil {
@@ -1386,6 +1668,15 @@ func Default() Config {
 			PlayerConnIDSuffixEnabled:     true,
 			PlayerConnIDSuffixFormat:      " [gray]{id}[]",
 		},
+		JoinPopup: JoinPopupConfig{
+			Enabled:          true,
+			DelayMs:          300,
+			Title:            "[accent]服务器公告[]",
+			Message:          "欢迎 [green]{player_name}[] 来到 [white]{server_name}[]\n当前地图: [white]{current_map}[]\n请选择下方按钮。",
+			AnnouncementText: "[accent]服务器公告[]\n\n1. 请遵守服务器规则。\n2. 如有问题可先查看快速帮助。\n3. 需要联系管理时请使用群或外部链接。",
+			LinkURL:          "https://example.com",
+			HelpText:         "[accent]帮助为分页弹窗[]\n第 1 页显示基础指令与投票换图；\n第 2 页显示常用与 OP 指令；\n第 3 页显示单位控制。",
+		},
 		StatusBar: StatusBarConfig{
 			Enabled:              true,
 			RefreshIntervalSec:   2,
@@ -1416,6 +1707,17 @@ func Default() Config {
 			CustomMessageEnabled: true,
 			CustomMessageText:    "请在这里填写服务器公告",
 			CustomMessageFormat:  "[gold]{message}[]",
+		},
+		MapVote: MapVoteConfig{
+			DurationSec:     15,
+			StatusRefreshMs: 1500,
+			PopupDurationMs: 1800,
+			HomeLinkURL:     "https://example.com/votemap",
+			Align:           "top_left",
+			Top:             220,
+			Left:            0,
+			Bottom:          0,
+			Right:           0,
 		},
 		Building: BuildingLogConfig{
 			Enabled:    true,

@@ -1,0 +1,76 @@
+2026-04-04T03:56:35.1540046Z [NET] kind=tcp_accept packet= conn_id=1587844884 uuid= ip=127.0.0.1 name="" detail=
+2026-04-04T03:56:35.1657336Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="" detail=version=156 type=official mods=0
+2026-04-04T03:56:35.2240856Z [NET] kind=world_handshake_sent packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T03:56:35.5513688Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T11:56:35.5701795+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-acropolis core_x=107 core_y=323 spawn_x=107 spawn_y=323
+2026-04-04T11:56:35.5722824+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=60 build_speed=1.50 spawn_x=107 spawn_y=323
+2026-04-04T11:57:00.8336103+08:00 [BUILD] action=deconstructing x=133 y=303 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:00.9374782+08:00 [BUILD] action=destroyed x=133 y=303 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:00.9501865+08:00 [BUILD] action=deconstructing x=133 y=304 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.0550294+08:00 [BUILD] action=destroyed x=133 y=304 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.0673154+08:00 [BUILD] action=deconstructing x=133 y=305 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.1694469+08:00 [BUILD] action=destroyed x=133 y=305 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.1829579+08:00 [BUILD] action=deconstructing x=133 y=306 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.2876374+08:00 [BUILD] action=destroyed x=133 y=306 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.3005594+08:00 [BUILD] action=deconstructing x=133 y=307 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.40417+08:00 [BUILD] action=destroyed x=133 y=307 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.4192374+08:00 [BUILD] action=deconstructing x=133 y=308 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.5206187+08:00 [BUILD] action=destroyed x=133 y=308 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.5345555+08:00 [BUILD] action=deconstructing x=133 y=309 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.6380152+08:00 [BUILD] action=destroyed x=133 y=309 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.6518893+08:00 [BUILD] action=deconstructing x=133 y=310 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.7561047+08:00 [BUILD] action=destroyed x=133 y=310 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.7662893+08:00 [BUILD] action=deconstructing x=133 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.878133+08:00 [BUILD] action=destroyed x=133 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.8884649+08:00 [BUILD] action=deconstructing x=134 y=303 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.9881399+08:00 [BUILD] action=destroyed x=134 y=303 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:01.999863+08:00 [BUILD] action=deconstructing x=134 y=304 block_id=429 block=信息板 team=1
+2026-04-04T11:57:02.0873293+08:00 [BUILD] action=destroyed x=134 y=304 block_id=429 block=信息板 team=1
+2026-04-04T11:57:03.5012182+08:00 [BUILD] action=deconstructing x=134 y=310 block_id=429 block=信息板 team=1
+2026-04-04T11:57:03.5885386+08:00 [BUILD] action=destroyed x=134 y=310 block_id=429 block=信息板 team=1
+2026-04-04T11:57:03.6078953+08:00 [BUILD] action=deconstructing x=134 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:03.7036243+08:00 [BUILD] action=destroyed x=134 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:03.7176782+08:00 [BUILD] action=deconstructing x=135 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:03.823184+08:00 [BUILD] action=destroyed x=135 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:03.8339076+08:00 [BUILD] action=deconstructing x=136 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:03.9371035+08:00 [BUILD] action=destroyed x=136 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:03.9512142+08:00 [BUILD] action=deconstructing x=137 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:04.7001823+08:00 [BUILD] action=deconstructing x=140 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:04.8038215+08:00 [BUILD] action=destroyed x=140 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:04.8170543+08:00 [BUILD] action=deconstructing x=141 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:04.920868+08:00 [BUILD] action=destroyed x=141 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:04.933495+08:00 [BUILD] action=deconstructing x=142 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.0384047+08:00 [BUILD] action=destroyed x=142 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.0508108+08:00 [BUILD] action=deconstructing x=143 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.1542215+08:00 [BUILD] action=destroyed x=143 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.167062+08:00 [BUILD] action=deconstructing x=144 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.2706388+08:00 [BUILD] action=destroyed x=144 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.2832401+08:00 [BUILD] action=deconstructing x=145 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.3872264+08:00 [BUILD] action=destroyed x=145 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.4004317+08:00 [BUILD] action=deconstructing x=146 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.5075227+08:00 [BUILD] action=destroyed x=146 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.5174079+08:00 [BUILD] action=deconstructing x=147 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.6304516+08:00 [BUILD] action=destroyed x=147 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:05.6398274+08:00 [BUILD] action=deconstructing x=148 y=311 block_id=220 block=塑钢墙 team=1
+2026-04-04T11:57:06.1177983+08:00 [BUILD] action=deconstructing x=137 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:06.7879829+08:00 [BUILD] action=destroyed x=137 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:07.6003543+08:00 [BUILD] action=deconstructing x=140 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:08.2695201+08:00 [BUILD] action=destroyed x=140 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:08.2842276+08:00 [BUILD] action=deconstructing x=139 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:08.9579975+08:00 [BUILD] action=destroyed x=139 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:08.9682636+08:00 [BUILD] action=deconstructing x=138 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:09.5856666+08:00 [BUILD] action=deconstructing x=140 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:10.2548431+08:00 [BUILD] action=destroyed x=140 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:10.2744661+08:00 [BUILD] action=deconstructing x=139 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:10.9361388+08:00 [BUILD] action=destroyed x=139 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:10.9513805+08:00 [BUILD] action=deconstructing x=138 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:11.6203292+08:00 [BUILD] action=destroyed x=138 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:11.6886422+08:00 [BUILD] action=destroyed x=138 y=309 block_id=412 block=物品源 team=1
+2026-04-04T11:57:11.7008143+08:00 [BUILD] action=deconstructing x=137 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:12.3704079+08:00 [BUILD] action=destroyed x=137 y=305 block_id=412 block=物品源 team=1
+2026-04-04T11:57:12.3838505+08:00 [BUILD] action=deconstructing x=137 y=306 block_id=412 block=物品源 team=1
+2026-04-04T11:57:13.0546898+08:00 [BUILD] action=destroyed x=137 y=306 block_id=412 block=物品源 team=1
+2026-04-04T11:57:13.0685061+08:00 [BUILD] action=deconstructing x=137 y=307 block_id=412 block=物品源 team=1
+2026-04-04T11:57:13.7366666+08:00 [BUILD] action=destroyed x=137 y=307 block_id=412 block=物品源 team=1
+2026-04-04T11:57:13.7504419+08:00 [BUILD] action=deconstructing x=137 y=308 block_id=412 block=物品源 team=1
+2026-04-04T11:57:14.4202597+08:00 [BUILD] action=destroyed x=137 y=308 block_id=412 block=物品源 team=1

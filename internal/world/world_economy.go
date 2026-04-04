@@ -10,10 +10,10 @@ import (
 
 const unlimitedUnitCap = int32(^uint32(0) >> 1)
 
-type factoryProfile struct {
-	UnitName string
-	TimeSec  float32
-	Cost     []ItemStack
+type unitFactoryPlan struct {
+	UnitName   string
+	TimeFrames float32
+	Cost       []ItemStack
 }
 
 var blockCostByName = map[string][]ItemStack{
@@ -52,10 +52,20 @@ var blockCostByName = map[string][]ItemStack{
 	"naval-factory":         {{Item: 0, Amount: 60}, {Item: 1, Amount: 50}, {Item: 2, Amount: 40}},
 }
 
-var factoryByName = map[string]factoryProfile{
-	"ground-factory": {UnitName: "dagger", TimeSec: 10, Cost: []ItemStack{{Item: 0, Amount: 8}, {Item: 1, Amount: 14}}},
-	"air-factory":    {UnitName: "flare", TimeSec: 10, Cost: []ItemStack{{Item: 0, Amount: 8}, {Item: 1, Amount: 14}}},
-	"naval-factory":  {UnitName: "risso", TimeSec: 12, Cost: []ItemStack{{Item: 0, Amount: 12}, {Item: 1, Amount: 20}}},
+var unitFactoryPlansByBlockName = map[string][]unitFactoryPlan{
+	"ground-factory": {
+		{UnitName: "dagger", TimeFrames: 60 * 15, Cost: []ItemStack{{Item: siliconItemID, Amount: 10}, {Item: leadItemID, Amount: 10}}},
+		{UnitName: "crawler", TimeFrames: 60 * 10, Cost: []ItemStack{{Item: siliconItemID, Amount: 8}, {Item: coalItemID, Amount: 10}}},
+		{UnitName: "nova", TimeFrames: 60 * 40, Cost: []ItemStack{{Item: siliconItemID, Amount: 30}, {Item: leadItemID, Amount: 20}, {Item: titaniumItemID, Amount: 20}}},
+	},
+	"air-factory": {
+		{UnitName: "flare", TimeFrames: 60 * 15, Cost: []ItemStack{{Item: siliconItemID, Amount: 15}}},
+		{UnitName: "mono", TimeFrames: 60 * 35, Cost: []ItemStack{{Item: siliconItemID, Amount: 30}, {Item: leadItemID, Amount: 15}}},
+	},
+	"naval-factory": {
+		{UnitName: "risso", TimeFrames: 60 * 45, Cost: []ItemStack{{Item: siliconItemID, Amount: 20}, {Item: metaglassItemID, Amount: 35}}},
+		{UnitName: "retusa", TimeFrames: 60 * 35, Cost: []ItemStack{{Item: siliconItemID, Amount: 15}, {Item: titaniumItemID, Amount: 20}}},
+	},
 }
 
 var blockUnitCapModifierByName = map[string]int32{
@@ -71,10 +81,12 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 	if w.model == nil {
 		return
 	}
-	dt := float32(delta.Seconds())
-	if dt <= 0 {
+	deltaFrames := float32(delta.Seconds() * 60)
+	deltaSeconds := float32(delta.Seconds())
+	if deltaFrames <= 0 || deltaSeconds <= 0 {
 		return
 	}
+	rules := w.rulesMgr.Get()
 	for _, pos := range w.activeTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
@@ -84,53 +96,287 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 			continue
 		}
 		name := w.blockNameByID(int16(t.Block))
-		prof, ok := factoryByName[name]
+		plans, ok := unitFactoryPlansByBlockName[name]
 		if !ok {
 			continue
 		}
-		st := w.factoryStates[pos]
+		st, hasState := w.factoryStates[pos]
+		st.CurrentPlan = unitFactoryCurrentPlanIndex(st, hasState, plans)
+		if st.CurrentPlan < 0 || int(st.CurrentPlan) >= len(plans) {
+			st.Progress = 0
+			st.UnitType = 0
+			w.factoryStates[pos] = st
+			continue
+		}
+		plan := plans[st.CurrentPlan]
+		if plan.TimeFrames <= 0 {
+			st.Progress = 0
+			w.factoryStates[pos] = st
+			continue
+		}
 		payloadState := w.payloadStateLocked(pos)
 		if payloadState.Payload != nil {
 			st.Progress = 0
 			w.factoryStates[pos] = st
 			continue
 		}
-		if st.UnitType <= 0 {
-			if typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(prof.UnitName)); ok {
-				st.UnitType = typeID
-			} else {
-				continue
-			}
-		}
-		if st.Progress <= 0 && !w.consumeProductionCost(t.Team, prof.Cost) {
-			continue
-		}
-		if !w.requirePowerAtLocked(pos, t.Team, 1.2*dt) {
+		typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(plan.UnitName))
+		if !ok || typeID <= 0 {
+			st.Progress = 0
+			st.UnitType = 0
 			w.factoryStates[pos] = st
 			continue
 		}
-		rules := w.rulesMgr.Get()
-		speedMul := float32(1)
-		if rules != nil && rules.UnitBuildSpeedMultiplier > 0 {
-			speedMul = rules.UnitBuildSpeedMultiplier
+		st.UnitType = typeID
+
+		scaledCost := w.unitFactoryScaledCostLocked(t.Team, plan.Cost)
+		speedMul := w.unitBuildSpeedMultiplierLocked(t.Team, rules)
+		if speedMul > 0 && hasRequiredItemsLocked(t.Build, scaledCost) && w.requirePowerAtLocked(pos, t.Team, 1.2*deltaSeconds) {
+			st.Progress += deltaFrames * speedMul
 		}
-		if rules != nil {
-			if tr, ok := rules.teamRule(t.Team); ok && tr.UnitBuildSpeedMultiplier > 0 {
-				speedMul *= tr.UnitBuildSpeedMultiplier
+		if st.Progress >= plan.TimeFrames {
+			payload := w.newFactoryUnitPayloadLocked(t, st.UnitType)
+			if payload == nil {
+				st.Progress = clampf(st.Progress, 0, plan.TimeFrames)
+			} else {
+				removeItemStacksLocked(t.Build, scaledCost)
+				st.Progress = float32(math.Mod(float64(st.Progress), 1))
+				payloadState.Payload = payload
+				payloadState.Move = 0
+				payloadState.Work = 0
+				payloadState.Exporting = false
+				w.syncPayloadTileLocked(t, payload)
 			}
 		}
-		st.Progress += dt * speedMul
-		if st.Progress >= prof.TimeSec {
-			st.Progress = 0
-			payload := w.newFactoryUnitPayloadLocked(t, st.UnitType)
-			payloadState.Payload = payload
-			payloadState.Move = 0
-			payloadState.Work = 0
-			payloadState.Exporting = false
-			w.syncPayloadTileLocked(t, payload)
-		}
+		st.Progress = clampf(st.Progress, 0, plan.TimeFrames)
 		w.factoryStates[pos] = st
 	}
+}
+
+func unitFactoryPlansByName(name string) []unitFactoryPlan {
+	return unitFactoryPlansByBlockName[strings.ToLower(strings.TrimSpace(name))]
+}
+
+func unitFactoryCurrentPlanIndex(state factoryState, hasState bool, plans []unitFactoryPlan) int16 {
+	if len(plans) == 0 {
+		return -1
+	}
+	if !hasState {
+		return 0
+	}
+	if state.CurrentPlan < 0 {
+		return -1
+	}
+	if int(state.CurrentPlan) >= len(plans) {
+		return -1
+	}
+	return state.CurrentPlan
+}
+
+func unitFactoryTotalItemCapacity(name string) int32 {
+	plans := unitFactoryPlansByName(name)
+	capacity := int32(10)
+	for _, plan := range plans {
+		for _, stack := range plan.Cost {
+			if value := stack.Amount * 2; value > capacity {
+				capacity = value
+			}
+		}
+	}
+	return capacity
+}
+
+func unitFactoryItemCapacity(name string, item ItemID) int32 {
+	var capacity int32
+	for _, plan := range unitFactoryPlansByName(name) {
+		for _, stack := range plan.Cost {
+			if stack.Item != item {
+				continue
+			}
+			if value := stack.Amount * 2; value > capacity {
+				capacity = value
+			}
+		}
+	}
+	return capacity
+}
+
+func (w *World) unitBuildSpeedMultiplierLocked(team TeamID, rules *Rules) float32 {
+	if rules == nil {
+		return 1
+	}
+	speedMul := rules.UnitBuildSpeedMultiplier
+	if tr, ok := rules.teamRule(team); ok && tr.UnitBuildSpeedMultiplier > 0 {
+		speedMul *= tr.UnitBuildSpeedMultiplier
+	}
+	return speedMul
+}
+
+func (w *World) unitCostMultiplierLocked(team TeamID) float32 {
+	rules := w.rulesMgr.Get()
+	if rules == nil {
+		return 1
+	}
+	costMul := rules.UnitCostMultiplier
+	if tr, ok := rules.teamRule(team); ok && tr.UnitCostMultiplier > 0 {
+		costMul *= tr.UnitCostMultiplier
+	}
+	return costMul
+}
+
+func unitFactoryScaledAmount(base int32, mul float32) int32 {
+	if base <= 0 || mul <= 0 {
+		return 0
+	}
+	return int32(math.Round(float64(float32(base) * mul)))
+}
+
+func (w *World) unitFactoryScaledCostLocked(team TeamID, cost []ItemStack) []ItemStack {
+	if len(cost) == 0 {
+		return nil
+	}
+	mul := w.unitCostMultiplierLocked(team)
+	out := make([]ItemStack, 0, len(cost))
+	for _, stack := range cost {
+		if stack.Amount <= 0 {
+			continue
+		}
+		amount := unitFactoryScaledAmount(stack.Amount, mul)
+		if amount <= 0 {
+			continue
+		}
+		out = append(out, ItemStack{Item: stack.Item, Amount: amount})
+	}
+	return out
+}
+
+func (w *World) unitFactorySelectedPlanLocked(pos int32, tile *Tile) (unitFactoryPlan, bool) {
+	if w == nil || w.model == nil || tile == nil {
+		return unitFactoryPlan{}, false
+	}
+	plans := unitFactoryPlansByName(w.blockNameByID(int16(tile.Block)))
+	if len(plans) == 0 {
+		return unitFactoryPlan{}, false
+	}
+	st, hasState := w.factoryStates[pos]
+	index := unitFactoryCurrentPlanIndex(st, hasState, plans)
+	if index < 0 || int(index) >= len(plans) {
+		return unitFactoryPlan{}, false
+	}
+	return plans[index], true
+}
+
+func (w *World) configureUnitFactoryPlanLocked(pos int32, planIndex int16) bool {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return false
+	}
+	tile := &w.model.Tiles[pos]
+	plans := unitFactoryPlansByName(w.blockNameByID(int16(tile.Block)))
+	if len(plans) == 0 {
+		return false
+	}
+	st, hasState := w.factoryStates[pos]
+	current := unitFactoryCurrentPlanIndex(st, hasState, plans)
+	target := planIndex
+	if target >= 0 && int(target) >= len(plans) {
+		target = -1
+	}
+	if current == target {
+		if !hasState && current >= 0 {
+			st.CurrentPlan = current
+			if typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(plans[current].UnitName)); ok {
+				st.UnitType = typeID
+			}
+			w.factoryStates[pos] = st
+		}
+		return true
+	}
+	if target < 0 {
+		st.CurrentPlan = -1
+		st.Progress = 0
+		st.UnitType = 0
+		w.factoryStates[pos] = st
+		return true
+	}
+	st.CurrentPlan = target
+	st.Progress = 0
+	if typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(plans[target].UnitName)); ok {
+		st.UnitType = typeID
+	} else {
+		st.UnitType = 0
+	}
+	w.factoryStates[pos] = st
+	return true
+}
+
+func (w *World) configureUnitFactoryUnitLocked(pos int32, typeID int16) bool {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return false
+	}
+	tile := &w.model.Tiles[pos]
+	plans := unitFactoryPlansByName(w.blockNameByID(int16(tile.Block)))
+	if len(plans) == 0 {
+		return false
+	}
+	for i, plan := range plans {
+		resolved, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(plan.UnitName))
+		if ok && resolved == typeID {
+			return w.configureUnitFactoryPlanLocked(pos, int16(i))
+		}
+	}
+	return w.configureUnitFactoryPlanLocked(pos, -1)
+}
+
+func (w *World) unitFactoryConfigValueLocked(pos int32, tile *Tile) (int32, bool) {
+	if w == nil || w.model == nil || tile == nil {
+		return 0, false
+	}
+	plans := unitFactoryPlansByName(w.blockNameByID(int16(tile.Block)))
+	if len(plans) == 0 {
+		return 0, false
+	}
+	st, hasState := w.factoryStates[pos]
+	index := unitFactoryCurrentPlanIndex(st, hasState, plans)
+	return int32(index), true
+}
+
+func (w *World) unitFactorySelectedTypeLocked(pos int32, tile *Tile) (int16, bool) {
+	if w == nil || w.model == nil || tile == nil {
+		return 0, false
+	}
+	if st, ok := w.factoryStates[pos]; ok && st.UnitType > 0 {
+		return st.UnitType, true
+	}
+	plan, ok := w.unitFactorySelectedPlanLocked(pos, tile)
+	if !ok {
+		return 0, false
+	}
+	typeID, ok := w.resolveUnitTypeIDLocked(normalizeUnitName(plan.UnitName))
+	if !ok {
+		return 0, false
+	}
+	return typeID, true
+}
+
+func (w *World) unitFactoryProgressLocked(pos int32, tile *Tile) float32 {
+	if w == nil || w.model == nil || tile == nil {
+		return 0
+	}
+	st, ok := w.factoryStates[pos]
+	if !ok {
+		return 0
+	}
+	plan, planOK := w.unitFactorySelectedPlanLocked(pos, tile)
+	if !planOK || plan.TimeFrames <= 0 {
+		return maxf(st.Progress, 0)
+	}
+	if st.Progress < 0 {
+		return 0
+	}
+	if st.Progress > plan.TimeFrames {
+		return plan.TimeFrames
+	}
+	return st.Progress
 }
 
 func (w *World) newFactoryUnitPayloadLocked(tile *Tile, typeID int16) *payloadData {
@@ -138,9 +384,10 @@ func (w *World) newFactoryUnitPayloadLocked(tile *Tile, typeID int16) *payloadDa
 		return nil
 	}
 	unit := w.newProducedUnitEntityLocked(typeID, tile.Build.Team, float32(tile.X*8+4), float32(tile.Y*8+4), float32(tile.Rotation)*90)
-	sync := &protocol.UnitEntitySync{
+	entity := &protocol.UnitEntitySync{
 		Controller:     nil,
 		Health:         unit.Health,
+		BaseRotation:   unit.Rotation,
 		Rotation:       unit.Rotation,
 		Shield:         unit.Shield,
 		SpawnedByCore:  false,
@@ -151,11 +398,20 @@ func (w *World) newFactoryUnitPayloadLocked(tile *Tile, typeID int16) *payloadDa
 		X:              unit.X,
 		Y:              unit.Y,
 	}
+	entity.ApplyLayoutByName(w.unitNamesByID[typeID])
 	writer := protocol.NewWriter()
-	_ = protocol.WritePayload(writer, protocol.UnitPayload{
-		ClassID: sync.ClassID(),
-		Entity:  sync,
-	})
+	if err := writer.WriteBool(true); err != nil {
+		return nil
+	}
+	if err := writer.WriteByte(protocol.PayloadUnit); err != nil {
+		return nil
+	}
+	if err := writer.WriteByte(entity.ClassID()); err != nil {
+		return nil
+	}
+	if err := entity.WriteEntity(writer); err != nil {
+		return nil
+	}
 	return &payloadData{
 		Kind:       payloadKindUnit,
 		UnitTypeID: typeID,
@@ -336,22 +592,114 @@ func (w *World) ensureTeamInventory(team TeamID) {
 			inv[item] = seed
 		}
 	}
-	for _, cost := range blockCostByName {
-		for _, s := range cost {
+	addStackSeed := func(stacks []ItemStack) {
+		for _, s := range stacks {
 			addItemSeed(s.Item)
 		}
+	}
+	for _, cost := range blockCostByName {
+		addStackSeed(cost)
 	}
 	for _, cost := range w.blockCostsByName {
-		for _, s := range cost {
-			addItemSeed(s.Item)
+		addStackSeed(cost)
+	}
+	for _, plans := range unitFactoryPlansByBlockName {
+		for _, plan := range plans {
+			addStackSeed(plan.Cost)
 		}
 	}
-	for _, prof := range factoryByName {
-		for _, s := range prof.Cost {
-			addItemSeed(s.Item)
+	for _, prof := range crafterProfilesByBlockName {
+		addStackSeed(prof.InputItems)
+		addStackSeed(prof.OutputItems)
+	}
+	for _, prof := range separatorProfilesByBlockName {
+		addStackSeed(prof.InputItems)
+		addStackSeed(prof.Results)
+	}
+	for _, prof := range solidPumpProfilesByBlockName {
+		addItemSeed(prof.ItemConsume)
+	}
+	for _, item := range []ItemID{
+		copperItemID,
+		leadItemID,
+		metaglassItemID,
+		graphiteItemID,
+		sandItemID,
+		coalItemID,
+		titaniumItemID,
+		thoriumItemID,
+		scrapItemID,
+		siliconItemID,
+		plastaniumItemID,
+		phaseFabricItemID,
+		surgeAlloyItemID,
+		sporePodItemID,
+		blastCompoundItemID,
+		pyratiteItemID,
+		berylliumItemID,
+		tungstenItemID,
+		oxideItemID,
+		carbideItemID,
+		fissileMatterItemID,
+	} {
+		addItemSeed(item)
+	}
+	if w.model != nil {
+		for i := range w.model.Tiles {
+			tile := &w.model.Tiles[i]
+			if tile.Build == nil {
+				continue
+			}
+			for _, stack := range tile.Build.Items {
+				addItemSeed(stack.Item)
+			}
 		}
 	}
 	w.teamItems[team] = inv
+}
+
+func (w *World) stepFillItemsLocked() {
+	if w == nil || w.model == nil {
+		return
+	}
+	rules := w.rulesMgr.Get()
+	if rules == nil || len(w.teamPrimaryCore) == 0 {
+		return
+	}
+	for team, corePos := range w.teamPrimaryCore {
+		if team == 0 || !rules.teamFillItems(team) {
+			continue
+		}
+		if corePos < 0 || int(corePos) >= len(w.model.Tiles) {
+			continue
+		}
+		coreTile := &w.model.Tiles[corePos]
+		if coreTile.Build == nil || coreTile.Block == 0 {
+			continue
+		}
+		capacity := w.itemCapacityAtLocked(corePos)
+		if capacity <= 0 {
+			continue
+		}
+		w.ensureTeamInventory(team)
+		if len(w.teamItems[team]) == 0 {
+			continue
+		}
+		changed := make([]ItemID, 0, len(w.teamItems[team]))
+		for item := range w.teamItems[team] {
+			if item < 0 {
+				continue
+			}
+			if coreTile.Build.ItemAmount(item) == capacity {
+				continue
+			}
+			coreTile.Build.SetItemAmount(item, capacity)
+			changed = append(changed, item)
+		}
+		if len(changed) > 0 {
+			w.emitTeamCoreItemsLocked(team, changed)
+		}
+	}
 }
 
 func (w *World) syntheticTeamInventoryEnabledLocked(team TeamID) bool {
@@ -518,11 +866,306 @@ func (w *World) consumeBuildCost(team TeamID, blockID int16) bool {
 	return w.consumeItemsForTeam(team, scaled)
 }
 
+func (w *World) pendingBuildScaledCostLocked(blockID int16) []ItemStack {
+	if blockID <= 0 {
+		return nil
+	}
+	name := w.blockNameByID(blockID)
+	cost := w.buildCostByName(name)
+	if len(cost) == 0 {
+		return nil
+	}
+	return w.scaleBuildCost(cost, w.rulesMgr.Get())
+}
+
+func (w *World) ensurePendingBuildCostStateLocked(st *pendingBuildState) {
+	if st == nil || st.BlockID <= 0 {
+		return
+	}
+	if len(st.BuildCost) == len(st.ItemsLeft) &&
+		len(st.BuildCost) == len(st.Accumulator) &&
+		len(st.BuildCost) == len(st.TotalAccumulator) &&
+		len(st.BuildCost) > 0 {
+		return
+	}
+	scaled := w.pendingBuildScaledCostLocked(st.BlockID)
+	st.BuildCost = append([]ItemStack(nil), scaled...)
+	st.ItemsLeft = make([]int32, len(scaled))
+	st.Accumulator = make([]float32, len(scaled))
+	st.TotalAccumulator = make([]float32, len(scaled))
+	for i, stack := range scaled {
+		st.ItemsLeft[i] = stack.Amount
+	}
+}
+
+func (w *World) pendingBuildHasStartItemsLocked(team TeamID, blockID int16) bool {
+	if team == 0 || blockID <= 0 {
+		return false
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return true
+	}
+	for _, stack := range w.pendingBuildScaledCostLocked(blockID) {
+		if stack.Amount <= 0 {
+			continue
+		}
+		if w.availableBuildItemAmountLocked(team, stack.Item) < 1 {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *World) availableBuildItemAmountLocked(team TeamID, item ItemID) int32 {
+	if team == 0 {
+		return 0
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return unlimitedUnitCap
+	}
+	if cores := w.teamCoreBuildsLocked(team); len(cores) > 0 {
+		total := int32(0)
+		for _, core := range cores {
+			total += core.ItemAmount(item)
+		}
+		return total
+	}
+	if !w.syntheticTeamInventoryEnabledLocked(team) {
+		return 0
+	}
+	w.ensureTeamInventory(team)
+	return w.teamItems[team][item]
+}
+
+func (w *World) consumeBuildItemAmountLocked(team TeamID, item ItemID, amount int32) int32 {
+	if team == 0 || amount <= 0 {
+		return 0
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return amount
+	}
+	if cores := w.teamCoreBuildsLocked(team); len(cores) > 0 {
+		remaining := amount
+		for _, core := range cores {
+			if remaining <= 0 {
+				break
+			}
+			available := core.ItemAmount(item)
+			if available <= 0 {
+				continue
+			}
+			use := remaining
+			if available < use {
+				use = available
+			}
+			if core.RemoveItem(item, use) {
+				remaining -= use
+			}
+		}
+		removed := amount - remaining
+		if removed > 0 {
+			w.emitTeamCoreItemsLocked(team, []ItemID{item})
+		}
+		return removed
+	}
+	if !w.syntheticTeamInventoryEnabledLocked(team) {
+		return 0
+	}
+	w.ensureTeamInventory(team)
+	available := w.teamItems[team][item]
+	if available <= 0 {
+		return 0
+	}
+	if available < amount {
+		amount = available
+	}
+	w.teamItems[team][item] -= amount
+	w.entityEvents = append(w.entityEvents, EntityEvent{
+		Kind:       EntityEventTeamItems,
+		BuildTeam:  team,
+		ItemID:     item,
+		ItemAmount: w.teamItems[team][item],
+	})
+	return amount
+}
+
+func (w *World) checkPendingBuildRequiredLocked(team TeamID, st *pendingBuildState, amount float32, remove bool) float32 {
+	if st == nil || amount <= 0 {
+		return 0
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return amount
+	}
+	maxProgress := amount
+	for i, stack := range st.BuildCost {
+		if i >= len(st.ItemsLeft) || stack.Amount <= 0 || st.ItemsLeft[i] <= 0 {
+			continue
+		}
+		required := int32(st.Accumulator[i])
+		available := w.availableBuildItemAmountLocked(team, stack.Item)
+		if available == 0 {
+			maxProgress = 0
+			continue
+		}
+		if required <= 0 {
+			continue
+		}
+		maxUse := required
+		if available < maxUse {
+			maxUse = available
+		}
+		fraction := float32(maxUse) / float32(required)
+		maxProgress = minf(maxProgress, maxProgress*fraction)
+		st.Accumulator[i] -= float32(maxUse)
+		if st.Accumulator[i] < 0 {
+			st.Accumulator[i] = 0
+		}
+		if remove {
+			removed := w.consumeBuildItemAmountLocked(team, stack.Item, maxUse)
+			st.ItemsLeft[i] -= removed
+			if st.ItemsLeft[i] < 0 {
+				st.ItemsLeft[i] = 0
+			}
+		}
+	}
+	return maxProgress
+}
+
+func (w *World) applyVanillaBuildCostStepLocked(team TeamID, st *pendingBuildState, amount float32) float32 {
+	if st == nil || amount <= 0 {
+		return 0
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return amount
+	}
+	w.ensurePendingBuildCostStateLocked(st)
+	if len(st.BuildCost) == 0 {
+		return amount
+	}
+	maxProgress := w.checkPendingBuildRequiredLocked(team, st, amount, false)
+	for i, stack := range st.BuildCost {
+		if stack.Amount <= 0 {
+			continue
+		}
+		target := float32(stack.Amount)
+		add := minf(target*maxProgress, target-st.TotalAccumulator[i])
+		if add < 0 {
+			add = 0
+		}
+		st.Accumulator[i] += add
+		st.TotalAccumulator[i] = minf(st.TotalAccumulator[i]+target*maxProgress, target)
+	}
+	maxProgress = w.checkPendingBuildRequiredLocked(team, st, maxProgress, true)
+	if maxProgress < 0 {
+		maxProgress = 0
+	}
+	if maxProgress > amount {
+		maxProgress = amount
+	}
+	return maxProgress
+}
+
+func (w *World) finishPendingBuildCostLocked(team TeamID, st *pendingBuildState) bool {
+	if st == nil {
+		return false
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(team) {
+		return true
+	}
+	if len(st.BuildCost) == 0 {
+		return true
+	}
+	for i, stack := range st.BuildCost {
+		if i >= len(st.ItemsLeft) || st.ItemsLeft[i] <= 0 || stack.Amount <= 0 {
+			continue
+		}
+		if w.availableBuildItemAmountLocked(team, stack.Item) < st.ItemsLeft[i] {
+			return false
+		}
+	}
+	for i, stack := range st.BuildCost {
+		if i >= len(st.ItemsLeft) || st.ItemsLeft[i] <= 0 || stack.Amount <= 0 {
+			continue
+		}
+		need := st.ItemsLeft[i]
+		if need <= 0 {
+			continue
+		}
+		if removed := w.consumeBuildItemAmountLocked(team, stack.Item, need); removed != need {
+			st.ItemsLeft[i] -= removed
+			if st.ItemsLeft[i] < 0 {
+				st.ItemsLeft[i] = 0
+			}
+			return false
+		}
+		st.ItemsLeft[i] = 0
+	}
+	return true
+}
+
+func (w *World) refundPendingBuildConsumedLocked(st pendingBuildState) {
+	if st.Team == 0 {
+		return
+	}
+	rules := w.rulesMgr.Get()
+	if rules != nil && rules.teamInfiniteResources(st.Team) {
+		return
+	}
+	if len(st.BuildCost) == 0 || len(st.ItemsLeft) < len(st.BuildCost) {
+		return
+	}
+	refundStacks := make([]ItemStack, 0, len(st.BuildCost))
+	for i, stack := range st.BuildCost {
+		if stack.Amount <= 0 {
+			continue
+		}
+		consumed := stack.Amount - st.ItemsLeft[i]
+		if consumed <= 0 {
+			continue
+		}
+		refundStacks = append(refundStacks, ItemStack{Item: stack.Item, Amount: consumed})
+	}
+	w.addRefundStacksToTeamLocked(st.Team, refundStacks)
+}
+
 func (w *World) buildDurationSeconds(blockID int16, rules *Rules) float32 {
 	return w.buildDurationSecondsForTeam(blockID, 0, rules)
 }
 
 func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *Rules) float32 {
+	return w.buildDurationSecondsForOwnerLocked(blockID, 0, team, rules)
+}
+
+func (w *World) builderSpeedForOwnerLocked(owner int32, team TeamID) float32 {
+	builderSpeed := float32(0.5) // alpha buildSpeed in vanilla BuilderComp path
+	if owner != 0 && w.model != nil {
+		if st, ok := w.builderStates[owner]; ok && st.UnitID != 0 {
+			for i := range w.model.Entities {
+				if w.model.Entities[i].ID != st.UnitID {
+					continue
+				}
+				if speed := w.builderSpeedForUnitTypeLocked(w.model.Entities[i].TypeID); speed > 0 {
+					return speed
+				}
+				break
+			}
+		}
+	}
+	if team > 0 && w.teamBuilderSpeed != nil {
+		if v, ok := w.teamBuilderSpeed[team]; ok && v > 0 {
+			builderSpeed = v
+		}
+	}
+	return builderSpeed
+}
+
+func (w *World) buildDurationSecondsForOwnerLocked(blockID int16, owner int32, team TeamID, rules *Rules) float32 {
 	if rules != nil && (rules.InstantBuild || rules.Editor) {
 		return 0.01
 	}
@@ -546,21 +1189,9 @@ func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *R
 	}
 	// Match vanilla BuilderComp formula:
 	// bs = 1/buildCost * type.buildSpeed * buildSpeedMultiplier * rules.buildSpeed(team)
-	// Here "base" is buildCost/60, so divide by builder speed terms.
-	builderSpeed := float32(0.5) // alpha buildSpeed in official 155.4 UnitTypes.java
-	if team > 0 && w.teamBuilderSpeed != nil {
-		if v, ok := w.teamBuilderSpeed[team]; ok && v > 0 {
-			builderSpeed = v
-		}
-	}
-	if rules != nil && rules.UnitBuildSpeedMultiplier > 0 {
-		builderSpeed *= rules.UnitBuildSpeedMultiplier
-	}
-	if team > 0 && rules != nil {
-		if tr, ok := rules.teamRule(team); ok && tr.UnitBuildSpeedMultiplier > 0 {
-			builderSpeed *= tr.UnitBuildSpeedMultiplier
-		}
-	}
+	// Here "base" is buildCost/60, so divide only by unit buildSpeed and rules.buildSpeed(team).
+	// unitBuildSpeedMultiplier is for unit factories/spawners in vanilla, not BuilderComp.
+	builderSpeed := w.builderSpeedForOwnerLocked(owner, team)
 	if builderSpeed > 0 {
 		base /= builderSpeed
 	}
@@ -573,13 +1204,21 @@ func (w *World) buildDurationSecondsForTeam(blockID int16, team TeamID, rules *R
 }
 
 func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
-	if tile == nil {
+	team, refundStacks := w.deconstructRefundStacks(tile, fallbackTeam)
+	if team == 0 || len(refundStacks) == 0 {
 		return
+	}
+	w.addRefundStacksToTeamLocked(team, refundStacks)
+}
+
+func (w *World) deconstructRefundStacks(tile *Tile, fallbackTeam TeamID) (TeamID, []ItemStack) {
+	if tile == nil {
+		return 0, nil
 	}
 	name := w.blockNameByID(int16(tile.Block))
 	cost := w.buildCostByName(name)
 	if len(cost) == 0 {
-		return
+		return 0, nil
 	}
 	refundMul := float32(0.5)
 	rules := w.rulesMgr.Get()
@@ -587,8 +1226,8 @@ func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
 	if team == 0 {
 		team = fallbackTeam
 	}
-	if rules != nil && rules.teamInfiniteResources(team) {
-		return
+	if team == 0 || (rules != nil && rules.teamInfiniteResources(team)) {
+		return 0, nil
 	}
 	if rules != nil && rules.DeconstructRefundMultiplier > 0 {
 		refundMul = rules.DeconstructRefundMultiplier
@@ -604,16 +1243,88 @@ func (w *World) refundDeconstructCost(tile *Tile, fallbackTeam TeamID) {
 		}
 		refundStacks = append(refundStacks, ItemStack{Item: s.Item, Amount: refund})
 	}
-	if w.addItemsToTeamCoresLocked(team, refundStacks) {
+	return team, refundStacks
+}
+
+func (w *World) addRefundStacksToTeamLocked(team TeamID, stacks []ItemStack) {
+	if team == 0 || len(stacks) == 0 {
+		return
+	}
+	if w.addItemsToTeamCoresLocked(team, stacks) {
 		return
 	}
 	if !w.syntheticTeamInventoryEnabledLocked(team) {
 		return
 	}
 	w.ensureTeamInventory(team)
-	for _, stack := range refundStacks {
+	for _, stack := range stacks {
 		w.addTeamItems(team, stack.Item, stack.Amount)
 	}
+}
+
+func (w *World) applyVanillaDeconstructRefundStepLocked(team TeamID, refundStacks []ItemStack, amount float32, accum map[ItemID]float32, total map[ItemID]float32, refunded map[ItemID]int32) (map[ItemID]float32, map[ItemID]float32, map[ItemID]int32) {
+	if team == 0 || len(refundStacks) == 0 || amount <= 0 {
+		return accum, total, refunded
+	}
+	if accum == nil {
+		accum = make(map[ItemID]float32, len(refundStacks))
+	}
+	if total == nil {
+		total = make(map[ItemID]float32, len(refundStacks))
+	}
+	if refunded == nil {
+		refunded = make(map[ItemID]int32, len(refundStacks))
+	}
+	deltaStacks := make([]ItemStack, 0, len(refundStacks))
+	for _, stack := range refundStacks {
+		if stack.Amount <= 0 {
+			continue
+		}
+		target := float32(stack.Amount)
+		item := stack.Item
+		add := amount * target
+		if remain := target - total[item]; add > remain {
+			add = remain
+		}
+		if add < 0 {
+			add = 0
+		}
+		accum[item] += add
+		total[item] = minf(total[item]+amount*target, target)
+		accumulated := int32(accum[item])
+		if accumulated <= 0 {
+			continue
+		}
+		refunded[item] += accumulated
+		accum[item] -= float32(accumulated)
+		deltaStacks = append(deltaStacks, ItemStack{Item: item, Amount: accumulated})
+	}
+	w.addRefundStacksToTeamLocked(team, deltaStacks)
+	return accum, total, refunded
+}
+
+func (w *World) finishVanillaDeconstructRefundLocked(team TeamID, refundStacks []ItemStack, refunded map[ItemID]int32) map[ItemID]int32 {
+	if team == 0 || len(refundStacks) == 0 {
+		return refunded
+	}
+	if refunded == nil {
+		refunded = make(map[ItemID]int32, len(refundStacks))
+	}
+	deltaStacks := make([]ItemStack, 0, len(refundStacks))
+	for _, stack := range refundStacks {
+		if stack.Amount <= 0 {
+			continue
+		}
+		current := refunded[stack.Item]
+		if current >= stack.Amount {
+			continue
+		}
+		delta := stack.Amount - current
+		refunded[stack.Item] = stack.Amount
+		deltaStacks = append(deltaStacks, ItemStack{Item: stack.Item, Amount: delta})
+	}
+	w.addRefundStacksToTeamLocked(team, deltaStacks)
+	return refunded
 }
 
 func (w *World) refundBuildCost(team TeamID, blockID int16, mul float32) {

@@ -92,9 +92,10 @@ type World struct {
 	rulesMgr *RulesManager
 	wavesMgr *WaveManager
 
-	entityEvents []EntityEvent
-	bullets      []simBullet
-	bulletNextID int32
+	entityEvents      []EntityEvent
+	bullets           []simBullet
+	pendingMountShots []pendingMountShot
+	bulletNextID      int32
 
 	blockNamesByID      map[int16]string
 	unitNamesByID       map[int16]string
@@ -102,6 +103,7 @@ type World struct {
 	buildStates         map[int32]buildCombatState
 	pendingBuilds       map[int32]pendingBuildState
 	pendingBreaks       map[int32]pendingBreakState
+	buildRejectLogTick  map[int32]uint64
 	builderStates       map[int32]builderRuntimeState
 	factoryStates       map[int32]factoryState
 	drillStates         map[int32]drillRuntimeState
@@ -115,8 +117,11 @@ type World struct {
 	powerNetByPos       map[int32]int32
 	powerNetDirty       bool
 	powerStorageState   map[int32]float32
+	powerRequested      map[int32]float32
+	powerSupplied       map[int32]float32
 	powerGeneratorState map[int32]*powerGeneratorState
 	unitMountCDs        map[int32][]float32
+	unitMountStates     map[int32][]unitMountState
 	unitTargets         map[int32]targetTrackState
 	teamItems           map[TeamID]map[ItemID]int32
 	teamBuilderSpeed    map[TeamID]float32
@@ -157,11 +162,14 @@ type World struct {
 	turretTilePositions []int32
 	nextPlanOrder       uint64
 
-	unitProfilesByType     map[int16]weaponProfile
-	unitProfilesByName     map[string]weaponProfile
-	buildingProfilesByName map[string]buildingWeaponProfile
-	blockCostsByName       map[string][]ItemStack
-	blockBuildTimesByName  map[string]float32
+	unitProfilesByType      map[int16]weaponProfile
+	unitProfilesByName      map[string]weaponProfile
+	unitMountProfilesByName map[string][]unitWeaponMountProfile
+	buildingProfilesByName  map[string]buildingWeaponProfile
+	blockCostsByName        map[string][]ItemStack
+	blockBuildTimesByName   map[string]float32
+	statusProfilesByID      map[int16]statusEffectProfile
+	statusProfilesByName    map[string]statusEffectProfile
 }
 
 const (
@@ -192,15 +200,19 @@ type BuildSyncState struct {
 }
 
 type pendingBuildState struct {
-	Owner        int32
-	Team         TeamID
-	BlockID      int16
-	Rotation     int8
-	Config       any
-	QueueOrder   uint64
-	Progress     float32
-	VisualPlaced bool
-	LastHP       float32
+	Owner            int32
+	Team             TeamID
+	BlockID          int16
+	Rotation         int8
+	Config           any
+	QueueOrder       uint64
+	Progress         float32
+	VisualPlaced     bool
+	LastHP           float32
+	BuildCost        []ItemStack
+	ItemsLeft        []int32
+	Accumulator      []float32
+	TotalAccumulator []float32
 }
 
 type builderRuntimeState struct {
@@ -224,11 +236,19 @@ type pendingBreakState struct {
 	Progress    float32
 	MaxHealth   float32
 	LastHP      float32
+	RefundTeam  TeamID
+	RefundCost  []ItemStack
+	RefundAccum map[ItemID]float32
+	RefundTotal map[ItemID]float32
+	Refunded    map[ItemID]int32
 }
 
+const constructBlockHealthMax = float32(10)
+
 type factoryState struct {
-	Progress float32
-	UnitType int16
+	Progress    float32
+	UnitType    int16
+	CurrentPlan int16
 }
 
 type drillRuntimeState struct {
@@ -458,89 +478,155 @@ type BulletEvent struct {
 }
 
 type simBullet struct {
-	ID             int32
-	Team           TeamID
-	X              float32
-	Y              float32
-	VX             float32
-	VY             float32
-	Damage         float32
-	LifeSec        float32
-	AgeSec         float32
-	Radius         float32
-	HitUnits       bool
-	HitBuilds      bool
-	BulletType     int16
-	SplashRadius   float32
-	SlowSec        float32
-	SlowMul        float32
-	PierceRemain   int32
-	ChainCount     int32
-	ChainRange     float32
-	FragmentCount  int32
-	FragmentSpread float32
-	FragmentSpeed  float32
-	FragmentLife   float32
-	ShootEffect    string
-	SmokeEffect    string
-	HitEffect      string
-	DespawnEffect  string
-	TargetAir      bool
-	TargetGround   bool
-	TargetPriority string
+	ID                   int32
+	Team                 TeamID
+	X                    float32
+	Y                    float32
+	VX                   float32
+	VY                   float32
+	Damage               float32
+	SplashDamage         float32
+	LifeSec              float32
+	AgeSec               float32
+	Radius               float32
+	HitUnits             bool
+	HitBuilds            bool
+	BulletType           int16
+	BulletClass          string
+	SplashRadius         float32
+	BuildingDamage       float32
+	SlowSec              float32
+	SlowMul              float32
+	PierceRemain         int32
+	PierceBuilding       bool
+	ChainCount           int32
+	ChainRange           float32
+	FragmentCount        int32
+	FragmentSpread       float32
+	FragmentSpeed        float32
+	FragmentLife         float32
+	FragmentRand         float32
+	FragmentAngle        float32
+	FragmentVelMin       float32
+	FragmentVelMax       float32
+	FragmentLifeMin      float32
+	FragmentLifeMax      float32
+	FragmentBullet       *bulletRuntimeProfile
+	StatusID             int16
+	StatusName           string
+	StatusDuration       float32
+	ShootEffect          string
+	SmokeEffect          string
+	HitEffect            string
+	DespawnEffect        string
+	TargetAir            bool
+	TargetGround         bool
+	TargetPriority       string
+	HelixScl             float32
+	HelixMag             float32
+	HelixOffset          float32
+	AimX                 float32
+	AimY                 float32
+	KeepAlive            bool
+	DamageTick           float32
+	BeamLength           float32
+	BeamDamageInterval   float32
+	BeamOptimalLifeFract float32
+	BeamFadeTime         float32
 }
 
 type weaponProfile struct {
-	FireMode        string // projectile|beam
-	Range           float32
-	Damage          float32
-	Interval        float32
-	BulletType      int16
-	BulletSpeed     float32
-	SplashRadius    float32
-	SlowSec         float32
-	SlowMul         float32
-	Pierce          int32
-	ChainCount      int32
-	ChainRange      float32
-	FragmentCount   int32
-	FragmentSpread  float32
-	FragmentSpeed   float32
-	FragmentLife    float32
-	ShootEffect     string
-	SmokeEffect     string
-	HitEffect       string
-	DespawnEffect   string
-	PreferBuildings bool
-	TargetAir       bool
-	TargetGround    bool
-	TargetPriority  string
-	HitBuildings    bool
+	FireMode             string // projectile|beam
+	Range                float32
+	Damage               float32
+	SplashDamage         float32
+	Interval             float32
+	BulletType           int16
+	BulletClass          string
+	BulletSpeed          float32
+	BulletLifetime       float32
+	BulletHitSize        float32
+	SplashRadius         float32
+	BuildingDamage       float32
+	SlowSec              float32
+	SlowMul              float32
+	Pierce               int32
+	PierceBuilding       bool
+	ChainCount           int32
+	ChainRange           float32
+	StatusID             int16
+	StatusName           string
+	StatusDuration       float32
+	ShootStatusID        int16
+	ShootStatusName      string
+	ShootStatusDuration  float32
+	FragmentCount        int32
+	FragmentSpread       float32
+	FragmentSpeed        float32
+	FragmentLife         float32
+	FragmentRandomSpread float32
+	FragmentAngle        float32
+	FragmentVelocityMin  float32
+	FragmentVelocityMax  float32
+	FragmentLifeMin      float32
+	FragmentLifeMax      float32
+	FragmentBullet       *bulletRuntimeProfile
+	ShootEffect          string
+	SmokeEffect          string
+	HitEffect            string
+	DespawnEffect        string
+	PreferBuildings      bool
+	TargetAir            bool
+	TargetGround         bool
+	TargetPriority       string
+	HitBuildings         bool
 }
 
 type buildingWeaponProfile struct {
-	FireMode       string // projectile|beam
-	Range          float32
-	Damage         float32
-	Interval       float32
-	BulletType     int16
-	BulletSpeed    float32
-	SplashRadius   float32
-	SlowSec        float32
-	SlowMul        float32
-	Pierce         int32
-	ChainCount     int32
-	ChainRange     float32
-	ShootEffect    string
-	SmokeEffect    string
-	HitEffect      string
-	DespawnEffect  string
-	HitBuildings   bool
-	TargetBuilds   bool
-	TargetAir      bool
-	TargetGround   bool
-	TargetPriority string
-	MinTargetTeam  TeamID
+	ClassName            string
+	FireMode             string // projectile|beam
+	Range                float32
+	Damage               float32
+	SplashDamage         float32
+	Interval             float32
+	BulletType           int16
+	BulletClass          string
+	BulletSpeed          float32
+	BulletLifetime       float32
+	BulletHitSize        float32
+	SplashRadius         float32
+	BuildingDamage       float32
+	SlowSec              float32
+	SlowMul              float32
+	Pierce               int32
+	PierceBuilding       bool
+	ChainCount           int32
+	ChainRange           float32
+	StatusID             int16
+	StatusName           string
+	StatusDuration       float32
+	FragmentCount        int32
+	FragmentSpread       float32
+	FragmentSpeed        float32
+	FragmentLife         float32
+	FragmentRandomSpread float32
+	FragmentAngle        float32
+	FragmentVelocityMin  float32
+	FragmentVelocityMax  float32
+	FragmentLifeMin      float32
+	FragmentLifeMax      float32
+	FragmentBullet       *bulletRuntimeProfile
+	Bullet               *bulletRuntimeProfile
+	ShootEffect          string
+	SmokeEffect          string
+	HitEffect            string
+	DespawnEffect        string
+	HitBuildings         bool
+	TargetBuilds         bool
+	TargetAir            bool
+	TargetGround         bool
+	TargetPriority       string
+	MinTargetTeam        TeamID
 
 	AmmoCapacity float32
 	AmmoRegen    float32
@@ -552,21 +638,40 @@ type buildingWeaponProfile struct {
 
 	BurstShots   int32
 	BurstSpacing float32
+
+	ContinuousHold bool
+	AimChangeSpeed float32
+	ShootDuration  float32
 }
 
 type buildCombatState struct {
-	Cooldown    float32
-	BurstRemain int32
-	BurstDelay  float32
-	Ammo        float32
-	Power       float32
-	TargetID    int32
-	RetargetCD  float32
+	Cooldown       float32
+	BurstRemain    int32
+	BurstDelay     float32
+	Ammo           float32
+	Power          float32
+	TargetID       int32
+	RetargetCD     float32
+	BeamBulletID   int32
+	BeamHoldRemain float32
+	BeamLastLength float32
 }
 
 type targetTrackState struct {
 	TargetID   int32
 	RetargetCD float32
+}
+
+type pendingMountShot struct {
+	EntityID    int32
+	MountIndex  int
+	DelaySec    float32
+	XOffset     float32
+	YOffset     float32
+	AngleOffset float32
+	HelixScl    float32
+	HelixMag    float32
+	HelixOffset float32
 }
 
 type unitWeaponMountProfile struct {
@@ -577,6 +682,120 @@ type unitWeaponMountProfile struct {
 	BulletSpeedMul  float32
 	BulletType      int16 // -1 means inherit entity bullet type
 	SplashRadiusMul float32
+
+	ClassName            string
+	FireMode             string
+	Range                float32
+	Damage               float32
+	SplashDamage         float32
+	Interval             float32
+	BulletClass          string
+	BulletSpeed          float32
+	BulletLifetime       float32
+	BulletHitSize        float32
+	SplashRadius         float32
+	BuildingDamage       float32
+	SlowSec              float32
+	SlowMul              float32
+	Pierce               int32
+	PierceBuilding       bool
+	ChainCount           int32
+	ChainRange           float32
+	StatusID             int16
+	StatusName           string
+	StatusDuration       float32
+	ShootStatusID        int16
+	ShootStatusName      string
+	ShootStatusDuration  float32
+	FragmentCount        int32
+	FragmentSpread       float32
+	FragmentSpeed        float32
+	FragmentLife         float32
+	FragmentRandomSpread float32
+	FragmentAngle        float32
+	FragmentVelocityMin  float32
+	FragmentVelocityMax  float32
+	FragmentLifeMin      float32
+	FragmentLifeMax      float32
+	FragmentBullet       *bulletRuntimeProfile
+	ShootEffect          string
+	SmokeEffect          string
+	HitEffect            string
+	DespawnEffect        string
+	PreferBuildings      bool
+	TargetAir            bool
+	TargetGround         bool
+	TargetPriority       string
+	HitBuildings         bool
+	X                    float32
+	Y                    float32
+	ShootX               float32
+	ShootY               float32
+	Rotate               bool
+	RotateSpeed          float32
+	BaseRotation         float32
+	Mirror               bool
+	Alternate            bool
+	FlipSprite           bool
+	OtherSide            int32
+	Controllable         bool
+	AIControllable       bool
+	AutoTarget           bool
+	PredictTarget        bool
+	UseAttackRange       bool
+	AlwaysShooting       bool
+	NoAttack             bool
+	TargetInterval       float32
+	TargetSwitchInterval float32
+	ShootCone            float32
+	MinShootVelocity     float32
+	Inaccuracy           float32
+	VelocityRnd          float32
+	XRand                float32
+	YRand                float32
+	ExtraVelocity        float32
+	RotationLimit        float32
+	MinWarmup            float32
+	ShootWarmupSpeed     float32
+	LinearWarmup         bool
+	AimChangeSpeed       float32
+	Continuous           bool
+	AlwaysContinuous     bool
+	PointDefense         bool
+	RepairBeam           bool
+	TargetUnits          bool
+	TargetBuildings      bool
+	RepairSpeed          float32
+	FractionRepairSpeed  float32
+	ShootPattern         string
+	ShootShots           int32
+	ShootFirstShotDelay  float32
+	ShootShotDelay       float32
+	ShootSpread          float32
+	ShootBarrels         int32
+	ShootBarrelOffset    int32
+	ShootPatternMirror   bool
+	ShootHelixScl        float32
+	ShootHelixMag        float32
+	ShootHelixOffset     float32
+	HitRadius            float32
+	Bullet               *bulletRuntimeProfile
+}
+
+type unitMountState struct {
+	Reload         float32
+	Rotation       float32
+	TargetRotation float32
+	AimX           float32
+	AimY           float32
+	Side           bool
+	Warmup         float32
+	BarrelCounter  int32
+	TargetID       int32
+	TargetBuildPos int32
+	RetargetCD     float32
+	BeamBulletID   int32
+	LastBeamLength float32
 }
 
 type vanillaProfilesFile struct {
@@ -584,6 +803,7 @@ type vanillaProfilesFile struct {
 	UnitsByName []vanillaUnitProfile   `json:"units_by_name"`
 	Turrets     []vanillaTurretProfile `json:"turrets"`
 	Blocks      []vanillaBlockProfile  `json:"blocks"`
+	Statuses    []vanillaStatusProfile `json:"statuses"`
 }
 
 type vanillaBlockRequirement struct {
@@ -601,91 +821,293 @@ type vanillaBlockProfile struct {
 }
 
 type vanillaUnitProfile struct {
-	Name            string  `json:"name"`
-	TypeID          int16   `json:"type_id"`
-	FireMode        string  `json:"fire_mode"`
-	Range           float32 `json:"range"`
-	Damage          float32 `json:"damage"`
-	Interval        float32 `json:"interval"`
-	BulletType      int16   `json:"bullet_type"`
-	BulletSpeed     float32 `json:"bullet_speed"`
-	SplashRadius    float32 `json:"splash_radius"`
-	SlowSec         float32 `json:"slow_sec"`
-	SlowMul         float32 `json:"slow_mul"`
-	Pierce          int32   `json:"pierce"`
-	ChainCount      int32   `json:"chain_count"`
-	ChainRange      float32 `json:"chain_range"`
-	FragmentCount   int32   `json:"fragment_count"`
-	FragmentSpread  float32 `json:"fragment_spread"`
-	FragmentSpeed   float32 `json:"fragment_speed"`
-	FragmentLife    float32 `json:"fragment_life"`
-	ShootEffect     string  `json:"shoot_effect,omitempty"`
-	SmokeEffect     string  `json:"smoke_effect,omitempty"`
-	HitEffect       string  `json:"hit_effect,omitempty"`
-	DespawnEffect   string  `json:"despawn_effect,omitempty"`
-	PreferBuildings bool    `json:"prefer_buildings"`
-	TargetAir       bool    `json:"target_air"`
-	TargetGround    bool    `json:"target_ground"`
-	TargetPriority  string  `json:"target_priority"`
-	HitBuildings    bool    `json:"hit_buildings"`
-	HitRadius       float32 `json:"hit_radius"`
+	Name                     string                      `json:"name"`
+	TypeID                   int16                       `json:"type_id"`
+	FireMode                 string                      `json:"fire_mode"`
+	Range                    float32                     `json:"range"`
+	Damage                   float32                     `json:"damage"`
+	SplashDamage             float32                     `json:"splash_damage"`
+	Interval                 float32                     `json:"interval"`
+	BulletType               int16                       `json:"bullet_type"`
+	BulletSpeed              float32                     `json:"bullet_speed"`
+	BulletLifetime           float32                     `json:"bullet_lifetime"`
+	BulletHitSize            float32                     `json:"bullet_hit_size"`
+	SplashRadius             float32                     `json:"splash_radius"`
+	BuildingDamageMultiplier float32                     `json:"building_damage_multiplier"`
+	SlowSec                  float32                     `json:"slow_sec"`
+	SlowMul                  float32                     `json:"slow_mul"`
+	Pierce                   int32                       `json:"pierce"`
+	PierceBuilding           bool                        `json:"pierce_building"`
+	ChainCount               int32                       `json:"chain_count"`
+	ChainRange               float32                     `json:"chain_range"`
+	StatusID                 int16                       `json:"status_id"`
+	StatusName               string                      `json:"status_name"`
+	StatusDuration           float32                     `json:"status_duration"`
+	ShootStatusID            int16                       `json:"shoot_status_id"`
+	ShootStatusName          string                      `json:"shoot_status_name"`
+	ShootStatusDuration      float32                     `json:"shoot_status_duration"`
+	FragmentCount            int32                       `json:"frag_bullets"`
+	FragmentSpread           float32                     `json:"frag_spread"`
+	FragmentSpeed            float32                     `json:"fragment_speed"`
+	FragmentLife             float32                     `json:"fragment_life"`
+	FragmentRandomSpread     float32                     `json:"frag_random_spread"`
+	FragmentAngle            float32                     `json:"frag_angle"`
+	FragmentVelocityMin      float32                     `json:"frag_velocity_min"`
+	FragmentVelocityMax      float32                     `json:"frag_velocity_max"`
+	FragmentLifeMin          float32                     `json:"frag_life_min"`
+	FragmentLifeMax          float32                     `json:"frag_life_max"`
+	FragmentBullet           *vanillaBulletProfile       `json:"frag_bullet,omitempty"`
+	ShootEffect              string                      `json:"shoot_effect,omitempty"`
+	SmokeEffect              string                      `json:"smoke_effect,omitempty"`
+	HitEffect                string                      `json:"hit_effect,omitempty"`
+	DespawnEffect            string                      `json:"despawn_effect,omitempty"`
+	PreferBuildings          bool                        `json:"prefer_buildings"`
+	TargetAir                bool                        `json:"target_air"`
+	TargetGround             bool                        `json:"target_ground"`
+	TargetPriority           string                      `json:"target_priority"`
+	HitBuildings             bool                        `json:"hit_buildings"`
+	HitRadius                float32                     `json:"hit_radius"`
+	Bullet                   *vanillaBulletProfile       `json:"bullet,omitempty"`
+	Mounts                   []vanillaWeaponMountProfile `json:"mounts,omitempty"`
 }
 
 type vanillaTurretProfile struct {
-	Name           string  `json:"name"`
-	FireMode       string  `json:"fire_mode"`
-	Range          float32 `json:"range"`
-	Damage         float32 `json:"damage"`
-	Interval       float32 `json:"interval"`
-	BulletType     int16   `json:"bullet_type"`
-	BulletSpeed    float32 `json:"bullet_speed"`
-	SplashRadius   float32 `json:"splash_radius"`
-	SlowSec        float32 `json:"slow_sec"`
-	SlowMul        float32 `json:"slow_mul"`
-	Pierce         int32   `json:"pierce"`
-	ChainCount     int32   `json:"chain_count"`
-	ChainRange     float32 `json:"chain_range"`
-	ShootEffect    string  `json:"shoot_effect,omitempty"`
-	SmokeEffect    string  `json:"smoke_effect,omitempty"`
-	HitEffect      string  `json:"hit_effect,omitempty"`
-	DespawnEffect  string  `json:"despawn_effect,omitempty"`
-	HitBuildings   bool    `json:"hit_buildings"`
-	TargetBuilds   bool    `json:"target_builds"`
-	TargetAir      bool    `json:"target_air"`
-	TargetGround   bool    `json:"target_ground"`
-	TargetPriority string  `json:"target_priority"`
-	AmmoCapacity   float32 `json:"ammo_capacity"`
-	AmmoRegen      float32 `json:"ammo_regen"`
-	AmmoPerShot    float32 `json:"ammo_per_shot"`
-	PowerCapacity  float32 `json:"power_capacity"`
-	PowerRegen     float32 `json:"power_regen"`
-	PowerPerShot   float32 `json:"power_per_shot"`
-	BurstShots     int32   `json:"burst_shots"`
-	BurstSpacing   float32 `json:"burst_spacing"`
+	ClassName                string                `json:"class_name,omitempty"`
+	Name                     string                `json:"name"`
+	FireMode                 string                `json:"fire_mode"`
+	Range                    float32               `json:"range"`
+	Damage                   float32               `json:"damage"`
+	SplashDamage             float32               `json:"splash_damage"`
+	Interval                 float32               `json:"interval"`
+	BulletType               int16                 `json:"bullet_type"`
+	BulletSpeed              float32               `json:"bullet_speed"`
+	BulletLifetime           float32               `json:"bullet_lifetime"`
+	BulletHitSize            float32               `json:"bullet_hit_size"`
+	SplashRadius             float32               `json:"splash_radius"`
+	BuildingDamageMultiplier float32               `json:"building_damage_multiplier"`
+	SlowSec                  float32               `json:"slow_sec"`
+	SlowMul                  float32               `json:"slow_mul"`
+	Pierce                   int32                 `json:"pierce"`
+	PierceBuilding           bool                  `json:"pierce_building"`
+	ChainCount               int32                 `json:"chain_count"`
+	ChainRange               float32               `json:"chain_range"`
+	StatusID                 int16                 `json:"status_id"`
+	StatusName               string                `json:"status_name"`
+	StatusDuration           float32               `json:"status_duration"`
+	FragmentCount            int32                 `json:"frag_bullets"`
+	FragmentSpread           float32               `json:"frag_spread"`
+	FragmentSpeed            float32               `json:"fragment_speed"`
+	FragmentLife             float32               `json:"fragment_life"`
+	FragmentRandomSpread     float32               `json:"frag_random_spread"`
+	FragmentAngle            float32               `json:"frag_angle"`
+	FragmentVelocityMin      float32               `json:"frag_velocity_min"`
+	FragmentVelocityMax      float32               `json:"frag_velocity_max"`
+	FragmentLifeMin          float32               `json:"frag_life_min"`
+	FragmentLifeMax          float32               `json:"frag_life_max"`
+	FragmentBullet           *vanillaBulletProfile `json:"frag_bullet,omitempty"`
+	ShootEffect              string                `json:"shoot_effect,omitempty"`
+	SmokeEffect              string                `json:"smoke_effect,omitempty"`
+	HitEffect                string                `json:"hit_effect,omitempty"`
+	DespawnEffect            string                `json:"despawn_effect,omitempty"`
+	HitBuildings             bool                  `json:"hit_buildings"`
+	TargetBuilds             bool                  `json:"target_builds"`
+	TargetAir                bool                  `json:"target_air"`
+	TargetGround             bool                  `json:"target_ground"`
+	TargetPriority           string                `json:"target_priority"`
+	AmmoCapacity             float32               `json:"ammo_capacity"`
+	AmmoRegen                float32               `json:"ammo_regen"`
+	AmmoPerShot              float32               `json:"ammo_per_shot"`
+	PowerCapacity            float32               `json:"power_capacity"`
+	PowerRegen               float32               `json:"power_regen"`
+	PowerPerShot             float32               `json:"power_per_shot"`
+	BurstShots               int32                 `json:"burst_shots"`
+	BurstSpacing             float32               `json:"burst_spacing"`
+	ContinuousHold           bool                  `json:"continuous_hold"`
+	AimChangeSpeed           float32               `json:"aim_change_speed"`
+	ShootDuration            float32               `json:"shoot_duration"`
+	Bullet                   *vanillaBulletProfile `json:"bullet,omitempty"`
+}
+
+type vanillaBulletProfile struct {
+	ClassName                string                `json:"class_name,omitempty"`
+	Damage                   float32               `json:"damage"`
+	SplashDamage             float32               `json:"splash_damage"`
+	BulletType               int16                 `json:"bullet_type"`
+	Speed                    float32               `json:"speed"`
+	Lifetime                 float32               `json:"lifetime"`
+	HitSize                  float32               `json:"hit_size"`
+	SplashRadius             float32               `json:"splash_radius"`
+	BuildingDamageMultiplier float32               `json:"building_damage_multiplier"`
+	Pierce                   int32                 `json:"pierce"`
+	PierceBuilding           bool                  `json:"pierce_building"`
+	StatusID                 int16                 `json:"status_id"`
+	StatusName               string                `json:"status_name"`
+	StatusDuration           float32               `json:"status_duration"`
+	HitBuildings             bool                  `json:"hit_buildings"`
+	TargetAir                bool                  `json:"target_air"`
+	TargetGround             bool                  `json:"target_ground"`
+	ShootEffect              string                `json:"shoot_effect,omitempty"`
+	SmokeEffect              string                `json:"smoke_effect,omitempty"`
+	HitEffect                string                `json:"hit_effect,omitempty"`
+	DespawnEffect            string                `json:"despawn_effect,omitempty"`
+	Length                   float32               `json:"length"`
+	DamageInterval           float32               `json:"damage_interval"`
+	OptimalLifeFract         float32               `json:"optimal_life_fract"`
+	FadeTime                 float32               `json:"fade_time"`
+	FragBullets              int32                 `json:"frag_bullets"`
+	FragSpread               float32               `json:"frag_spread"`
+	FragRandomSpread         float32               `json:"frag_random_spread"`
+	FragAngle                float32               `json:"frag_angle"`
+	FragVelocityMin          float32               `json:"frag_velocity_min"`
+	FragVelocityMax          float32               `json:"frag_velocity_max"`
+	FragLifeMin              float32               `json:"frag_life_min"`
+	FragLifeMax              float32               `json:"frag_life_max"`
+	FragBullet               *vanillaBulletProfile `json:"frag_bullet,omitempty"`
+}
+
+type vanillaWeaponMountProfile struct {
+	ClassName                string                `json:"class_name,omitempty"`
+	FireMode                 string                `json:"fire_mode"`
+	Range                    float32               `json:"range"`
+	Damage                   float32               `json:"damage"`
+	SplashDamage             float32               `json:"splash_damage"`
+	Interval                 float32               `json:"interval"`
+	BulletType               int16                 `json:"bullet_type"`
+	BulletSpeed              float32               `json:"bullet_speed"`
+	BulletLifetime           float32               `json:"bullet_lifetime"`
+	BulletHitSize            float32               `json:"bullet_hit_size"`
+	SplashRadius             float32               `json:"splash_radius"`
+	BuildingDamageMultiplier float32               `json:"building_damage_multiplier"`
+	Pierce                   int32                 `json:"pierce"`
+	PierceBuilding           bool                  `json:"pierce_building"`
+	StatusID                 int16                 `json:"status_id"`
+	StatusName               string                `json:"status_name"`
+	StatusDuration           float32               `json:"status_duration"`
+	FragBullets              int32                 `json:"frag_bullets"`
+	FragSpread               float32               `json:"frag_spread"`
+	FragRandomSpread         float32               `json:"frag_random_spread"`
+	FragAngle                float32               `json:"frag_angle"`
+	FragVelocityMin          float32               `json:"frag_velocity_min"`
+	FragVelocityMax          float32               `json:"frag_velocity_max"`
+	FragLifeMin              float32               `json:"frag_life_min"`
+	FragLifeMax              float32               `json:"frag_life_max"`
+	FragBullet               *vanillaBulletProfile `json:"frag_bullet,omitempty"`
+	TargetAir                bool                  `json:"target_air"`
+	TargetGround             bool                  `json:"target_ground"`
+	HitBuildings             bool                  `json:"hit_buildings"`
+	PreferBuildings          bool                  `json:"prefer_buildings"`
+	HitRadius                float32               `json:"hit_radius"`
+	ShootStatusID            int16                 `json:"shoot_status_id"`
+	ShootStatusName          string                `json:"shoot_status_name"`
+	ShootStatusDuration      float32               `json:"shoot_status_duration"`
+	ShootEffect              string                `json:"shoot_effect,omitempty"`
+	SmokeEffect              string                `json:"smoke_effect,omitempty"`
+	HitEffect                string                `json:"hit_effect,omitempty"`
+	DespawnEffect            string                `json:"despawn_effect,omitempty"`
+	Bullet                   *vanillaBulletProfile `json:"bullet,omitempty"`
+	X                        float32               `json:"x"`
+	Y                        float32               `json:"y"`
+	ShootX                   float32               `json:"shoot_x"`
+	ShootY                   float32               `json:"shoot_y"`
+	Rotate                   bool                  `json:"rotate"`
+	RotateSpeed              float32               `json:"rotate_speed"`
+	BaseRotation             float32               `json:"base_rotation"`
+	Mirror                   bool                  `json:"mirror"`
+	Alternate                bool                  `json:"alternate"`
+	FlipSprite               bool                  `json:"flip_sprite"`
+	OtherSide                int32                 `json:"other_side"`
+	Controllable             bool                  `json:"controllable"`
+	AIControllable           bool                  `json:"ai_controllable"`
+	AutoTarget               bool                  `json:"auto_target"`
+	PredictTarget            bool                  `json:"predict_target"`
+	UseAttackRange           bool                  `json:"use_attack_range"`
+	AlwaysShooting           bool                  `json:"always_shooting"`
+	NoAttack                 bool                  `json:"no_attack"`
+	TargetInterval           float32               `json:"target_interval"`
+	TargetSwitchInterval     float32               `json:"target_switch_interval"`
+	ShootCone                float32               `json:"shoot_cone"`
+	MinShootVelocity         float32               `json:"min_shoot_velocity"`
+	Inaccuracy               float32               `json:"inaccuracy"`
+	VelocityRnd              float32               `json:"velocity_rnd"`
+	XRand                    float32               `json:"x_rand"`
+	YRand                    float32               `json:"y_rand"`
+	ExtraVelocity            float32               `json:"extra_velocity"`
+	RotationLimit            float32               `json:"rotation_limit"`
+	MinWarmup                float32               `json:"min_warmup"`
+	ShootWarmupSpeed         float32               `json:"shoot_warmup_speed"`
+	LinearWarmup             bool                  `json:"linear_warmup"`
+	AimChangeSpeed           float32               `json:"aim_change_speed"`
+	Continuous               bool                  `json:"continuous"`
+	AlwaysContinuous         bool                  `json:"always_continuous"`
+	PointDefense             bool                  `json:"point_defense"`
+	RepairBeam               bool                  `json:"repair_beam"`
+	TargetUnits              bool                  `json:"target_units"`
+	TargetBuildings          bool                  `json:"target_buildings"`
+	RepairSpeed              float32               `json:"repair_speed"`
+	FractionRepairSpeed      float32               `json:"fraction_repair_speed"`
+	ShootPattern             string                `json:"shoot_pattern,omitempty"`
+	ShootShots               int32                 `json:"shoot_shots"`
+	ShootFirstShotDelay      float32               `json:"shoot_first_shot_delay"`
+	ShootShotDelay           float32               `json:"shoot_shot_delay"`
+	ShootSpread              float32               `json:"shoot_spread"`
+	ShootBarrels             int32                 `json:"shoot_barrels"`
+	ShootBarrelOffset        int32                 `json:"shoot_barrel_offset"`
+	ShootPatternMirror       bool                  `json:"shoot_pattern_mirror"`
+	ShootHelixScl            float32               `json:"shoot_helix_scl"`
+	ShootHelixMag            float32               `json:"shoot_helix_mag"`
+	ShootHelixOffset         float32               `json:"shoot_helix_offset"`
+}
+
+type vanillaStatusProfile struct {
+	ID                   int16    `json:"id"`
+	Name                 string   `json:"name"`
+	DamageMultiplier     float32  `json:"damage_multiplier"`
+	HealthMultiplier     float32  `json:"health_multiplier"`
+	SpeedMultiplier      float32  `json:"speed_multiplier"`
+	ReloadMultiplier     float32  `json:"reload_multiplier"`
+	BuildSpeedMultiplier float32  `json:"build_speed_multiplier"`
+	DragMultiplier       float32  `json:"drag_multiplier"`
+	TransitionDamage     float32  `json:"transition_damage"`
+	Damage               float32  `json:"damage"`
+	IntervalDamageTime   float32  `json:"interval_damage_time"`
+	IntervalDamage       float32  `json:"interval_damage"`
+	IntervalDamagePierce bool     `json:"interval_damage_pierce"`
+	Disarm               bool     `json:"disarm"`
+	Permanent            bool     `json:"permanent"`
+	Reactive             bool     `json:"reactive"`
+	Dynamic              bool     `json:"dynamic"`
+	Opposites            []string `json:"opposites,omitempty"`
+	Affinities           []string `json:"affinities,omitempty"`
 }
 
 var defaultWeaponProfile = weaponProfile{
-	FireMode:        "projectile",
-	Range:           56,
-	Damage:          8,
-	Interval:        0.7,
-	BulletType:      0,
-	BulletSpeed:     34,
-	SplashRadius:    0,
-	SlowSec:         0,
-	SlowMul:         1,
-	Pierce:          0,
-	ChainCount:      0,
-	ChainRange:      0,
-	FragmentCount:   0,
-	FragmentSpread:  0,
-	FragmentSpeed:   0,
-	FragmentLife:    0,
-	PreferBuildings: false,
-	TargetAir:       true,
-	TargetGround:    true,
-	TargetPriority:  "nearest",
-	HitBuildings:    true,
+	FireMode:            "projectile",
+	Range:               56,
+	Damage:              8,
+	Interval:            0.7,
+	BulletType:          0,
+	BulletSpeed:         34,
+	BulletHitSize:       10,
+	SplashRadius:        0,
+	BuildingDamage:      1,
+	SlowSec:             0,
+	SlowMul:             1,
+	Pierce:              0,
+	ChainCount:          0,
+	ChainRange:          0,
+	FragmentCount:       0,
+	FragmentSpread:      0,
+	FragmentSpeed:       0,
+	FragmentLife:        0,
+	FragmentVelocityMin: 0.2,
+	FragmentVelocityMax: 1,
+	FragmentLifeMin:     1,
+	FragmentLifeMax:     1,
+	PreferBuildings:     false,
+	TargetAir:           true,
+	TargetGround:        true,
+	TargetPriority:      "nearest",
+	HitBuildings:        true,
 }
 
 // Approximate presets by typeId to make combat behavior more varied.
@@ -792,78 +1214,86 @@ func New(cfg Config) *World {
 	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return &World{
-		wave:                   1,
-		waveTime:               0,
-		tick:                   0,
-		rand0:                  rng.Int63(),
-		rand1:                  rng.Int63(),
-		tps:                    int8(tps),
-		actualTps:              int8(tps),
-		tpsWindowStart:         time.Now(),
-		start:                  time.Now(),
-		bulletNextID:           1,
-		buildStates:            map[int32]buildCombatState{},
-		pendingBuilds:          map[int32]pendingBuildState{},
-		pendingBreaks:          map[int32]pendingBreakState{},
-		builderStates:          map[int32]builderRuntimeState{},
-		factoryStates:          map[int32]factoryState{},
-		drillStates:            map[int32]drillRuntimeState{},
-		pumpStates:             map[int32]pumpRuntimeState{},
-		crafterStates:          map[int32]crafterRuntimeState{},
-		heatStates:             map[int32]float32{},
-		incineratorStates:      map[int32]float32{},
-		teamPowerStates:        map[TeamID]*teamPowerState{},
-		teamPowerBudget:        map[TeamID]float32{},
-		powerNetStates:         map[int32]*powerNetState{},
-		powerNetByPos:          map[int32]int32{},
-		powerNetDirty:          true,
-		powerStorageState:      map[int32]float32{},
-		powerGeneratorState:    map[int32]*powerGeneratorState{},
-		unitMountCDs:           map[int32][]float32{},
-		unitTargets:            map[int32]targetTrackState{},
-		teamItems:              map[TeamID]map[ItemID]int32{},
-		teamBuilderSpeed:       map[TeamID]float32{1: 0.5},
-		itemSourceCfg:          map[int32]ItemID{},
-		liquidSourceCfg:        map[int32]LiquidID{},
-		sorterCfg:              map[int32]ItemID{},
-		unloaderCfg:            map[int32]ItemID{},
-		payloadRouterCfg:       map[int32]protocol.Content{},
-		powerNodeLinks:         map[int32][]int32{},
-		bridgeLinks:            map[int32]int32{},
-		massDriverLinks:        map[int32]int32{},
-		payloadDriverLinks:     map[int32]int32{},
-		bridgeBuffers:          map[int32][]bufferedBridgeItem{},
-		bridgeAcceptAcc:        map[int32]float32{},
-		conveyorStates:         map[int32]*conveyorRuntimeState{},
-		ductStates:             map[int32]*ductRuntimeState{},
-		routerStates:           map[int32]*routerRuntimeState{},
-		stackStates:            map[int32]*stackRuntimeState{},
-		massDriverStates:       map[int32]*massDriverRuntimeState{},
-		payloadStates:          map[int32]*payloadRuntimeState{},
-		payloadDriverStates:    map[int32]*payloadDriverRuntimeState{},
-		massDriverShots:        []massDriverShot{},
-		payloadDriverShots:     []payloadDriverShot{},
-		blockDumpIndex:         map[int32]int{},
-		itemSourceAccum:        map[int32]float32{},
-		routerInputPos:         map[int32]int32{},
-		routerRotation:         map[int32]byte{},
-		transportAccum:         map[int32]float32{},
-		junctionQueues:         map[int32]junctionQueueState{},
-		reactorStates:          map[int32]nuclearReactorState{},
-		storageLinkedCore:      map[int32]int32{},
-		teamPrimaryCore:        map[TeamID]int32{},
-		coreStorageCapacity:    map[int32]int32{},
-		blockOccupancy:         map[int32]int32{},
-		teamBuildingTiles:      map[TeamID][]int32{},
-		teamBuildingSpatial:    map[TeamID]*buildingSpatialIndex{},
-		turretTilePositions:    []int32{},
-		unitProfilesByType:     cloneUnitWeaponProfiles(weaponProfilesByType),
-		unitProfilesByName:     map[string]weaponProfile{},
-		buildingProfilesByName: cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
-		blockCostsByName:       map[string][]ItemStack{},
-		blockBuildTimesByName:  map[string]float32{},
-		rulesMgr:               NewRulesManager(nil),
-		wavesMgr:               NewWaveManager(nil),
+		wave:                    1,
+		waveTime:                0,
+		tick:                    0,
+		rand0:                   rng.Int63(),
+		rand1:                   rng.Int63(),
+		tps:                     int8(tps),
+		actualTps:               int8(tps),
+		tpsWindowStart:          time.Now(),
+		start:                   time.Now(),
+		pendingMountShots:       []pendingMountShot{},
+		bulletNextID:            1,
+		buildStates:             map[int32]buildCombatState{},
+		pendingBuilds:           map[int32]pendingBuildState{},
+		pendingBreaks:           map[int32]pendingBreakState{},
+		buildRejectLogTick:      map[int32]uint64{},
+		builderStates:           map[int32]builderRuntimeState{},
+		factoryStates:           map[int32]factoryState{},
+		drillStates:             map[int32]drillRuntimeState{},
+		pumpStates:              map[int32]pumpRuntimeState{},
+		crafterStates:           map[int32]crafterRuntimeState{},
+		heatStates:              map[int32]float32{},
+		incineratorStates:       map[int32]float32{},
+		teamPowerStates:         map[TeamID]*teamPowerState{},
+		teamPowerBudget:         map[TeamID]float32{},
+		powerNetStates:          map[int32]*powerNetState{},
+		powerNetByPos:           map[int32]int32{},
+		powerNetDirty:           true,
+		powerStorageState:       map[int32]float32{},
+		powerRequested:          map[int32]float32{},
+		powerSupplied:           map[int32]float32{},
+		powerGeneratorState:     map[int32]*powerGeneratorState{},
+		unitMountCDs:            map[int32][]float32{},
+		unitMountStates:         map[int32][]unitMountState{},
+		unitTargets:             map[int32]targetTrackState{},
+		teamItems:               map[TeamID]map[ItemID]int32{},
+		teamBuilderSpeed:        map[TeamID]float32{1: 0.5},
+		itemSourceCfg:           map[int32]ItemID{},
+		liquidSourceCfg:         map[int32]LiquidID{},
+		sorterCfg:               map[int32]ItemID{},
+		unloaderCfg:             map[int32]ItemID{},
+		payloadRouterCfg:        map[int32]protocol.Content{},
+		powerNodeLinks:          map[int32][]int32{},
+		bridgeLinks:             map[int32]int32{},
+		massDriverLinks:         map[int32]int32{},
+		payloadDriverLinks:      map[int32]int32{},
+		bridgeBuffers:           map[int32][]bufferedBridgeItem{},
+		bridgeAcceptAcc:         map[int32]float32{},
+		conveyorStates:          map[int32]*conveyorRuntimeState{},
+		ductStates:              map[int32]*ductRuntimeState{},
+		routerStates:            map[int32]*routerRuntimeState{},
+		stackStates:             map[int32]*stackRuntimeState{},
+		massDriverStates:        map[int32]*massDriverRuntimeState{},
+		payloadStates:           map[int32]*payloadRuntimeState{},
+		payloadDriverStates:     map[int32]*payloadDriverRuntimeState{},
+		massDriverShots:         []massDriverShot{},
+		payloadDriverShots:      []payloadDriverShot{},
+		blockDumpIndex:          map[int32]int{},
+		itemSourceAccum:         map[int32]float32{},
+		routerInputPos:          map[int32]int32{},
+		routerRotation:          map[int32]byte{},
+		transportAccum:          map[int32]float32{},
+		junctionQueues:          map[int32]junctionQueueState{},
+		reactorStates:           map[int32]nuclearReactorState{},
+		storageLinkedCore:       map[int32]int32{},
+		teamPrimaryCore:         map[TeamID]int32{},
+		coreStorageCapacity:     map[int32]int32{},
+		blockOccupancy:          map[int32]int32{},
+		teamBuildingTiles:       map[TeamID][]int32{},
+		teamBuildingSpatial:     map[TeamID]*buildingSpatialIndex{},
+		turretTilePositions:     []int32{},
+		unitProfilesByType:      cloneUnitWeaponProfiles(weaponProfilesByType),
+		unitProfilesByName:      map[string]weaponProfile{},
+		unitMountProfilesByName: map[string][]unitWeaponMountProfile{},
+		buildingProfilesByName:  cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
+		blockCostsByName:        map[string][]ItemStack{},
+		blockBuildTimesByName:   map[string]float32{},
+		statusProfilesByID:      map[int16]statusEffectProfile{},
+		statusProfilesByName:    map[string]statusEffectProfile{},
+		rulesMgr:                NewRulesManager(nil),
+		wavesMgr:                NewWaveManager(nil),
 	}
 }
 
@@ -905,6 +1335,8 @@ func (w *World) Step(delta time.Duration) {
 			}
 		}
 	}
+
+	w.stepFillItemsLocked()
 
 	pendingBuildStartedAt := time.Now()
 	w.stepPendingBuilds(delta)
@@ -1115,6 +1547,18 @@ func (w *World) itemConfigBlockAtLocked(pos int32) bool {
 	}
 }
 
+func (w *World) unitFactoryConfigBlockAtLocked(pos int32) bool {
+	if w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return false
+	}
+	switch w.blockNameByID(int16(w.model.Tiles[pos].Block)) {
+	case "ground-factory", "air-factory", "naval-factory":
+		return true
+	default:
+		return false
+	}
+}
+
 func (w *World) ClearBuildingConfig(pos int32) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -1234,8 +1678,14 @@ func (w *World) applyBuildingConfigLocked(pos int32, value any, persist bool) {
 		case protocol.ContentLiquid:
 			w.configureLiquidContentLocked(pos, LiquidID(v.ID()))
 			applied = true
-		case protocol.ContentBlock, protocol.ContentUnit:
+		case protocol.ContentBlock:
 			applied = w.configurePayloadContentLocked(pos, v)
+		case protocol.ContentUnit:
+			if w.unitFactoryConfigBlockAtLocked(pos) {
+				applied = w.configureUnitFactoryUnitLocked(pos, v.ID())
+			} else {
+				applied = w.configurePayloadContentLocked(pos, v)
+			}
 		}
 	case protocol.Point2:
 		applied = w.configurePointConfigLocked(pos, v)
@@ -1245,6 +1695,8 @@ func (w *World) applyBuildingConfigLocked(pos int32, value any, persist bool) {
 		if w.itemConfigBlockAtLocked(pos) {
 			w.configureItemContentLocked(pos, ItemID(v))
 			applied = true
+		} else if w.unitFactoryConfigBlockAtLocked(pos) {
+			applied = w.configureUnitFactoryPlanLocked(pos, int16(v))
 		} else {
 			applied = w.configureAbsoluteLinkLocked(pos, v)
 		}
@@ -1252,6 +1704,8 @@ func (w *World) applyBuildingConfigLocked(pos int32, value any, persist bool) {
 		if w.itemConfigBlockAtLocked(pos) {
 			w.configureItemContentLocked(pos, ItemID(v))
 			applied = true
+		} else if w.unitFactoryConfigBlockAtLocked(pos) {
+			applied = w.configureUnitFactoryPlanLocked(pos, int16(v))
 		} else {
 			applied = w.configureAbsoluteLinkLocked(pos, int32(v))
 		}
@@ -1259,6 +1713,8 @@ func (w *World) applyBuildingConfigLocked(pos int32, value any, persist bool) {
 		if w.itemConfigBlockAtLocked(pos) {
 			w.configureItemContentLocked(pos, ItemID(v))
 			applied = true
+		} else if w.unitFactoryConfigBlockAtLocked(pos) {
+			applied = w.configureUnitFactoryPlanLocked(pos, v)
 		} else {
 			applied = w.configureAbsoluteLinkLocked(pos, int32(v))
 		}
@@ -1448,6 +1904,12 @@ func (w *World) normalizedBuildingConfigLocked(pos int32) (any, bool) {
 			return nil, false
 		}
 		return filter, true
+	case "ground-factory", "air-factory", "naval-factory":
+		value, ok := w.unitFactoryConfigValueLocked(pos, tile)
+		if !ok {
+			return nil, false
+		}
+		return value, true
 	case "power-node", "power-node-large", "surge-tower", "beam-link", "power-source":
 		links := w.powerNodeLinks[pos]
 		if len(links) == 0 {
@@ -1701,6 +2163,8 @@ func (w *World) itemCapacityForBlockLocked(tile *Tile) int32 {
 		return 30
 	case "phase-synthesizer":
 		return 40
+	case "ground-factory", "air-factory", "naval-factory":
+		return unitFactoryScaledAmount(unitFactoryTotalItemCapacity(w.blockNameByID(int16(tile.Block))), w.unitCostMultiplierLocked(tile.Team))
 	case "core-shard":
 		return 4000
 	case "core-foundation":
@@ -4158,11 +4622,7 @@ func (w *World) tryInsertItemLocked(fromPos, toPos int32, item ItemID, depth int
 		}
 		return w.tryInsertItemLocked(toPos, target, item, depth+1)
 	case "thorium-reactor":
-		cap := w.itemCapacityAtLocked(toPos)
-		if w.itemAmountAtLocked(toPos, item) >= cap {
-			return false
-		}
-		return w.addItemAtLocked(toPos, item, 1)
+		return w.storeAcceptedBuildingItemLocked(toPos, toTile, item, 1)
 	case "item-void":
 		return true
 	case "incinerator":
@@ -4172,11 +4632,7 @@ func (w *World) tryInsertItemLocked(fromPos, toPos int32, item ItemID, depth int
 		w.incineratorBurnItemLocked(toPos)
 		return true
 	default:
-		cap := w.itemCapacityAtLocked(toPos)
-		if cap <= 0 || w.itemAmountAtLocked(toPos, item) >= cap {
-			return false
-		}
-		return w.addItemAtLocked(toPos, item, 1)
+		return w.storeAcceptedBuildingItemLocked(toPos, toTile, item, 1)
 	}
 }
 
@@ -5295,6 +5751,103 @@ func (w *World) overflowTargetLocked(fromPos, gatePos int32, item ItemID, invert
 	return forward, true
 }
 
+func containsItemInStacks(stacks []ItemStack, item ItemID) bool {
+	for _, stack := range stacks {
+		if stack.Item == item && stack.Amount > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *World) maximumAcceptedItemForBlockLocked(pos int32, tile *Tile, item ItemID) int32 {
+	if w == nil || tile == nil || tile.Build == nil || tile.Block == 0 {
+		return 0
+	}
+	name := w.blockNameByID(int16(tile.Block))
+	switch name {
+	case "core-shard", "core-foundation", "core-nucleus", "core-bastion", "core-citadel", "core-acropolis",
+		"container", "vault", "reinforced-container", "reinforced-vault":
+		return w.itemCapacityAtLocked(pos)
+	case "payload-loader", "payload-unloader":
+		return w.itemCapacityForBlockLocked(tile)
+	case "ground-factory", "air-factory", "naval-factory":
+		plan, ok := w.unitFactorySelectedPlanLocked(pos, tile)
+		if !ok || !containsItemInStacks(plan.Cost, item) {
+			return 0
+		}
+		return unitFactoryScaledAmount(unitFactoryItemCapacity(name, item), w.unitCostMultiplierLocked(tile.Build.Team))
+	case "combustion-generator", "steam-generator":
+		if item == coalItemID || item == pyratiteItemID || item == sporePodItemID {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	case "differential-generator":
+		if item == pyratiteItemID {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	case "rtg-generator":
+		if item == phaseFabricItemID || item == thoriumItemID || item == legacyThoriumItemID {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	case "thorium-reactor":
+		if item == thoriumItemID || item == legacyThoriumItemID {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	case "impact-reactor":
+		if item == blastCompoundItemID {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	case "neoplasia-reactor":
+		if item == phaseFabricItemID {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	}
+	if prof, ok := crafterProfilesByBlockName[name]; ok {
+		if containsItemInStacks(prof.InputItems, item) {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	}
+	if prof, ok := separatorProfilesByBlockName[name]; ok {
+		if containsItemInStacks(prof.InputItems, item) {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	}
+	if prof, ok := solidPumpProfilesByBlockName[name]; ok {
+		if prof.ItemUseTimeFrames > 0 && prof.ItemConsume == item {
+			return w.itemCapacityForBlockLocked(tile)
+		}
+		return 0
+	}
+	return 0
+}
+
+func (w *World) acceptsBuildingItemLocked(pos int32, tile *Tile, item ItemID) bool {
+	cap := w.maximumAcceptedItemForBlockLocked(pos, tile, item)
+	return cap > 0 && w.itemAmountAtLocked(pos, item) < cap
+}
+
+func (w *World) storeAcceptedBuildingItemLocked(pos int32, tile *Tile, item ItemID, amount int32) bool {
+	if amount <= 0 {
+		return false
+	}
+	cap := w.maximumAcceptedItemForBlockLocked(pos, tile, item)
+	if cap <= 0 {
+		return false
+	}
+	if w.itemAmountAtLocked(pos, item)+amount > cap {
+		return false
+	}
+	return w.addItemAtLocked(pos, item, amount)
+}
+
 func (w *World) canAcceptItemLocked(fromPos, toPos int32, item ItemID, depth int) bool {
 	if depth > 8 || w.model == nil || toPos < 0 || int(toPos) >= len(w.model.Tiles) {
 		return false
@@ -5354,10 +5907,13 @@ func (w *World) canAcceptItemLocked(fromPos, toPos int32, item ItemID, depth int
 		target, ok := w.overflowTargetLocked(fromPos, toPos, item, true, false)
 		return ok && w.canAcceptItemLocked(toPos, target, item, depth+1)
 	case "thorium-reactor":
-		return w.itemAmountAtLocked(toPos, item) < w.itemCapacityAtLocked(toPos)
+		return w.acceptsBuildingItemLocked(toPos, toTile, item)
+	case "item-void":
+		return true
+	case "incinerator":
+		return w.incineratorAcceptsItemLocked(toPos)
 	default:
-		cap := w.itemCapacityAtLocked(toPos)
-		return cap > 0 && w.itemAmountAtLocked(toPos, item) < cap
+		return w.acceptsBuildingItemLocked(toPos, toTile, item)
 	}
 }
 
@@ -5401,6 +5957,8 @@ func blockSizeByName(name string) int {
 	case "battery-large", "solar-panel-large", "differential-generator", "beam-tower", "beam-link":
 		return 3
 	case "core-shard", "vault", "reinforced-vault", "thorium-reactor", "mass-driver", "payload-conveyor", "reinforced-payload-conveyor", "payload-router", "reinforced-payload-router", "payload-mass-driver", "payload-loader", "payload-unloader":
+		return 3
+	case "ground-factory", "air-factory", "naval-factory":
 		return 3
 	case "blast-drill":
 		return 4
@@ -5759,6 +6317,7 @@ func (w *World) SetModel(m *WorldModel) {
 	w.buildStates = map[int32]buildCombatState{}
 	w.pendingBuilds = map[int32]pendingBuildState{}
 	w.pendingBreaks = map[int32]pendingBreakState{}
+	w.buildRejectLogTick = map[int32]uint64{}
 	w.builderStates = map[int32]builderRuntimeState{}
 	w.factoryStates = map[int32]factoryState{}
 	w.drillStates = map[int32]drillRuntimeState{}
@@ -5774,6 +6333,8 @@ func (w *World) SetModel(m *WorldModel) {
 	w.powerStorageState = map[int32]float32{}
 	w.powerGeneratorState = map[int32]*powerGeneratorState{}
 	w.unitMountCDs = map[int32][]float32{}
+	w.unitMountStates = map[int32][]unitMountState{}
+	w.pendingMountShots = []pendingMountShot{}
 	w.unitTargets = map[int32]targetTrackState{}
 	w.teamItems = map[TeamID]map[ItemID]int32{}
 	w.itemSourceCfg = map[int32]ItemID{}
@@ -5815,24 +6376,18 @@ func (w *World) SetModel(m *WorldModel) {
 	w.blockNamesByID = nil
 	w.unitNamesByID = nil
 	w.unitTypeDefsByID = nil
+	w.statusProfilesByID = map[int16]statusEffectProfile{}
+	w.statusProfilesByName = map[string]statusEffectProfile{}
 
 	// 每次切图都从默认规则重新解析，再按原版 Gamemode 预设与地图 rules 叠加，
 	// 避免旧地图规则残留，也避免漏掉 attack/sandbox/editor/pvp 的模式默认值。
 	if m != nil {
-		base := DefaultRules()
-		var overlay Rules
-		if m.Tags != nil {
-			if raw := strings.TrimSpace(m.Tags["rules"]); raw != "" {
-				_ = json.Unmarshal([]byte(raw), &overlay)
-			}
+		raw := strings.TrimSpace(tagValue(m.Tags, "rules"))
+		if base, err := decodeRulesWithGamemodeDefaults([]byte(raw), m.Tags, m); err == nil && base != nil {
+			w.rulesMgr.Set(base)
+		} else {
+			w.rulesMgr.Set(DefaultRules())
 		}
-		applyGamemodeDefaults(base, inferGamemodeFromModel(m, &overlay))
-		if m.Tags != nil {
-			if raw := strings.TrimSpace(m.Tags["rules"]); raw != "" {
-				_ = json.Unmarshal([]byte(raw), base)
-			}
-		}
-		w.rulesMgr.Set(base)
 		// 应用倍率到现有单位和建筑
 		w.applyRulesToEntities()
 	}
@@ -5940,6 +6495,12 @@ func (w *World) appendBuildCancelledLocked(pos int32, st pendingBuildState) {
 	})
 }
 
+func (w *World) cancelPendingBuildLocked(pos int32, st pendingBuildState) {
+	delete(w.pendingBuilds, pos)
+	w.refundPendingBuildConsumedLocked(st)
+	w.appendBuildCancelledLocked(pos, st)
+}
+
 func (w *World) stepPendingBuilds(delta time.Duration) {
 	if w.model == nil || len(w.pendingBuilds) == 0 {
 		return
@@ -6006,6 +6567,11 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			continue
 		}
 		if !st.VisualPlaced {
+			if !w.pendingBuildHasStartItemsLocked(st.Team, st.BlockID) {
+				w.pendingBuilds[pos] = st
+				continue
+			}
+			w.ensurePendingBuildCostStateLocked(&st)
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:        EntityEventBuildPlaced,
 				BuildPos:    packTilePos(tile.X, tile.Y),
@@ -6023,9 +6589,14 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 				BuildHP:  st.LastHP,
 			})
 		}
-		buildDuration := w.buildDurationSecondsForTeam(st.BlockID, st.Team, rules)
-		st.Progress += dt / buildDuration
-		hpNow := float32(1000) * clampf(st.Progress, 0, 1)
+		buildDuration := w.buildDurationSecondsForOwnerLocked(st.BlockID, st.Owner, st.Team, rules)
+		progressBefore := clampf(st.Progress, 0, 1)
+		progressStep := dt / buildDuration
+		if progressStep > 0 {
+			progressStep = w.applyVanillaBuildCostStepLocked(st.Team, &st, progressStep)
+		}
+		st.Progress = clampf(st.Progress+progressStep, 0, 1)
+		hpNow := constructBlockHealthMax * clampf(st.Progress, 0, 1)
 		if hpNow < 1 {
 			hpNow = 1
 		}
@@ -6041,16 +6612,25 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			w.pendingBuilds[pos] = st
 			continue
 		}
+		if !w.finishPendingBuildCostLocked(st.Team, &st) {
+			if progressBefore != st.Progress {
+				w.pendingBuilds[pos] = st
+				continue
+			}
+			w.pendingBuilds[pos] = st
+			continue
+		}
 		tile.Block = BlockID(st.BlockID)
 		tile.Team = st.Team
 		tile.Rotation = st.Rotation
 		tile.Build = &Building{
-			Block:    tile.Block,
-			Team:     st.Team,
-			Rotation: st.Rotation,
-			X:        tile.X,
-			Y:        tile.Y,
-			Health:   1000,
+			Block:     tile.Block,
+			Team:      st.Team,
+			Rotation:  st.Rotation,
+			X:         tile.X,
+			Y:         tile.Y,
+			Health:    1000,
+			MaxHealth: 1000,
 		}
 		w.setBuildingOccupancyLocked(pos, tile, true)
 		w.applyBuildingConfigLocked(pos, st.Config, true)
@@ -6157,7 +6737,7 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 		if !w.builderCanActLocked(st.Owner, st.Team, tile) {
 			continue
 		}
-		breakDuration := w.buildDurationSecondsForTeam(st.BlockID, st.Team, rules)
+		breakDuration := w.buildDurationSecondsForOwnerLocked(st.BlockID, st.Owner, st.Team, rules)
 		if breakDuration < float32(1.0/60.0) {
 			breakDuration = float32(1.0 / 60.0)
 		}
@@ -6172,15 +6752,27 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 			})
 			st.VisualStart = true
 		}
-		st.Progress += dt / breakDuration
-		hpNow := st.MaxHealth * (1 - clampf(st.Progress, 0, 1))
-		if hpNow < 1 && st.Progress < 1 {
-			hpNow = 1
+		amount := dt / breakDuration
+		progressBefore := clampf(st.Progress, 0, 1)
+		clampedAmount := amount
+		if remaining := 1 - progressBefore; clampedAmount > remaining {
+			clampedAmount = remaining
+		}
+		if clampedAmount > 0 {
+			st.RefundAccum, st.RefundTotal, st.Refunded = w.applyVanillaDeconstructRefundStepLocked(
+				st.RefundTeam, st.RefundCost, clampedAmount, st.RefundAccum, st.RefundTotal, st.Refunded,
+			)
+		}
+		st.Progress += amount
+		progress := clampf(st.Progress, 0, 1)
+		hpNow := st.MaxHealth * (1 - progress)
+		if hpNow < 0 {
+			hpNow = 0
 		}
 		if tile.Build != nil {
 			tile.Build.Health = hpNow
 		}
-		if st.LastHP-hpNow >= 1 || st.Progress >= 1 {
+		if st.LastHP-hpNow >= 1 || hpNow <= 0 || st.Progress >= 1 {
 			st.LastHP = hpNow
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
@@ -6192,7 +6784,7 @@ func (w *World) stepPendingBreaks(delta time.Duration) {
 			w.pendingBreaks[pos] = st
 			continue
 		}
-		w.refundDeconstructCost(tile, st.Team)
+		st.Refunded = w.finishVanillaDeconstructRefundLocked(st.RefundTeam, st.RefundCost, st.Refunded)
 		teamOld := tile.Team
 		if tile.Build != nil && tile.Build.Team != 0 {
 			teamOld = tile.Build.Team
@@ -6294,6 +6886,7 @@ func (w *World) LoadVanillaProfiles(path string) error {
 	if len(payload.Units) > 0 {
 		base := cloneUnitWeaponProfiles(weaponProfilesByType)
 		byName := cloneUnitWeaponProfilesByName(w.unitProfilesByName)
+		mountsByName := cloneUnitMountProfilesByName(w.unitMountProfilesByName)
 		for _, u := range payload.Units {
 			name := strings.ToLower(strings.TrimSpace(u.Name))
 			if name != "" {
@@ -6303,6 +6896,13 @@ func (w *World) LoadVanillaProfiles(path string) error {
 				}
 				mergeUnitProfile(&pn, u)
 				byName[name] = pn
+				if len(u.Mounts) > 0 {
+					parsed := make([]unitWeaponMountProfile, 0, len(u.Mounts))
+					for _, m := range u.Mounts {
+						parsed = append(parsed, convertVanillaMountProfile(m))
+					}
+					mountsByName[name] = parsed
+				}
 			}
 			if u.TypeID >= 0 {
 				p := defaultWeaponProfile
@@ -6318,9 +6918,11 @@ func (w *World) LoadVanillaProfiles(path string) error {
 		}
 		w.unitProfilesByType = base
 		w.unitProfilesByName = byName
+		w.unitMountProfilesByName = mountsByName
 	}
 	if len(payload.UnitsByName) > 0 {
 		base := cloneUnitWeaponProfilesByName(w.unitProfilesByName)
+		mountsByName := cloneUnitMountProfilesByName(w.unitMountProfilesByName)
 		for _, u := range payload.UnitsByName {
 			name := strings.ToLower(strings.TrimSpace(u.Name))
 			if name == "" {
@@ -6332,8 +6934,16 @@ func (w *World) LoadVanillaProfiles(path string) error {
 			}
 			mergeUnitProfile(&p, u)
 			base[name] = p
+			if len(u.Mounts) > 0 {
+				parsed := make([]unitWeaponMountProfile, 0, len(u.Mounts))
+				for _, m := range u.Mounts {
+					parsed = append(parsed, convertVanillaMountProfile(m))
+				}
+				mountsByName[name] = parsed
+			}
 		}
 		w.unitProfilesByName = base
+		w.unitMountProfilesByName = mountsByName
 	}
 	if len(payload.Turrets) > 0 {
 		base := cloneBuildingWeaponProfiles(buildingWeaponProfilesByName)
@@ -6383,12 +6993,46 @@ func (w *World) LoadVanillaProfiles(path string) error {
 			w.blockBuildTimesByName = times
 		}
 	}
+	if len(payload.Statuses) > 0 {
+		byID := make(map[int16]statusEffectProfile, len(payload.Statuses))
+		byName := make(map[string]statusEffectProfile, len(payload.Statuses))
+		for _, s := range payload.Statuses {
+			prof := statusEffectProfile{
+				ID:                   s.ID,
+				Name:                 strings.ToLower(strings.TrimSpace(s.Name)),
+				DamageMultiplier:     s.DamageMultiplier,
+				HealthMultiplier:     s.HealthMultiplier,
+				SpeedMultiplier:      s.SpeedMultiplier,
+				ReloadMultiplier:     s.ReloadMultiplier,
+				BuildSpeedMultiplier: s.BuildSpeedMultiplier,
+				DragMultiplier:       s.DragMultiplier,
+				TransitionDamage:     s.TransitionDamage,
+				Damage:               s.Damage,
+				IntervalDamageTime:   s.IntervalDamageTime,
+				IntervalDamage:       s.IntervalDamage,
+				IntervalDamagePierce: s.IntervalDamagePierce,
+				Disarm:               s.Disarm,
+				Permanent:            s.Permanent,
+				Reactive:             s.Reactive,
+				Dynamic:              s.Dynamic,
+				Opposites:            append([]string(nil), s.Opposites...),
+				Affinities:           append([]string(nil), s.Affinities...),
+			}
+			byID[prof.ID] = prof
+			if prof.Name != "" {
+				byName[prof.Name] = prof
+			}
+		}
+		w.statusProfilesByID = byID
+		w.statusProfilesByName = byName
+	}
 	return nil
 }
 
 func cloneUnitWeaponProfiles(src map[int16]weaponProfile) map[int16]weaponProfile {
 	out := make(map[int16]weaponProfile, len(src))
 	for k, v := range src {
+		v.FragmentBullet = cloneBulletRuntimeProfile(v.FragmentBullet)
 		out[k] = v
 	}
 	return out
@@ -6397,6 +7041,8 @@ func cloneUnitWeaponProfiles(src map[int16]weaponProfile) map[int16]weaponProfil
 func cloneBuildingWeaponProfiles(src map[string]buildingWeaponProfile) map[string]buildingWeaponProfile {
 	out := make(map[string]buildingWeaponProfile, len(src))
 	for k, v := range src {
+		v.FragmentBullet = cloneBulletRuntimeProfile(v.FragmentBullet)
+		v.Bullet = cloneBulletRuntimeProfile(v.Bullet)
 		out[k] = v
 	}
 	return out
@@ -6405,6 +7051,7 @@ func cloneBuildingWeaponProfiles(src map[string]buildingWeaponProfile) map[strin
 func cloneUnitWeaponProfilesByName(src map[string]weaponProfile) map[string]weaponProfile {
 	out := make(map[string]weaponProfile, len(src))
 	for k, v := range src {
+		v.FragmentBullet = cloneBulletRuntimeProfile(v.FragmentBullet)
 		out[k] = v
 	}
 	return out
@@ -6423,25 +7070,61 @@ func mergeUnitProfile(p *weaponProfile, u vanillaUnitProfile) {
 	if u.Damage > 0 {
 		p.Damage = u.Damage
 	}
+	if u.SplashDamage > 0 {
+		p.SplashDamage = u.SplashDamage
+	}
 	if u.Interval > 0 {
 		p.Interval = u.Interval
 	}
 	p.BulletType = u.BulletType
+	p.BulletClass = ""
+	if u.Bullet != nil {
+		p.BulletClass = strings.TrimSpace(u.Bullet.ClassName)
+	}
 	if u.BulletSpeed > 0 {
 		p.BulletSpeed = u.BulletSpeed
 	}
+	if u.BulletLifetime > 0 {
+		p.BulletLifetime = u.BulletLifetime
+	}
+	if u.BulletHitSize > 0 {
+		p.BulletHitSize = u.BulletHitSize
+	}
 	p.SplashRadius = u.SplashRadius
+	p.BuildingDamage = u.BuildingDamageMultiplier
 	p.SlowSec = u.SlowSec
 	if u.SlowMul > 0 {
 		p.SlowMul = u.SlowMul
 	}
 	p.Pierce = u.Pierce
+	p.PierceBuilding = u.PierceBuilding
 	p.ChainCount = u.ChainCount
 	p.ChainRange = u.ChainRange
 	p.FragmentCount = u.FragmentCount
 	p.FragmentSpread = u.FragmentSpread
 	p.FragmentSpeed = u.FragmentSpeed
 	p.FragmentLife = u.FragmentLife
+	p.FragmentRandomSpread = u.FragmentRandomSpread
+	p.FragmentAngle = u.FragmentAngle
+	if u.FragmentVelocityMin > 0 {
+		p.FragmentVelocityMin = u.FragmentVelocityMin
+	}
+	if u.FragmentVelocityMax > 0 {
+		p.FragmentVelocityMax = u.FragmentVelocityMax
+	}
+	if u.FragmentLifeMin > 0 {
+		p.FragmentLifeMin = u.FragmentLifeMin
+	}
+	if u.FragmentLifeMax > 0 {
+		p.FragmentLifeMax = u.FragmentLifeMax
+	}
+	p.FragmentBullet = convertVanillaBulletProfile(u.FragmentBullet)
+	p.StatusID = u.StatusID
+	p.StatusName = strings.ToLower(strings.TrimSpace(u.StatusName))
+	p.StatusDuration = u.StatusDuration
+	p.ShootStatusID = u.ShootStatusID
+	p.ShootStatusName = strings.ToLower(strings.TrimSpace(u.ShootStatusName))
+	p.ShootStatusDuration = u.ShootStatusDuration
 	if strings.TrimSpace(u.ShootEffect) != "" {
 		p.ShootEffect = strings.TrimSpace(u.ShootEffect)
 	}
@@ -6467,6 +7150,9 @@ func mergeBuildingProfile(p *buildingWeaponProfile, t vanillaTurretProfile) {
 	if p == nil {
 		return
 	}
+	if strings.TrimSpace(t.ClassName) != "" {
+		p.ClassName = strings.TrimSpace(t.ClassName)
+	}
 	if strings.TrimSpace(t.FireMode) != "" {
 		p.FireMode = strings.TrimSpace(t.FireMode)
 	}
@@ -6476,21 +7162,59 @@ func mergeBuildingProfile(p *buildingWeaponProfile, t vanillaTurretProfile) {
 	if t.Damage > 0 {
 		p.Damage = t.Damage
 	}
-	if t.Interval > 0 {
+	if t.SplashDamage > 0 {
+		p.SplashDamage = t.SplashDamage
+	}
+	if t.Interval > 0 || t.ContinuousHold {
 		p.Interval = t.Interval
 	}
 	p.BulletType = t.BulletType
+	p.BulletClass = ""
+	if t.Bullet != nil {
+		p.BulletClass = strings.TrimSpace(t.Bullet.ClassName)
+	}
 	if t.BulletSpeed > 0 {
 		p.BulletSpeed = t.BulletSpeed
 	}
+	if t.BulletLifetime > 0 {
+		p.BulletLifetime = t.BulletLifetime
+	}
+	if t.BulletHitSize > 0 {
+		p.BulletHitSize = t.BulletHitSize
+	}
 	p.SplashRadius = t.SplashRadius
+	p.BuildingDamage = t.BuildingDamageMultiplier
 	p.SlowSec = t.SlowSec
 	if t.SlowMul > 0 {
 		p.SlowMul = t.SlowMul
 	}
 	p.Pierce = t.Pierce
+	p.PierceBuilding = t.PierceBuilding
 	p.ChainCount = t.ChainCount
 	p.ChainRange = t.ChainRange
+	p.StatusID = t.StatusID
+	p.StatusName = strings.ToLower(strings.TrimSpace(t.StatusName))
+	p.StatusDuration = t.StatusDuration
+	p.FragmentCount = t.FragmentCount
+	p.FragmentSpread = t.FragmentSpread
+	p.FragmentSpeed = t.FragmentSpeed
+	p.FragmentLife = t.FragmentLife
+	p.FragmentRandomSpread = t.FragmentRandomSpread
+	p.FragmentAngle = t.FragmentAngle
+	if t.FragmentVelocityMin > 0 {
+		p.FragmentVelocityMin = t.FragmentVelocityMin
+	}
+	if t.FragmentVelocityMax > 0 {
+		p.FragmentVelocityMax = t.FragmentVelocityMax
+	}
+	if t.FragmentLifeMin > 0 {
+		p.FragmentLifeMin = t.FragmentLifeMin
+	}
+	if t.FragmentLifeMax > 0 {
+		p.FragmentLifeMax = t.FragmentLifeMax
+	}
+	p.FragmentBullet = convertVanillaBulletProfile(t.FragmentBullet)
+	p.Bullet = convertVanillaBulletProfile(t.Bullet)
 	if strings.TrimSpace(t.ShootEffect) != "" {
 		p.ShootEffect = strings.TrimSpace(t.ShootEffect)
 	}
@@ -6518,6 +7242,9 @@ func mergeBuildingProfile(p *buildingWeaponProfile, t vanillaTurretProfile) {
 	p.PowerPerShot = t.PowerPerShot
 	p.BurstShots = t.BurstShots
 	p.BurstSpacing = t.BurstSpacing
+	p.ContinuousHold = t.ContinuousHold
+	p.AimChangeSpeed = t.AimChangeSpeed
+	p.ShootDuration = t.ShootDuration
 }
 
 func (w *World) Model() *WorldModel {
@@ -6542,18 +7269,25 @@ func (w *World) AddEntity(typeID int16, x, y float32, team TeamID) (RawEntity, e
 		return RawEntity{}, ErrOutOfBounds
 	}
 	ent := RawEntity{
-		TypeID:      typeID,
-		X:           x,
-		Y:           y,
-		Team:        team,
-		Health:      100,
-		MaxHealth:   100,
-		Shield:      25,
-		ShieldMax:   25,
-		ShieldRegen: 4.5,
-		Armor:       1.5,
-		SlowMul:     1,
-		RuntimeInit: true,
+		TypeID:              typeID,
+		X:                   x,
+		Y:                   y,
+		Team:                team,
+		Health:              100,
+		MaxHealth:           100,
+		Shield:              25,
+		ShieldMax:           25,
+		ShieldRegen:         4.5,
+		Armor:               1.5,
+		SlowMul:             1,
+		StatusDamageMul:     1,
+		StatusHealthMul:     1,
+		StatusSpeedMul:      1,
+		StatusReloadMul:     1,
+		StatusBuildSpeedMul: 1,
+		StatusDragMul:       1,
+		StatusArmorOverride: -1,
+		RuntimeInit:         true,
 	}
 	w.applyUnitTypeDef(&ent)
 	w.applyWeaponProfile(&ent)
@@ -6586,19 +7320,26 @@ func (w *World) AddEntityWithID(typeID int16, id int32, x, y float32, team TeamI
 		}
 	}
 	ent := RawEntity{
-		TypeID:      typeID,
-		ID:          id,
-		X:           x,
-		Y:           y,
-		Health:      100,
-		MaxHealth:   100,
-		Shield:      25,
-		ShieldMax:   25,
-		ShieldRegen: 4.5,
-		Armor:       1.5,
-		SlowMul:     1,
-		RuntimeInit: true,
-		Team:        team,
+		TypeID:              typeID,
+		ID:                  id,
+		X:                   x,
+		Y:                   y,
+		Health:              100,
+		MaxHealth:           100,
+		Shield:              25,
+		ShieldMax:           25,
+		ShieldRegen:         4.5,
+		Armor:               1.5,
+		SlowMul:             1,
+		StatusDamageMul:     1,
+		StatusHealthMul:     1,
+		StatusSpeedMul:      1,
+		StatusReloadMul:     1,
+		StatusBuildSpeedMul: 1,
+		StatusDragMul:       1,
+		StatusArmorOverride: -1,
+		RuntimeInit:         true,
+		Team:                team,
 	}
 	w.applyUnitTypeDef(&ent)
 	w.applyWeaponProfile(&ent)
@@ -6614,6 +7355,7 @@ func (w *World) RemoveEntity(id int32) (RawEntity, bool) {
 	ent, ok := w.model.RemoveEntity(id)
 	if ok {
 		delete(w.unitMountCDs, id)
+		delete(w.unitMountStates, id)
 		delete(w.unitTargets, id)
 		w.entityEvents = append(w.entityEvents, EntityEvent{
 			Kind:   EntityEventRemoved,
@@ -6660,9 +7402,7 @@ func (w *World) TeamCoreItemSnapshots() []TeamCoreItemSnapshot {
 	if w.model == nil {
 		return nil
 	}
-	rules := w.rulesMgr.Get()
 	teams := make(map[TeamID]map[ItemID]int32)
-	teamsWithSync := make(map[TeamID]struct{})
 	for _, pos := range w.activeTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
@@ -6674,7 +7414,6 @@ func (w *World) TeamCoreItemSnapshots() []TeamCoreItemSnapshot {
 		if !strings.HasPrefix(w.blockNameByID(int16(tile.Block)), "core-") {
 			continue
 		}
-		teamsWithSync[tile.Team] = struct{}{}
 		items, ok := teams[tile.Team]
 		if !ok {
 			items = make(map[ItemID]int32)
@@ -6685,45 +7424,6 @@ func (w *World) TeamCoreItemSnapshots() []TeamCoreItemSnapshot {
 				continue
 			}
 			items[stack.Item] += stack.Amount
-		}
-	}
-	for pos, corePos := range w.storageLinkedCore {
-		if pos < 0 || corePos < 0 || int(pos) >= len(w.model.Tiles) || int(corePos) >= len(w.model.Tiles) {
-			continue
-		}
-		coreTile := &w.model.Tiles[corePos]
-		storageTile := &w.model.Tiles[pos]
-		if coreTile.Team == 0 || coreTile.Team != storageTile.Team || storageTile.Build == nil || storageTile.Block == 0 {
-			continue
-		}
-		teamsWithSync[coreTile.Team] = struct{}{}
-	}
-	for team := range teamsWithSync {
-		items := teams[team]
-		hasRealItems := false
-		for _, amount := range items {
-			if amount > 0 {
-				hasRealItems = true
-				break
-			}
-		}
-		if hasRealItems {
-			continue
-		}
-		if rules == nil || !rules.teamFillItems(team) {
-			continue
-		}
-		if len(w.teamItems[team]) == 0 {
-			continue
-		}
-		if items == nil {
-			items = make(map[ItemID]int32)
-			teams[team] = items
-		}
-		for item, amount := range w.teamItems[team] {
-			if amount > 0 {
-				items[item] = amount
-			}
 		}
 	}
 	if len(teams) == 0 {
@@ -6817,6 +7517,38 @@ func unitBuildSpeedByName(name string) float32 {
 	default:
 		return 0.5
 	}
+}
+
+func constructBreakStartHealth(tile *Tile) float32 {
+	if tile == nil || tile.Build == nil {
+		return constructBlockHealthMax
+	}
+	maxHealth := tile.Build.MaxHealth
+	if maxHealth <= 0 {
+		maxHealth = tile.Build.Health
+	}
+	if maxHealth <= 0 {
+		return constructBlockHealthMax
+	}
+	start := constructBlockHealthMax * clampf(tile.Build.Health/maxHealth, 0, 1)
+	if start < 0 {
+		return 0
+	}
+	if start > constructBlockHealthMax {
+		return constructBlockHealthMax
+	}
+	return start
+}
+
+func (w *World) builderSpeedForUnitTypeLocked(typeID int16) float32 {
+	name := ""
+	if w.unitNamesByID != nil {
+		name = w.unitNamesByID[typeID]
+	}
+	if strings.TrimSpace(name) == "" {
+		name = fallbackUnitNameByTypeID(typeID)
+	}
+	return unitBuildSpeedByName(name)
 }
 
 func fallbackUnitNameByTypeID(typeID int16) string {
@@ -7034,9 +7766,7 @@ func (w *World) ApplyBuildPlanSnapshotForOwner(owner int32, team TeamID, ops []B
 		if _, ok := wantBuild[pos]; ok {
 			continue
 		}
-		delete(w.pendingBuilds, pos)
-		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		w.appendBuildCancelledLocked(pos, st)
+		w.cancelPendingBuildLocked(pos, st)
 		addChanged(pos)
 	}
 	for pos, st := range w.pendingBreaks {
@@ -7071,9 +7801,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			if owner != 0 && st.Owner != 0 && st.Owner != owner {
 				return
 			}
-			delete(w.pendingBuilds, pos)
-			w.refundBuildCost(st.Team, st.BlockID, 1.0)
-			w.appendBuildCancelledLocked(pos, st)
+			w.cancelPendingBuildLocked(pos, st)
 			addChanged(pos)
 		}
 		delete(w.factoryStates, pos)
@@ -7095,10 +7823,8 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			addChanged(pos)
 			return
 		}
-		maxHP := float32(1000)
-		if tile.Build != nil && tile.Build.Health > 0 {
-			maxHP = tile.Build.Health
-		}
+		maxHP := constructBreakStartHealth(tile)
+		refundTeam, refundStacks := w.deconstructRefundStacks(tile, team)
 		w.pendingBreaks[pos] = pendingBreakState{
 			Owner:       owner,
 			Team:        team,
@@ -7109,6 +7835,8 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			Progress:    0,
 			MaxHealth:   maxHP,
 			LastHP:      maxHP,
+			RefundTeam:  refundTeam,
+			RefundCost:  append([]ItemStack(nil), refundStacks...),
 		}
 		addChanged(pos)
 		return
@@ -7127,7 +7855,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			w.pendingBuilds[pos] = pending
 			return
 		}
-		w.refundBuildCost(pending.Team, pending.BlockID, 1.0)
+		w.cancelPendingBuildLocked(pos, pending)
 	}
 	if rules := w.rulesMgr.Get(); rules != nil &&
 		rules.DerelictRepair &&
@@ -7201,10 +7929,6 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 		w.applyBuildingConfigLocked(pos, op.Config, true)
 		delete(w.pendingBreaks, pos)
 		delete(w.pendingBuilds, pos)
-		return
-	}
-	if !w.consumeBuildCost(team, op.BlockID) {
-		fmt.Printf("[buildtrace] reject plan xy=(%d,%d) block=%d team=%d reason=insufficient_items\n", tile.X, tile.Y, op.BlockID, team)
 		return
 	}
 	if rules := w.rulesMgr.Get(); rules != nil && (rules.InstantBuild || rules.Editor) {
@@ -7351,9 +8075,7 @@ func (w *World) CancelBuildPlansPackedForOwner(owner int32, positions []int32) {
 			if owner != 0 && st.Owner != 0 && st.Owner != owner {
 				continue
 			}
-			delete(w.pendingBuilds, pos)
-			w.refundBuildCost(st.Team, st.BlockID, 1.0)
-			w.appendBuildCancelledLocked(pos, st)
+			w.cancelPendingBuildLocked(pos, st)
 		}
 		if st, ok := w.pendingBreaks[pos]; ok {
 			if owner != 0 && st.Owner != 0 && st.Owner != owner {
@@ -7388,9 +8110,7 @@ func (w *World) CancelBuildAtForOwner(owner int32, x, y int32, breaking bool) {
 		if owner != 0 && st.Owner != 0 && st.Owner != owner {
 			return
 		}
-		delete(w.pendingBuilds, pos)
-		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		w.appendBuildCancelledLocked(pos, st)
+		w.cancelPendingBuildLocked(pos, st)
 	}
 }
 
@@ -7407,9 +8127,7 @@ func (w *World) CancelBuildPlansByTeam(team TeamID) {
 		if st.Team != team {
 			continue
 		}
-		delete(w.pendingBuilds, pos)
-		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		w.appendBuildCancelledLocked(pos, st)
+		w.cancelPendingBuildLocked(pos, st)
 	}
 	for pos, st := range w.pendingBreaks {
 		if st.Team == team {
@@ -7431,9 +8149,7 @@ func (w *World) CancelBuildPlansByOwner(owner int32) {
 		if st.Owner != owner {
 			continue
 		}
-		delete(w.pendingBuilds, pos)
-		w.refundBuildCost(st.Team, st.BlockID, 1.0)
-		w.appendBuildCancelledLocked(pos, st)
+		w.cancelPendingBuildLocked(pos, st)
 	}
 	for pos, st := range w.pendingBreaks {
 		if st.Owner == owner {
@@ -7634,6 +8350,14 @@ func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, build
 			}
 			changed = true
 		}
+		prevStatusCount := len(e.Statuses)
+		prevHealth := e.Health
+		prevShield := e.Shield
+		prevDisarmed := e.Disarmed
+		w.updateEntityStatuses(e, dt)
+		if prevStatusCount != len(e.Statuses) || prevHealth != e.Health || prevShield != e.Shield || prevDisarmed != e.Disarmed {
+			changed = true
+		}
 		if e.Shield < e.ShieldMax && e.ShieldRegen > 0 {
 			e.Shield += e.ShieldRegen * dt
 			if e.Shield > e.ShieldMax {
@@ -7676,6 +8400,7 @@ func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, build
 		}
 		removed := *e
 		delete(w.unitMountCDs, removed.ID)
+		delete(w.unitMountStates, removed.ID)
 		delete(w.unitTargets, removed.ID)
 		last := len(w.model.Entities) - 1
 		w.model.Entities[i] = w.model.Entities[last]
@@ -7704,7 +8429,8 @@ func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, build
 	buildingCombatDur = time.Since(buildingCombatStartedAt)
 
 	bulletStartedAt := time.Now()
-	w.stepBullets(dt, idToIndex)
+	w.stepPendingMountShots(dt, idToIndex)
+	w.stepBullets(dt, idToIndex, spatial, teamSpatial)
 	bulletDur = time.Since(bulletStartedAt)
 	return movementDur, combatDur, buildingCombatDur, bulletDur
 }
@@ -7716,16 +8442,15 @@ func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int, spatial *e
 	}
 	for i := range ents {
 		e := &ents[i]
-		if e.Health <= 0 || e.AttackDamage <= 0 {
+		if !canEntityAttack(*e) {
 			continue
 		}
-		if mounts, ok := unitMountProfilesByType[e.TypeID]; ok && len(mounts) > 0 {
+		if mounts := w.unitMountProfilesForEntity(*e); len(mounts) > 0 {
 			w.stepEntityMountedCombat(e, mounts, dt, idToIndex, spatial, teamSpatial)
 			continue
 		}
 		if e.AttackCooldown > 0 {
-			slowMul := clampf(e.SlowMul, 0.2, 1)
-			e.AttackCooldown -= dt * slowMul
+			e.AttackCooldown -= dt * attackCooldownScale(*e)
 			if e.AttackCooldown < 0 {
 				e.AttackCooldown = 0
 			}
@@ -7737,35 +8462,45 @@ func (w *World) stepEntityCombat(dt float32, idToIndex map[int32]int, spatial *e
 		}
 		track := w.unitTargets[e.ID]
 		retargetDelay := maxf(e.AttackInterval*0.45, 0.18)
+		if e.AttackBuildings && e.AttackPreferBuildings {
+			if pos, tx, ty, ok := w.findNearestEnemyBuilding(*e, rangeLimit); ok {
+				e.AttackCooldown = maxf(e.AttackInterval, 0.2)
+				e.Rotation = lookAt(e.X, e.Y, tx, ty)
+				w.applyShootStatus(e)
+				if e.AttackFireMode == "beam" {
+					w.fireBeamAtBuilding(*e, pos, tx, ty, false)
+				} else {
+					w.spawnBullet(*e, tx, ty, false)
+				}
+				w.unitTargets[e.ID] = track
+				continue
+			}
+		}
 		if tid, ok := w.acquireTrackedEntityTarget(*e, ents, idToIndex, spatial, teamSpatial, rangeLimit, e.AttackTargetAir, e.AttackTargetGround, e.AttackTargetPriority, &track, dt, retargetDelay); ok {
 			if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(ents) {
 				target := &ents[idx]
 				e.AttackCooldown = maxf(e.AttackInterval, 0.2)
 				e.Rotation = lookAt(e.X, e.Y, target.X, target.Y)
+				w.applyShootStatus(e)
 				if e.AttackFireMode == "beam" {
-					w.emitAttackFireEffectsLocked(*e)
-					w.applyDamageToEntity(target, e.AttackDamage)
-					applySlow(target, e.AttackSlowSec, e.AttackSlowMul)
-					w.emitAttackHitEffectLocked(*e, target.X, target.Y)
-					w.applyBeamChain(*e, idx)
+					w.fireBeamAtEntity(*e, target, idx, false)
 				} else {
-					w.spawnBullet(*e, target.X, target.Y)
+					w.spawnBullet(*e, target.X, target.Y, false)
 				}
+				w.unitTargets[e.ID] = track
 				continue
 			}
 		}
 		w.unitTargets[e.ID] = track
 		if e.AttackBuildings {
 			if pos, tx, ty, ok := w.findNearestEnemyBuilding(*e, rangeLimit); ok {
-				_ = pos
 				e.AttackCooldown = maxf(e.AttackInterval, 0.2)
 				e.Rotation = lookAt(e.X, e.Y, tx, ty)
+				w.applyShootStatus(e)
 				if e.AttackFireMode == "beam" {
-					w.emitAttackFireEffectsLocked(*e)
-					_ = w.applyDamageToBuilding(pos, e.AttackDamage)
-					w.emitAttackHitEffectLocked(*e, tx, ty)
+					w.fireBeamAtBuilding(*e, pos, tx, ty, false)
 				} else {
-					w.spawnBullet(*e, tx, ty)
+					w.spawnBullet(*e, tx, ty, false)
 				}
 			}
 		}
@@ -7776,107 +8511,239 @@ func (w *World) stepEntityMountedCombat(e *RawEntity, mounts []unitWeaponMountPr
 	if e == nil || len(mounts) == 0 {
 		return
 	}
-	cds := w.unitMountCDs[e.ID]
-	if len(cds) != len(mounts) {
-		cds = make([]float32, len(mounts))
+	states := w.ensureUnitMountStates(e.ID, mounts)
+	scale := attackCooldownScale(*e)
+	for i := range mounts {
+		lastReload := states[i].Reload
+		if states[i].Reload > 0 {
+			states[i].Reload -= dt * scale
+			if states[i].Reload < 0 {
+				states[i].Reload = 0
+			}
+		}
+		if mounts[i].Alternate && mounts[i].OtherSide >= 0 {
+			half := mounts[i].Interval * 0.5
+			if half > 0 && states[i].Reload <= half && lastReload > half {
+				other := int(mounts[i].OtherSide)
+				states[i].Side = !states[i].Side
+				if other >= 0 && other < len(states) {
+					states[other].Side = !states[other].Side
+				}
+			}
+		}
 	}
-	slowMul := clampf(e.SlowMul, 0.2, 1)
-	for i := range cds {
-		if cds[i] <= 0 {
+
+	for mi := range mounts {
+		mount := mounts[mi]
+		state := &states[mi]
+		rangeLimit := mount.Range
+		if rangeLimit <= 0 {
+			rangeLimit = e.AttackRange
+		}
+		if rangeLimit <= 0 {
+			rangeLimit = 56
+		}
+		baseX, baseY := unitMountBasePosition(*e, mount)
+
+		if mount.NoAttack {
+			state.TargetBuildPos = -1
+			state.Warmup = warmupToward(state.Warmup, 0, mount.ShootWarmupSpeed, mount.LinearWarmup, dt)
+			if mount.RepairBeam {
+				src := RawEntity{ID: e.ID, Team: e.Team, X: baseX, Y: baseY}
+				if entIdx, pos, tx, ty, ok := w.findRepairTarget(src, mount, rangeLimit); ok {
+					w.updateMountAim(*e, mount, state, tx, ty, dt)
+					state.Warmup = warmupToward(state.Warmup, 1, mount.ShootWarmupSpeed, mount.LinearWarmup, dt)
+					deltaFrames := dt * 60
+					if entIdx >= 0 && entIdx < len(w.model.Entities) {
+						target := &w.model.Entities[entIdx]
+						amount := mount.RepairSpeed*deltaFrames + mount.FractionRepairSpeed*deltaFrames*target.MaxHealth/100
+						_ = w.healEntity(target, amount)
+					} else if pos >= 0 {
+						x := int(pos) % w.model.Width
+						y := int(pos) / w.model.Width
+						if w.model.InBounds(x, y) {
+							build := w.model.Tiles[pos].Build
+							if build != nil {
+								amount := mount.RepairSpeed*deltaFrames + mount.FractionRepairSpeed*deltaFrames*build.MaxHealth/100
+								_ = w.healBuilding(pos, amount)
+							}
+						}
+					}
+				}
+			}
 			continue
 		}
-		cds[i] -= dt * slowMul
-		if cds[i] < 0 {
-			cds[i] = 0
-		}
-	}
-	rangeLimit := e.AttackRange
-	if rangeLimit <= 0 {
-		rangeLimit = 56
-	}
-	unitFired := false
-	track := w.unitTargets[e.ID]
-	retargetDelay := maxf(e.AttackInterval*0.45, 0.18)
-	if tid, ok := w.acquireTrackedEntityTarget(*e, w.model.Entities, idToIndex, spatial, teamSpatial, rangeLimit, e.AttackTargetAir, e.AttackTargetGround, e.AttackTargetPriority, &track, dt, retargetDelay); ok {
-		if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(w.model.Entities) {
-			target := &w.model.Entities[idx]
-			for mi := range mounts {
-				if cds[mi] > 0 {
-					continue
+
+		if mount.PointDefense {
+			state.TargetBuildPos = -1
+			targetIdx := w.findPointDefenseTarget(e.Team, baseX, baseY, rangeLimit)
+			state.Warmup = warmupToward(state.Warmup, 0, mount.ShootWarmupSpeed, mount.LinearWarmup, dt)
+			if targetIdx >= 0 {
+				target := w.bullets[targetIdx]
+				w.updateMountAim(*e, mount, state, target.X, target.Y, dt)
+				state.Warmup = warmupToward(state.Warmup, 1, mount.ShootWarmupSpeed, mount.LinearWarmup, dt)
+				if states[mi].Reload <= 0 &&
+					(mount.MinShootVelocity < 0 || entityVelocityLen(*e) >= mount.MinShootVelocity) &&
+					state.Warmup >= mount.MinWarmup &&
+					(!mount.Rotate || angleWithin(state.Rotation, state.TargetRotation, mount.ShootCone)) &&
+					(!mount.Alternate || mount.OtherSide < 0 || state.Side == mount.FlipSprite) {
+					src := *e
+					applyMountWeaponProfile(&src, mount)
+					sx, sy, _ := unitMountShootPosition(*e, mount, *state)
+					src.X = sx
+					src.Y = sy
+					src.Rotation = lookAt(sx, sy, target.X, target.Y)
+					if w.firePointDefenseMount(src, targetIdx) {
+						reload := mount.Interval
+						if reload <= 0 {
+							reload = 1.0 / 60.0
+						}
+						state.Reload = reload
+					}
 				}
-				if w.fireEntityMountAtUnit(e, target, mounts[mi], idx) {
-					cds[mi] = maxf(e.AttackInterval*maxf(mounts[mi].CooldownMul, 0.15), 0.05)
-					unitFired = true
+			}
+			continue
+		}
+
+		if mount.MinShootVelocity >= 0 && entityVelocityLen(*e) < mount.MinShootVelocity {
+			continue
+		}
+
+		src := RawEntity{ID: e.ID, Team: e.Team, X: baseX, Y: baseY}
+		track := targetTrackState{TargetID: state.TargetID, RetargetCD: state.RetargetCD}
+		retargetDelay := mount.TargetInterval
+		if track.TargetID != 0 && mount.TargetSwitchInterval > 0 {
+			retargetDelay = mount.TargetSwitchInterval
+		}
+
+		unitIdx := -1
+		targetBuild := false
+		buildPos := int32(-1)
+		targetX, targetY := float32(0), float32(0)
+
+		if mount.PreferBuildings && mount.HitBuildings {
+			if pos, tx, ty, ok := w.findNearestEnemyBuilding(src, rangeLimit); ok {
+				targetBuild = true
+				buildPos = pos
+				targetX, targetY = tx, ty
+			}
+		}
+
+		if !targetBuild {
+			if tid, ok := w.acquireTrackedEntityTarget(src, w.model.Entities, idToIndex, spatial, teamSpatial, rangeLimit, mount.TargetAir, mount.TargetGround, "nearest", &track, dt, retargetDelay); ok {
+				if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(w.model.Entities) {
+					unitIdx = idx
+					targetX = w.model.Entities[idx].X
+					targetY = w.model.Entities[idx].Y
 				}
 			}
 		}
-	}
-	if e.AttackBuildings && !unitFired {
-		if pos, tx, ty, ok := w.findNearestEnemyBuilding(*e, rangeLimit); ok {
-			for mi := range mounts {
-				if cds[mi] > 0 {
-					continue
-				}
-				if w.fireEntityMountAtBuilding(e, pos, tx, ty, mounts[mi]) {
-					cds[mi] = maxf(e.AttackInterval*maxf(mounts[mi].CooldownMul, 0.15), 0.05)
-				}
+
+		if unitIdx < 0 && mount.HitBuildings {
+			if pos, tx, ty, ok := w.findNearestEnemyBuilding(src, rangeLimit); ok {
+				targetBuild = true
+				buildPos = pos
+				targetX, targetY = tx, ty
 			}
 		}
+
+		state.TargetID = track.TargetID
+		state.RetargetCD = track.RetargetCD
+		state.TargetBuildPos = buildPos
+		beamActive := mount.Continuous && state.BeamBulletID != 0
+		reload := mount.Interval
+		if reload <= 0 {
+			reload = maxf(e.AttackInterval, 1.0/60.0)
+		}
+		warmupTarget := float32(0)
+		if beamActive {
+			warmupTarget = 1
+		}
+		if unitIdx < 0 && !targetBuild {
+			state.Warmup = warmupToward(state.Warmup, warmupTarget, mount.ShootWarmupSpeed, mount.LinearWarmup, dt)
+			if beamActive {
+				if w.updateMountedBeamBullet(e, mount, state, dt) {
+					state.Reload = reload
+					continue
+				}
+			}
+			continue
+		}
+		warmupTarget = 1
+
+		w.updateMountAim(*e, mount, state, targetX, targetY, dt)
+		state.Warmup = warmupToward(state.Warmup, warmupTarget, mount.ShootWarmupSpeed, mount.LinearWarmup, dt)
+		if beamActive {
+			if w.updateMountedBeamBullet(e, mount, state, dt) {
+				if mount.AlwaysContinuous {
+					w.keepMountedBeamAlive(e, mount, state)
+				}
+				state.Reload = reload
+				continue
+			}
+		}
+		if state.Reload > 0 && !(mount.AlwaysContinuous && state.BeamBulletID == 0) {
+			continue
+		}
+		if state.Warmup < mount.MinWarmup {
+			continue
+		}
+		if mount.Alternate && mount.OtherSide >= 0 && state.Side != mount.FlipSprite {
+			continue
+		}
+		if mount.Rotate {
+			if !angleWithin(state.Rotation, state.TargetRotation, mount.ShootCone) {
+				continue
+			}
+		} else if !mount.AlwaysShooting && !angleWithin(e.Rotation+mount.BaseRotation, state.TargetRotation, mount.ShootCone) {
+			continue
+		}
+
+		if w.triggerEntityMountFire(e, mi, mount, state, idToIndex) {
+			state.Reload = reload
+		}
 	}
-	w.unitMountCDs[e.ID] = cds
-	w.unitTargets[e.ID] = track
+
+	w.unitMountStates[e.ID] = states
 }
 
-func (w *World) fireEntityMountAtUnit(e *RawEntity, target *RawEntity, mount unitWeaponMountProfile, targetIdx int) bool {
+func (w *World) fireEntityMountAtUnit(e *RawEntity, target *RawEntity, mount unitWeaponMountProfile, state unitMountState, targetIdx int) bool {
 	if e == nil || target == nil || target.Health <= 0 {
 		return false
 	}
 	src := *e
-	applyMountStats(&src, mount)
-	baseAngle := lookAt(src.X, src.Y, target.X, target.Y)
-	aimAngle := baseAngle + mount.AngleOffset
-	src.Rotation = aimAngle
+	applyMountWeaponProfile(&src, mount)
+	sx, sy, _ := unitMountShootPosition(*e, mount, state)
+	src.X = sx
+	src.Y = sy
+	src.Rotation = lookAt(sx, sy, target.X, target.Y)
 	if src.AttackFireMode == "beam" {
-		scale := maxf(mount.DamageMul, 0.05)
-		w.emitAttackFireEffectsLocked(src)
-		w.applyDamageToEntity(target, src.AttackDamage*scale)
-		applySlow(target, src.AttackSlowSec*scale, src.AttackSlowMul)
-		w.emitAttackHitEffectLocked(src, target.X, target.Y)
-		w.applyBeamChain(src, targetIdx)
+		w.applyMountShootStatus(e, mount)
+		w.fireBeamAtEntity(src, target, targetIdx, false)
 		return true
 	}
-	tx, ty := target.X, target.Y
-	if mount.AngleOffset != 0 {
-		rad := float32(aimAngle * math.Pi / 180)
-		dist := maxf(src.AttackRange*0.85, 24)
-		tx = src.X + float32(math.Cos(float64(rad)))*dist
-		ty = src.Y + float32(math.Sin(float64(rad)))*dist
-	}
-	w.spawnBullet(src, tx, ty)
+	w.applyMountShootStatus(e, mount)
+	w.spawnBullet(src, target.X, target.Y, false)
 	return true
 }
 
-func (w *World) fireEntityMountAtBuilding(e *RawEntity, pos int32, tx, ty float32, mount unitWeaponMountProfile) bool {
+func (w *World) fireEntityMountAtBuilding(e *RawEntity, pos int32, tx, ty float32, mount unitWeaponMountProfile, state unitMountState) bool {
 	if e == nil {
 		return false
 	}
 	src := *e
-	applyMountStats(&src, mount)
-	src.Rotation = lookAt(src.X, src.Y, tx, ty) + mount.AngleOffset
+	applyMountWeaponProfile(&src, mount)
+	sx, sy, _ := unitMountShootPosition(*e, mount, state)
+	src.X = sx
+	src.Y = sy
+	src.Rotation = lookAt(sx, sy, tx, ty)
 	if src.AttackFireMode == "beam" {
-		scale := maxf(mount.DamageMul, 0.05)
-		w.emitAttackFireEffectsLocked(src)
-		_ = w.applyDamageToBuilding(pos, src.AttackDamage*scale)
-		w.emitAttackHitEffectLocked(src, tx, ty)
+		w.applyMountShootStatus(e, mount)
+		w.fireBeamAtBuilding(src, pos, tx, ty, false)
 		return true
 	}
-	if mount.AngleOffset != 0 {
-		rad := float32(src.Rotation * math.Pi / 180)
-		dist := maxf(src.AttackRange*0.85, 24)
-		tx = src.X + float32(math.Cos(float64(rad)))*dist
-		ty = src.Y + float32(math.Sin(float64(rad)))*dist
-	}
-	w.spawnBullet(src, tx, ty)
+	w.applyMountShootStatus(e, mount)
+	w.spawnBullet(src, tx, ty, false)
 	return true
 }
 
@@ -7886,6 +8753,7 @@ func applyMountStats(src *RawEntity, mount unitWeaponMountProfile) {
 	}
 	if mount.DamageMul > 0 {
 		src.AttackDamage *= mount.DamageMul
+		src.AttackSplashDamage *= mount.DamageMul
 	}
 	if mount.RangeMul > 0 {
 		src.AttackRange *= mount.RangeMul
@@ -7918,7 +8786,7 @@ func (w *World) stepBuildingCombat(dt float32, idToIndex map[int32]int, spatial 
 			continue
 		}
 		prof, ok := w.getBuildingWeaponProfile(int16(t.Build.Block))
-		if !ok || prof.Damage <= 0 || prof.Interval <= 0 || prof.Range <= 0 {
+		if !ok || (prof.Damage <= 0 && prof.SplashDamage <= 0 && prof.StatusID == 0 && strings.TrimSpace(prof.StatusName) == "") || (!prof.ContinuousHold && prof.Interval <= 0) || prof.Range <= 0 {
 			continue
 		}
 		state, exists := w.buildStates[pos]
@@ -7949,30 +8817,58 @@ func (w *World) stepBuildingCombat(dt float32, idToIndex map[int32]int, spatial 
 		}
 
 		src := RawEntity{
-			X:                    float32(t.X*8 + 4),
-			Y:                    float32(t.Y*8 + 4),
-			Rotation:             float32(t.Rotation) * 90,
-			Team:                 t.Build.Team,
-			AttackFireMode:       prof.FireMode,
-			AttackDamage:         prof.Damage,
-			AttackInterval:       prof.Interval,
-			AttackRange:          prof.Range,
-			AttackBulletType:     prof.BulletType,
-			AttackBulletSpeed:    prof.BulletSpeed,
-			AttackSplashRadius:   prof.SplashRadius,
-			AttackSlowSec:        prof.SlowSec,
-			AttackSlowMul:        prof.SlowMul,
-			AttackPierce:         prof.Pierce,
-			AttackChainCount:     prof.ChainCount,
-			AttackChainRange:     prof.ChainRange,
-			AttackShootEffect:    prof.ShootEffect,
-			AttackSmokeEffect:    prof.SmokeEffect,
-			AttackHitEffect:      prof.HitEffect,
-			AttackDespawnEffect:  prof.DespawnEffect,
-			AttackTargetAir:      prof.TargetAir,
-			AttackTargetGround:   prof.TargetGround,
-			AttackTargetPriority: prof.TargetPriority,
-			AttackBuildings:      prof.HitBuildings,
+			X:                       float32(t.X*8 + 4),
+			Y:                       float32(t.Y*8 + 4),
+			Rotation:                float32(t.Rotation) * 90,
+			Team:                    t.Build.Team,
+			AttackFireMode:          prof.FireMode,
+			AttackDamage:            prof.Damage,
+			AttackSplashDamage:      prof.SplashDamage,
+			AttackInterval:          prof.Interval,
+			AttackRange:             prof.Range,
+			AttackBulletType:        prof.BulletType,
+			AttackBulletLifetime:    prof.BulletLifetime,
+			AttackBulletHitSize:     prof.BulletHitSize,
+			AttackBulletSpeed:       prof.BulletSpeed,
+			AttackSplashRadius:      prof.SplashRadius,
+			AttackBuildingDamage:    prof.BuildingDamage,
+			AttackBuildingDamageSet: true,
+			AttackSlowSec:           prof.SlowSec,
+			AttackSlowMul:           prof.SlowMul,
+			AttackPierce:            prof.Pierce,
+			AttackPierceBuilding:    prof.PierceBuilding,
+			AttackChainCount:        prof.ChainCount,
+			AttackChainRange:        prof.ChainRange,
+			AttackStatusID:          prof.StatusID,
+			AttackStatusName:        prof.StatusName,
+			AttackStatusDuration:    prof.StatusDuration,
+			AttackFragmentCount:     prof.FragmentCount,
+			AttackFragmentSpread:    prof.FragmentSpread,
+			AttackFragmentSpeed:     prof.FragmentSpeed,
+			AttackFragmentLife:      prof.FragmentLife,
+			AttackFragmentRand:      prof.FragmentRandomSpread,
+			AttackFragmentAngle:     prof.FragmentAngle,
+			AttackFragmentVelMin:    prof.FragmentVelocityMin,
+			AttackFragmentVelMax:    prof.FragmentVelocityMax,
+			AttackFragmentLifeMin:   prof.FragmentLifeMin,
+			AttackFragmentLifeMax:   prof.FragmentLifeMax,
+			AttackFragmentBullet:    cloneBulletRuntimeProfile(prof.FragmentBullet),
+			AttackShootEffect:       prof.ShootEffect,
+			AttackSmokeEffect:       prof.SmokeEffect,
+			AttackHitEffect:         prof.HitEffect,
+			AttackDespawnEffect:     prof.DespawnEffect,
+			AttackTargetAir:         prof.TargetAir,
+			AttackTargetGround:      prof.TargetGround,
+			AttackTargetPriority:    prof.TargetPriority,
+			AttackBuildings:         prof.HitBuildings,
+		}
+
+		if prof.ContinuousHold && isPersistentBeamBulletProfile(prof.Bullet) {
+			if w.stepBuildingContinuousBeam(&src, &state, prof, ents, idToIndex, spatial, teamSpatial, dt) {
+				t.Rotation = int8((int(src.Rotation/90) + 4) % 4)
+			}
+			w.buildStates[pos] = state
+			continue
 		}
 
 		allowShot := state.Cooldown <= 0 && (state.BurstRemain == 0 || state.BurstDelay <= 0)
@@ -8024,38 +8920,25 @@ func (w *World) tryFireBuildingShot(src *RawEntity, state *buildCombatState, pro
 	}
 
 	fired := false
-	track := targetTrackState{TargetID: state.TargetID, RetargetCD: state.RetargetCD}
-	retargetDelay := maxf(prof.Interval*0.55, 0.22)
-	if tid, ok := w.acquireTrackedEntityTarget(*src, ents, idToIndex, spatial, teamSpatial, prof.Range, prof.TargetAir, prof.TargetGround, prof.TargetPriority, &track, 0, retargetDelay); ok {
-		if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(ents) {
-			target := &ents[idx]
-			src.Rotation = lookAt(src.X, src.Y, target.X, target.Y)
-			if src.AttackFireMode == "beam" {
-				w.emitAttackFireEffectsLocked(*src)
-				w.applyDamageToEntity(target, src.AttackDamage)
-				applySlow(target, src.AttackSlowSec, src.AttackSlowMul)
-				w.emitAttackHitEffectLocked(*src, target.X, target.Y)
-				w.applyBeamChain(*src, idx)
-			} else {
-				w.spawnBullet(*src, target.X, target.Y)
-			}
-			fired = true
+	targetIdx, buildPos, tx, ty := w.acquireBuildingWeaponTarget(*src, state, prof, ents, idToIndex, spatial, teamSpatial)
+	if targetIdx >= 0 && targetIdx < len(ents) {
+		target := &ents[targetIdx]
+		src.Rotation = lookAt(src.X, src.Y, target.X, target.Y)
+		if src.AttackFireMode == "beam" {
+			w.fireBeamAtEntity(*src, target, targetIdx, true)
+		} else {
+			w.spawnBullet(*src, target.X, target.Y, true)
 		}
+		fired = true
 	}
-	state.TargetID = track.TargetID
-	state.RetargetCD = track.RetargetCD
-	if !fired && prof.TargetBuilds {
-		if bpos, tx, ty, ok := w.findNearestEnemyBuilding(*src, prof.Range); ok {
-			src.Rotation = lookAt(src.X, src.Y, tx, ty)
-			if src.AttackFireMode == "beam" {
-				w.emitAttackFireEffectsLocked(*src)
-				_ = w.applyDamageToBuilding(bpos, src.AttackDamage)
-				w.emitAttackHitEffectLocked(*src, tx, ty)
-			} else {
-				w.spawnBullet(*src, tx, ty)
-			}
-			fired = true
+	if !fired && buildPos >= 0 {
+		src.Rotation = lookAt(src.X, src.Y, tx, ty)
+		if src.AttackFireMode == "beam" {
+			w.fireBeamAtBuilding(*src, buildPos, tx, ty, true)
+		} else {
+			w.spawnBullet(*src, tx, ty, true)
 		}
+		fired = true
 	}
 	if !fired {
 		return false
@@ -8075,7 +8958,11 @@ func (w *World) tryFireBuildingShot(src *RawEntity, state *buildCombatState, pro
 	return true
 }
 
-func (w *World) spawnBullet(src RawEntity, tx, ty float32) {
+func (w *World) spawnBullet(src RawEntity, tx, ty float32, sourceIsBuilding bool) {
+	w.spawnBulletWithAngle(src, tx, ty, lookAt(src.X, src.Y, tx, ty), 1, pendingMountShot{}, sourceIsBuilding)
+}
+
+func (w *World) spawnBulletWithAngle(src RawEntity, tx, ty, angle, speedScale float32, shot pendingMountShot, sourceIsBuilding bool) {
 	bulletSpeed := src.AttackBulletSpeed
 	if bulletSpeed <= 0 {
 		speed := src.MoveSpeed
@@ -8084,38 +8971,65 @@ func (w *World) spawnBullet(src RawEntity, tx, ty float32) {
 		}
 		bulletSpeed = maxf(speed*2.2, 28)
 	}
-	angle := lookAt(src.X, src.Y, tx, ty)
+	if speedScale <= 0 {
+		speedScale = 1
+	}
+	bulletSpeed *= speedScale
 	rad := float32(angle * math.Pi / 180)
+	damageScale := w.outgoingDamageScale(src, sourceIsBuilding)
+	lifeSec := src.AttackBulletLifetime
+	if lifeSec <= 0 && bulletSpeed > 0 {
+		lifeSec = maxf(src.AttackRange/bulletSpeed, 0.6)
+	}
+	radius := maxf(src.AttackBulletHitSize*0.5, 4)
+	buildingMul := entityBuildingDamageMultiplier(src)
 	b := simBullet{
-		ID:             w.bulletNextID,
-		Team:           src.Team,
-		X:              src.X,
-		Y:              src.Y,
-		VX:             float32(math.Cos(float64(rad))) * bulletSpeed,
-		VY:             float32(math.Sin(float64(rad))) * bulletSpeed,
-		Damage:         src.AttackDamage,
-		LifeSec:        maxf(src.AttackRange/bulletSpeed, 0.6),
-		Radius:         5,
-		HitUnits:       true,
-		HitBuilds:      src.AttackBuildings,
-		BulletType:     src.AttackBulletType,
-		SplashRadius:   src.AttackSplashRadius,
-		SlowSec:        src.AttackSlowSec,
-		SlowMul:        clampf(src.AttackSlowMul, 0.2, 1),
-		PierceRemain:   src.AttackPierce,
-		ChainCount:     src.AttackChainCount,
-		ChainRange:     src.AttackChainRange,
-		FragmentCount:  src.AttackFragmentCount,
-		FragmentSpread: src.AttackFragmentSpread,
-		FragmentSpeed:  src.AttackFragmentSpeed,
-		FragmentLife:   src.AttackFragmentLife,
-		ShootEffect:    src.AttackShootEffect,
-		SmokeEffect:    src.AttackSmokeEffect,
-		HitEffect:      src.AttackHitEffect,
-		DespawnEffect:  src.AttackDespawnEffect,
-		TargetAir:      src.AttackTargetAir,
-		TargetGround:   src.AttackTargetGround,
-		TargetPriority: src.AttackTargetPriority,
+		ID:              w.bulletNextID,
+		Team:            src.Team,
+		X:               src.X,
+		Y:               src.Y,
+		VX:              float32(math.Cos(float64(rad))) * bulletSpeed,
+		VY:              float32(math.Sin(float64(rad))) * bulletSpeed,
+		Damage:          src.AttackDamage * damageScale,
+		SplashDamage:    src.AttackSplashDamage * damageScale,
+		LifeSec:         lifeSec,
+		AgeSec:          0,
+		Radius:          radius,
+		HitUnits:        true,
+		HitBuilds:       src.AttackBuildings,
+		BulletType:      src.AttackBulletType,
+		SplashRadius:    src.AttackSplashRadius,
+		BuildingDamage:  buildingMul,
+		SlowSec:         src.AttackSlowSec,
+		SlowMul:         clampf(src.AttackSlowMul, 0.2, 1),
+		PierceRemain:    src.AttackPierce,
+		PierceBuilding:  src.AttackPierceBuilding,
+		ChainCount:      src.AttackChainCount,
+		ChainRange:      src.AttackChainRange,
+		FragmentCount:   src.AttackFragmentCount,
+		FragmentSpread:  src.AttackFragmentSpread,
+		FragmentSpeed:   src.AttackFragmentSpeed,
+		FragmentLife:    src.AttackFragmentLife,
+		FragmentRand:    src.AttackFragmentRand,
+		FragmentAngle:   src.AttackFragmentAngle,
+		FragmentVelMin:  src.AttackFragmentVelMin,
+		FragmentVelMax:  src.AttackFragmentVelMax,
+		FragmentLifeMin: src.AttackFragmentLifeMin,
+		FragmentLifeMax: src.AttackFragmentLifeMax,
+		FragmentBullet:  cloneBulletRuntimeProfile(src.AttackFragmentBullet),
+		StatusID:        src.AttackStatusID,
+		StatusName:      src.AttackStatusName,
+		StatusDuration:  src.AttackStatusDuration,
+		ShootEffect:     src.AttackShootEffect,
+		SmokeEffect:     src.AttackSmokeEffect,
+		HitEffect:       src.AttackHitEffect,
+		DespawnEffect:   src.AttackDespawnEffect,
+		TargetAir:       src.AttackTargetAir,
+		TargetGround:    src.AttackTargetGround,
+		TargetPriority:  src.AttackTargetPriority,
+		HelixScl:        shot.HelixScl,
+		HelixMag:        shot.HelixMag,
+		HelixOffset:     shot.HelixOffset,
 	}
 	w.bulletNextID++
 	w.bullets = append(w.bullets, b)
@@ -8133,39 +9047,67 @@ func (w *World) spawnBullet(src RawEntity, tx, ty float32) {
 	})
 }
 
-func (w *World) stepBullets(dt float32, idToIndex map[int32]int) {
+func (w *World) stepBullets(dt float32, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex) {
 	if len(w.bullets) == 0 {
 		return
 	}
 	for i := 0; i < len(w.bullets); {
 		b := &w.bullets[i]
+		if isPersistentBeamBulletClass(b.BulletClass) {
+			impacted, expired := w.stepPersistentBeamBullet(b, dt)
+			impactRot := beamImpactRotation(*b)
+			if impacted {
+				tx, ty := beamEndPosition(*b)
+				w.emitEffectLocked(b.HitEffect, tx, ty, impactRot)
+			} else if expired {
+				tx, ty := beamEndPosition(*b)
+				w.emitEffectLocked(b.DespawnEffect, tx, ty, impactRot)
+			}
+			if !expired {
+				i++
+				continue
+			}
+			last := len(w.bullets) - 1
+			w.bullets[i] = w.bullets[last]
+			w.bullets = w.bullets[:last]
+			continue
+		}
 		b.AgeSec += dt
 		b.X += b.VX * dt
 		b.Y += b.VY * dt
+		if b.HelixScl > 0 && b.HelixMag != 0 {
+			rot := float32(math.Atan2(float64(b.VY), float64(b.VX)) * 180 / math.Pi)
+			side := float32(math.Sin(float64((b.AgeSec*60+b.HelixOffset)/b.HelixScl))) * b.HelixMag * dt * 60
+			b.X += trnsx(rot, 0, side)
+			b.Y += trnsy(rot, 0, side)
+		}
 		hit := false
 		impacted := false
 		if b.HitUnits {
-			if tid, ok := findHitEnemyEntity(*b, w.model.Entities, b.Radius, b.TargetAir, b.TargetGround); ok {
-				if idx, exists := idToIndex[tid]; exists && idx >= 0 && idx < len(w.model.Entities) {
-					w.applyDamageToEntity(&w.model.Entities[idx], b.Damage)
-					applySlow(&w.model.Entities[idx], b.SlowSec, b.SlowMul)
-					w.applyChainDamage(*b, idx)
-					w.applySplashDamage(*b)
-					hit = true
-					impacted = true
-					if b.PierceRemain > 0 {
-						b.PierceRemain--
-						hit = false
-					}
+			if idx, ok := findHitEnemyEntityIndex(*b, w.model.Entities, spatial, teamSpatial, b.Radius, b.TargetAir, b.TargetGround); ok && idx >= 0 && idx < len(w.model.Entities) {
+				w.applyDamageToEntityDetailed(&w.model.Entities[idx], b.Damage, false)
+				applySlow(&w.model.Entities[idx], b.SlowSec, b.SlowMul)
+				w.applyStatusToEntity(&w.model.Entities[idx], b.StatusID, b.StatusName, b.StatusDuration)
+				w.applyChainDamage(*b, idx)
+				w.applySplashDamage(*b)
+				hit = true
+				impacted = true
+				if b.PierceRemain > 0 {
+					b.PierceRemain--
+					hit = false
 				}
 			}
 		}
 		if !hit && b.HitBuilds {
 			if pos, _, _, ok := w.findNearestEnemyBuilding(RawEntity{X: b.X, Y: b.Y, Team: b.Team}, b.Radius); ok {
-				if w.applyDamageToBuilding(pos, b.Damage) {
+				if w.applyDamageToBuildingDetailed(pos, b.Damage*b.BuildingDamage) {
 					w.applySplashDamage(*b)
 					hit = true
 					impacted = true
+					if b.PierceBuilding && b.PierceRemain > 0 {
+						b.PierceRemain--
+						hit = false
+					}
 				}
 			}
 		}
@@ -8199,48 +9141,131 @@ func (w *World) spawnBulletFragments(parent simBullet) {
 	if spread <= 0 {
 		spread = 20
 	}
-	speed := parent.FragmentSpeed
-	if speed <= 0 {
-		speed = 28
-	}
-	life := parent.FragmentLife
-	if life <= 0 {
-		life = 0.6
-	}
 	for i := int32(0); i < n; i++ {
 		t := float32(i)
 		offset := float32(0)
 		if n > 1 {
 			offset = (t/float32(n-1))*spread - spread/2
 		}
-		ang := baseAngle + float32(offset)
+		randomSpread := parent.FragmentRand
+		if randomSpread <= 0 {
+			randomSpread = spread
+		}
+		ang := baseAngle + parent.FragmentAngle + float32(offset) + (rand.Float32()-0.5)*randomSpread
 		rad := float32(ang * math.Pi / 180)
+		template := parent.FragmentBullet
+		speed := parent.FragmentSpeed
+		life := parent.FragmentLife
+		damage := parent.Damage * 0.45
+		splashDamage := parent.SplashDamage * 0.45
+		splashRadius := parent.SplashRadius * 0.5
+		radius := float32(4)
+		buildingDamage := parent.BuildingDamage
+		bulletType := parent.BulletType
+		bulletClass := parent.BulletClass
+		pierce := int32(0)
+		pierceBuilding := false
+		statusID := parent.StatusID
+		statusName := parent.StatusName
+		statusDuration := parent.StatusDuration
+		hitBuilds := parent.HitBuilds
+		targetAir := parent.TargetAir
+		targetGround := parent.TargetGround
+		hitEffect := parent.HitEffect
+		despawnEffect := parent.DespawnEffect
+		fragCount := int32(0)
+		fragSpread2 := float32(0)
+		fragRand := float32(0)
+		fragAngle := float32(0)
+		fragVelMin := float32(0)
+		fragVelMax := float32(0)
+		fragLifeMin := float32(0)
+		fragLifeMax := float32(0)
+		var fragBullet *bulletRuntimeProfile
+		if template != nil {
+			if template.Speed > 0 {
+				speed = template.Speed
+			}
+			if template.Lifetime > 0 {
+				life = template.Lifetime
+			}
+			damage = template.Damage
+			splashDamage = template.SplashDamage
+			splashRadius = template.SplashRadius
+			radius = maxf(template.HitSize*0.5, 4)
+			buildingDamage = template.BuildingDamage
+			bulletType = template.BulletType
+			bulletClass = template.ClassName
+			pierce = template.Pierce
+			pierceBuilding = template.PierceBuilding
+			statusID = template.StatusID
+			statusName = template.StatusName
+			statusDuration = template.StatusDuration
+			hitBuilds = template.HitBuildings
+			targetAir = template.TargetAir
+			targetGround = template.TargetGround
+			hitEffect = template.HitEffect
+			despawnEffect = template.DespawnEffect
+			fragCount = template.FragmentCount
+			fragSpread2 = template.FragmentSpread
+			fragRand = template.FragmentRandom
+			fragAngle = template.FragmentAngle
+			fragVelMin = template.FragmentVelocityMin
+			fragVelMax = template.FragmentVelocityMax
+			fragLifeMin = template.FragmentLifeMin
+			fragLifeMax = template.FragmentLifeMax
+			fragBullet = cloneBulletRuntimeProfile(template.FragmentBullet)
+		}
+		speedMul := randomRange(parent.FragmentVelMin, parent.FragmentVelMax)
+		if speedMul == 0 {
+			speedMul = 1
+		}
+		lifeMul := randomRange(parent.FragmentLifeMin, parent.FragmentLifeMax)
+		if lifeMul == 0 {
+			lifeMul = 1
+		}
 		b := simBullet{
-			ID:             w.bulletNextID,
-			Team:           parent.Team,
-			X:              parent.X,
-			Y:              parent.Y,
-			VX:             float32(math.Cos(float64(rad))) * speed,
-			VY:             float32(math.Sin(float64(rad))) * speed,
-			Damage:         parent.Damage * 0.45,
-			LifeSec:        life,
-			Radius:         4,
-			HitUnits:       parent.HitUnits,
-			HitBuilds:      parent.HitBuilds,
-			BulletType:     parent.BulletType,
-			SplashRadius:   parent.SplashRadius * 0.5,
-			SlowSec:        parent.SlowSec * 0.5,
-			SlowMul:        parent.SlowMul,
-			PierceRemain:   0,
-			ChainCount:     0,
-			ChainRange:     0,
-			ShootEffect:    "",
-			SmokeEffect:    "",
-			HitEffect:      parent.HitEffect,
-			DespawnEffect:  parent.DespawnEffect,
-			TargetAir:      parent.TargetAir,
-			TargetGround:   parent.TargetGround,
-			TargetPriority: parent.TargetPriority,
+			ID:              w.bulletNextID,
+			Team:            parent.Team,
+			X:               parent.X,
+			Y:               parent.Y,
+			VX:              float32(math.Cos(float64(rad))) * speed * speedMul,
+			VY:              float32(math.Sin(float64(rad))) * speed * speedMul,
+			Damage:          damage,
+			SplashDamage:    splashDamage,
+			LifeSec:         maxf(life*lifeMul, 0.2),
+			Radius:          radius,
+			HitUnits:        parent.HitUnits,
+			HitBuilds:       hitBuilds,
+			BulletType:      bulletType,
+			BulletClass:     bulletClass,
+			SplashRadius:    splashRadius,
+			BuildingDamage:  buildingDamage,
+			SlowSec:         parent.SlowSec,
+			SlowMul:         parent.SlowMul,
+			PierceRemain:    pierce,
+			PierceBuilding:  pierceBuilding,
+			ChainCount:      0,
+			ChainRange:      0,
+			FragmentCount:   fragCount,
+			FragmentSpread:  fragSpread2,
+			FragmentRand:    fragRand,
+			FragmentAngle:   fragAngle,
+			FragmentVelMin:  fragVelMin,
+			FragmentVelMax:  fragVelMax,
+			FragmentLifeMin: fragLifeMin,
+			FragmentLifeMax: fragLifeMax,
+			FragmentBullet:  fragBullet,
+			StatusID:        statusID,
+			StatusName:      statusName,
+			StatusDuration:  statusDuration,
+			ShootEffect:     "",
+			SmokeEffect:     "",
+			HitEffect:       hitEffect,
+			DespawnEffect:   despawnEffect,
+			TargetAir:       targetAir,
+			TargetGround:    targetGround,
+			TargetPriority:  parent.TargetPriority,
 		}
 		w.bulletNextID++
 		w.bullets = append(w.bullets, b)
@@ -8259,7 +9284,7 @@ func (w *World) spawnBulletFragments(parent simBullet) {
 }
 
 func (w *World) applySplashDamage(b simBullet) {
-	if b.SplashRadius <= 0 {
+	if b.SplashRadius <= 0 || (b.SplashDamage <= 0 && b.StatusID == 0 && strings.TrimSpace(b.StatusName) == "") {
 		return
 	}
 	// Damage enemy units in splash radius.
@@ -8274,12 +9299,16 @@ func (w *World) applySplashDamage(b simBullet) {
 		if d2 > b.SplashRadius*b.SplashRadius {
 			continue
 		}
-		scale := 1 - float32(math.Sqrt(float64(d2)))/b.SplashRadius
-		if scale < 0.15 {
-			scale = 0.15
+		dist := float32(math.Sqrt(float64(d2)))
+		scale := 1 - 0.6*(dist/b.SplashRadius)
+		if scale < 0.4 {
+			scale = 0.4
 		}
-		w.applyDamageToEntity(e, b.Damage*scale)
+		if b.SplashDamage > 0 {
+			w.applyDamageToEntityDetailed(e, b.SplashDamage*scale, false)
+		}
 		applySlow(e, b.SlowSec*scale, b.SlowMul)
+		w.applyStatusToEntity(e, b.StatusID, b.StatusName, b.StatusDuration)
 	}
 	// Damage enemy buildings in splash radius.
 	r := int(math.Ceil(float64(b.SplashRadius / 8)))
@@ -8302,12 +9331,15 @@ func (w *World) applySplashDamage(b simBullet) {
 			if d2 > b.SplashRadius*b.SplashRadius {
 				continue
 			}
-			scale := 1 - float32(math.Sqrt(float64(d2)))/b.SplashRadius
-			if scale < 0.15 {
-				scale = 0.15
+			dist := float32(math.Sqrt(float64(d2)))
+			scale := 1 - 0.6*(dist/b.SplashRadius)
+			if scale < 0.4 {
+				scale = 0.4
 			}
 			pos := int32(ty*w.model.Width + tx)
-			_ = w.applyDamageToBuilding(pos, b.Damage*scale)
+			if b.SplashDamage > 0 {
+				_ = w.applyDamageToBuildingDetailed(pos, b.SplashDamage*scale*b.BuildingDamage)
+			}
 		}
 	}
 }
@@ -8345,14 +9377,15 @@ func (w *World) applyChainDamage(b simBullet, firstIdx int) {
 		}
 		scale := float32(math.Pow(0.72, float64(c+1)))
 		damage := b.Damage * scale
-		w.applyDamageToEntity(&w.model.Entities[next], damage)
+		w.applyDamageToEntityDetailed(&w.model.Entities[next], damage, false)
 		applySlow(&w.model.Entities[next], b.SlowSec*scale, b.SlowMul)
+		w.applyStatusToEntity(&w.model.Entities[next], b.StatusID, b.StatusName, b.StatusDuration)
 		hit[next] = struct{}{}
 		prev = next
 	}
 }
 
-func (w *World) applyBeamChain(src RawEntity, firstIdx int) {
+func (w *World) applyBeamChainFromSource(src RawEntity, firstIdx int, sourceIsBuilding bool) {
 	if src.AttackChainCount <= 0 || src.AttackChainRange <= 0 || firstIdx < 0 || firstIdx >= len(w.model.Entities) {
 		return
 	}
@@ -8384,36 +9417,17 @@ func (w *World) applyBeamChain(src RawEntity, firstIdx int) {
 			return
 		}
 		scale := float32(math.Pow(0.72, float64(c+1)))
-		dmg := src.AttackDamage * scale
-		w.applyDamageToEntity(&w.model.Entities[next], dmg)
+		dmg := src.AttackDamage * scale * w.outgoingDamageScale(src, sourceIsBuilding)
+		w.applyDamageToEntityDetailed(&w.model.Entities[next], dmg, false)
 		applySlow(&w.model.Entities[next], src.AttackSlowSec*scale, src.AttackSlowMul)
+		w.applyStatusToEntity(&w.model.Entities[next], src.AttackStatusID, src.AttackStatusName, src.AttackStatusDuration)
 		hit[next] = struct{}{}
 		prev = next
 	}
 }
 
 func (w *World) applyDamageToEntity(e *RawEntity, dmg float32) {
-	if e == nil || dmg <= 0 {
-		return
-	}
-	if e.PlayerID != 0 {
-		return
-	}
-	armor := e.Armor
-	if armor > 0 {
-		dmg -= armor
-		if dmg < 0.5 {
-			dmg = 0.5
-		}
-	}
-	if e.Shield > 0 {
-		absorb := minf(e.Shield, dmg)
-		e.Shield -= absorb
-		dmg -= absorb
-	}
-	if dmg > 0 {
-		e.Health -= dmg
-	}
+	w.applyDamageToEntityDetailed(e, dmg, false)
 }
 
 func (w *World) getBuildingWeaponProfile(blockID int16) (buildingWeaponProfile, bool) {
@@ -8518,6 +9532,10 @@ func (w *World) findNearestEnemyBuilding(src RawEntity, rangeLimit float32) (int
 }
 
 func (w *World) applyDamageToBuilding(pos int32, damage float32) bool {
+	return w.applyDamageToBuildingDetailed(pos, damage)
+}
+
+func (w *World) applyDamageToBuildingRaw(pos int32, damage float32) bool {
 	if w.model == nil || damage <= 0 {
 		return false
 	}
@@ -8769,37 +9787,54 @@ func (idx *entitySpatialIndex) forEachInRange(x, y, radius float32, visit func(i
 	}
 }
 
-func findHitEnemyEntity(b simBullet, ents []RawEntity, radius float32, allowAir, allowGround bool) (int32, bool) {
+func findHitEnemyEntityIndex(b simBullet, ents []RawEntity, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex, radius float32, allowAir, allowGround bool) (int, bool) {
 	if !allowAir && !allowGround {
 		allowAir, allowGround = true, true
 	}
 	bestDist2 := float32(math.MaxFloat32)
-	bestID := int32(0)
-	for i := range ents {
+	bestIdx := -1
+	visit := func(i int) {
+		if i < 0 || i >= len(ents) {
+			return
+		}
 		e := ents[i]
 		if e.Health <= 0 || e.Team == b.Team {
-			continue
+			return
 		}
 		if isPlayerControlledEntity(e) {
-			continue
+			return
 		}
 		if !canTargetEntity(e, allowAir, allowGround) {
-			continue
+			return
 		}
 		dx := e.X - b.X
 		dy := e.Y - b.Y
 		d2 := dx*dx + dy*dy
 		hitR := radius + maxf(e.HitRadius, 1.0)
 		if d2 > hitR*hitR {
-			continue
+			return
 		}
 		if d2 >= bestDist2 {
-			continue
+			return
 		}
 		bestDist2 = d2
-		bestID = e.ID
+		bestIdx = i
 	}
-	return bestID, bestID != 0
+	if len(teamSpatial) != 0 {
+		for team, idx := range teamSpatial {
+			if team == 0 || team == b.Team || idx == nil {
+				continue
+			}
+			idx.forEachInRange(b.X, b.Y, radius+16, visit)
+		}
+	} else if spatial != nil {
+		spatial.forEachInRange(b.X, b.Y, radius+16, visit)
+	} else {
+		for i := range ents {
+			visit(i)
+		}
+	}
+	return bestIdx, bestIdx >= 0
 }
 
 func targetPriorityScore(src RawEntity, e RawEntity, d2 float32, priority string) float32 {
@@ -8877,6 +9912,12 @@ func (w *World) ensureEntityDefaults(e *RawEntity) {
 	if e.AttackBulletSpeed <= 0 {
 		e.AttackBulletSpeed = 34
 	}
+	if e.AttackBulletHitSize <= 0 {
+		e.AttackBulletHitSize = 10
+	}
+	if !e.AttackBuildingDamageSet && e.AttackBuildingDamage != 0 {
+		e.AttackBuildingDamageSet = true
+	}
 	if e.AttackSlowMul <= 0 {
 		e.AttackSlowMul = 1
 	}
@@ -8889,6 +9930,27 @@ func (w *World) ensureEntityDefaults(e *RawEntity) {
 	}
 	if strings.TrimSpace(e.AttackTargetPriority) == "" {
 		e.AttackTargetPriority = "nearest"
+	}
+	if e.StatusDamageMul <= 0 {
+		e.StatusDamageMul = 1
+	}
+	if e.StatusHealthMul <= 0 {
+		e.StatusHealthMul = 1
+	}
+	if e.StatusSpeedMul <= 0 {
+		e.StatusSpeedMul = 1
+	}
+	if e.StatusReloadMul <= 0 {
+		e.StatusReloadMul = 1
+	}
+	if e.StatusBuildSpeedMul <= 0 {
+		e.StatusBuildSpeedMul = 1
+	}
+	if e.StatusDragMul <= 0 {
+		e.StatusDragMul = 1
+	}
+	if e.StatusArmorOverride < 0 {
+		e.StatusArmorOverride = -1
 	}
 	if e.HitRadius <= 0 {
 		e.HitRadius = entityHitRadiusForType(e.TypeID)
@@ -8916,38 +9978,11 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 	if e == nil {
 		return
 	}
-	if w.applyWeaponFromUnitTypeDef(e) {
-		return
-	}
 	p := defaultWeaponProfile
 	if name, ok := w.unitNamesByID[e.TypeID]; ok && name != "" {
 		if byName, exists := w.unitProfilesByName[name]; exists {
 			p = byName
-			e.AttackRange = p.Range
-			e.AttackFireMode = p.FireMode
-			e.AttackDamage = p.Damage
-			e.AttackInterval = p.Interval
-			e.AttackBulletType = p.BulletType
-			e.AttackBulletSpeed = p.BulletSpeed
-			e.AttackSplashRadius = p.SplashRadius
-			e.AttackSlowSec = p.SlowSec
-			e.AttackSlowMul = p.SlowMul
-			e.AttackPierce = p.Pierce
-			e.AttackChainCount = p.ChainCount
-			e.AttackChainRange = p.ChainRange
-			e.AttackFragmentCount = p.FragmentCount
-			e.AttackFragmentSpread = p.FragmentSpread
-			e.AttackFragmentSpeed = p.FragmentSpeed
-			e.AttackFragmentLife = p.FragmentLife
-			e.AttackShootEffect = p.ShootEffect
-			e.AttackSmokeEffect = p.SmokeEffect
-			e.AttackHitEffect = p.HitEffect
-			e.AttackDespawnEffect = p.DespawnEffect
-			e.AttackPreferBuildings = p.PreferBuildings
-			e.AttackTargetAir = p.TargetAir
-			e.AttackTargetGround = p.TargetGround
-			e.AttackTargetPriority = p.TargetPriority
-			e.AttackBuildings = p.HitBuildings
+			applyWeaponProfileToEntity(e, p)
 			if e.HitRadius <= 0 {
 				e.HitRadius = entityHitRadiusForType(e.TypeID)
 			}
@@ -8961,31 +9996,11 @@ func (w *World) applyWeaponProfile(e *RawEntity) {
 	if v, ok := src[e.TypeID]; ok {
 		p = v
 	}
-	e.AttackRange = p.Range
-	e.AttackFireMode = p.FireMode
-	e.AttackDamage = p.Damage
-	e.AttackInterval = p.Interval
-	e.AttackBulletType = p.BulletType
-	e.AttackBulletSpeed = p.BulletSpeed
-	e.AttackSplashRadius = p.SplashRadius
-	e.AttackSlowSec = p.SlowSec
-	e.AttackSlowMul = p.SlowMul
-	e.AttackPierce = p.Pierce
-	e.AttackChainCount = p.ChainCount
-	e.AttackChainRange = p.ChainRange
-	e.AttackFragmentCount = p.FragmentCount
-	e.AttackFragmentSpread = p.FragmentSpread
-	e.AttackFragmentSpeed = p.FragmentSpeed
-	e.AttackFragmentLife = p.FragmentLife
-	e.AttackShootEffect = p.ShootEffect
-	e.AttackSmokeEffect = p.SmokeEffect
-	e.AttackHitEffect = p.HitEffect
-	e.AttackDespawnEffect = p.DespawnEffect
-	e.AttackPreferBuildings = p.PreferBuildings
-	e.AttackTargetAir = p.TargetAir
-	e.AttackTargetGround = p.TargetGround
-	e.AttackTargetPriority = p.TargetPriority
-	e.AttackBuildings = p.HitBuildings
+	if p != defaultWeaponProfile || len(src) > 0 {
+		applyWeaponProfileToEntity(e, p)
+	} else {
+		w.applyWeaponFromUnitTypeDef(e)
+	}
 	if e.HitRadius <= 0 {
 		e.HitRadius = entityHitRadiusForType(e.TypeID)
 	}
@@ -9072,7 +10087,10 @@ func (w *World) applyWeaponFromUnitTypeDef(e *RawEntity) bool {
 	e.AttackDamage = def.Weapon.Damage
 	e.AttackInterval = def.Weapon.Interval
 	e.AttackBulletSpeed = def.Weapon.BulletSpeed
+	e.AttackBulletHitSize = 10
 	e.AttackSplashRadius = def.Weapon.SplashRadius
+	e.AttackBuildingDamage = 1
+	e.AttackBuildingDamageSet = true
 	e.AttackPierce = def.Weapon.Pierce
 	e.AttackShootEffect = ""
 	e.AttackSmokeEffect = ""
@@ -9181,7 +10199,7 @@ func applyBehaviorMotion(e *RawEntity, ents []RawEntity, idToIndex map[int32]int
 	if speed <= 0 {
 		speed = 18
 	}
-	speed *= clampf(e.SlowMul, 0.2, 1)
+	speed *= entitySpeedMultiplier(*e)
 	switch e.Behavior {
 	case "follow":
 		if e.TargetID == 0 {

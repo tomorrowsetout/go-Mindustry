@@ -1,0 +1,64 @@
+2026-04-04T08:24:40.78294Z [NET] kind=tcp_accept packet= conn_id=568667393 uuid= ip=10.147.17.101 name="" detail=
+2026-04-04T08:24:40.7925039Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-04-04T08:24:40.843821Z [NET] kind=world_handshake_sent packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T08:24:41.5818147Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T16:24:41.6429366+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:24:41.6586423+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:24:54.1017348+08:00 [BUILD] action=placed x=291 y=157 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:24:54.3347983+08:00 [BUILD] action=constructed x=291 y=157 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:24:54.4848084+08:00 [BUILD] action=placed x=283 y=158 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:24:54.718251+08:00 [BUILD] action=constructed x=283 y=158 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:24:54.9181893+08:00 [BUILD] action=placed x=287 y=163 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:24:55.1517496+08:00 [BUILD] action=constructed x=287 y=163 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:25:00.4516775+08:00 [BUILD] action=deconstructing x=283 y=158 block_id=303 block=大型电力节点 team=1
+2026-04-04T16:25:00.6850671+08:00 [BUILD] action=destroyed x=283 y=158 block_id=303 block=大型电力节点 team=1
+2026-04-04T16:25:00.7015089+08:00 [BUILD] action=deconstructing x=287 y=163 block_id=303 block=大型电力节点 team=1
+2026-04-04T16:25:00.9351814+08:00 [BUILD] action=destroyed x=287 y=163 block_id=303 block=大型电力节点 team=1
+2026-04-04T16:25:00.95142+08:00 [BUILD] action=deconstructing x=291 y=157 block_id=303 block=大型电力节点 team=1
+2026-04-04T16:25:01.185068+08:00 [BUILD] action=destroyed x=291 y=157 block_id=303 block=大型电力节点 team=1
+2026-04-04T16:25:06.7851327+08:00 [BUILD] action=placed x=290 y=160 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:25:07.0185052+08:00 [BUILD] action=constructed x=290 y=160 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:25:07.1681431+08:00 [BUILD] action=placed x=281 y=159 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T16:25:07.4017675+08:00 [BUILD] action=constructed x=281 y=159 block_id=303 block=大型电力节点 team=1 rot=0
+2026-04-04T08:25:07.5516153Z [NET] kind=tcp_accept packet= conn_id=170783966 uuid= ip=122.6.152.96 name="" detail=
+2026-04-04T08:25:07.6182376Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=46696 uuid=/snVqfDyQnEAAAAAPOmuBg== ip=122.6.152.96 name="" detail=version=156 type=official mods=0
+2026-04-04T08:25:07.6367852Z [NET] kind=world_handshake_sent packet= conn_id=46696 uuid=/snVqfDyQnEAAAAAPOmuBg== ip=122.6.152.96 name="[scarlet]（未绑定杂鱼~）[]咕咕嘎嘎[gray]46696[]" detail=
+2026-04-04T08:25:08.5891834Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=46696 uuid=/snVqfDyQnEAAAAAPOmuBg== ip=122.6.152.96 name="[scarlet]（未绑定杂鱼~）[]咕咕嘎嘎[gray]46696[]" detail=
+2026-04-04T16:25:08.6301144+08:00 [RESPAWN] player="咕咕嘎嘎" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:25:08.6392136+08:00 [RESPAWN] player="咕咕嘎嘎" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T08:25:08.7099976Z [NET] kind=tcp_closed packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=EOF
+2026-04-04T08:25:42.1837191Z [NET] kind=tcp_accept packet= conn_id=1089029390 uuid= ip=10.147.17.101 name="" detail=
+2026-04-04T08:25:42.206043Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="" detail=version=156 type=official mods=0
+2026-04-04T08:25:42.2240753Z [NET] kind=world_handshake_sent packet= conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T08:25:42.942266Z [NET] kind=connect_confirm_client_snapshot packet=*protocol.Remote_NetServer_clientSnapshot_22 conn_id=79926 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定杂鱼~）[][#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be[gray]79926[]" detail=
+2026-04-04T16:25:42.9894694+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 core=core-nucleus core_x=288 core_y=148 spawn_x=288 spawn_y=148
+2026-04-04T16:25:43.0001077+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳 I\uf7a9\uf7be" team=1 unit=37 build_speed=1.00 spawn_x=288 spawn_y=148
+2026-04-04T16:25:50.1851196+08:00 [CHAT] from="咕咕嘎嘎" player_id=2 uuid=/snVqfDyQnEAAAAAPOmuBg== ip=122.6.152.96:17838 msg="/heLp"
+2026-04-04T16:25:52.0851856+08:00 [BUILD] action=placed x=290 y=155 block_id=328 block=爆破钻头 team=1 rot=0
+2026-04-04T16:25:56.0514026+08:00 [BUILD] action=placed x=271 y=160 block_id=326 block=气动钻头 team=1 rot=0
+2026-04-04T16:25:56.3683464+08:00 [BUILD] action=constructed x=271 y=160 block_id=326 block=气动钻头 team=1 rot=0
+2026-04-04T16:25:56.6518881+08:00 [BUILD] action=placed x=270 y=158 block_id=326 block=气动钻头 team=1 rot=0
+2026-04-04T16:25:56.9681687+08:00 [BUILD] action=constructed x=270 y=158 block_id=326 block=气动钻头 team=1 rot=0
+2026-04-04T16:25:59.5018311+08:00 [BUILD] action=placed x=272 y=158 block_id=310 block=涡轮发电机 team=1 rot=0
+2026-04-04T08:26:00.4475292Z [NET] kind=tcp_closed packet= conn_id=46696 uuid=/snVqfDyQnEAAAAAPOmuBg== ip=122.6.152.96 name="[scarlet]（未绑定杂鱼~）[]咕咕嘎嘎[gray]46696[]" detail=EOF
+2026-04-04T16:26:01.0685548+08:00 [BUILD] action=constructed x=272 y=158 block_id=310 block=涡轮发电机 team=1 rot=0
+2026-04-04T16:26:01.101798+08:00 [BUILD] action=placed x=278 y=158 block_id=283 block=机械泵 team=1 rot=0
+2026-04-04T16:26:01.4680893+08:00 [BUILD] action=constructed x=278 y=158 block_id=283 block=机械泵 team=1 rot=0
+2026-04-04T16:26:03.1018933+08:00 [BUILD] action=placed x=276 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:03.1181987+08:00 [BUILD] action=constructed x=276 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:03.1346689+08:00 [BUILD] action=placed x=275 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:03.1515051+08:00 [BUILD] action=constructed x=275 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:03.1680505+08:00 [BUILD] action=placed x=274 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:03.1848433+08:00 [BUILD] action=constructed x=274 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:04.5848669+08:00 [BUILD] action=placed x=277 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:04.601807+08:00 [BUILD] action=constructed x=277 y=158 block_id=286 block=导管 team=1 rot=2
+2026-04-04T16:26:06.8848403+08:00 [BUILD] action=placed x=283 y=156 block_id=302 block=电力节点 team=1 rot=0
+2026-04-04T16:26:06.9685895+08:00 [BUILD] action=constructed x=283 y=156 block_id=302 block=电力节点 team=1 rot=0
+2026-04-04T16:26:08.6183981+08:00 [BUILD] action=deconstructing x=283 y=156 block_id=302 block=电力节点 team=1
+2026-04-04T16:26:08.7019525+08:00 [BUILD] action=destroyed x=283 y=156 block_id=302 block=电力节点 team=1
+2026-04-04T16:26:12.4183151+08:00 [BUILD] action=placed x=285 y=152 block_id=378 block=空军工厂 team=1 rot=1
+2026-04-04T16:26:14.5347495+08:00 [BUILD] action=constructed x=285 y=152 block_id=378 block=空军工厂 team=1 rot=1
+2026-04-04T16:26:15.2185549+08:00 [BUILD] action=placed x=287 y=151 block_id=270 block=装卸器 team=1 rot=0
+2026-04-04T16:26:16.0352413+08:00 [BUILD] action=constructed x=287 y=151 block_id=270 block=装卸器 team=1 rot=0
+2026-04-04T16:26:36.1849482+08:00 [BUILD] action=placed x=291 y=153 block_id=302 block=电力节点 team=1 rot=0
+2026-04-04T16:26:36.2685443+08:00 [BUILD] action=constructed x=291 y=153 block_id=302 block=电力节点 team=1 rot=0

@@ -1,0 +1,5 @@
+{"timestamp":"2026-04-02T03:32:23.892553Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":265520993,"uuid":"yv0WgwpNNgsAAAAAoRVCQQ==","ip":"120.242.151.175"}
+{"timestamp":"2026-04-02T03:32:24.0130259Z","kind":"world_handshake_sent","conn_id":265520993,"uuid":"yv0WgwpNNgsAAAAAoRVCQQ==","ip":"120.242.151.175","name":"[scarlet]（未绑定杂鱼~）[]卡奴猫娘[gray]57213[]"}
+{"timestamp":"2026-04-02T03:32:24.7608262Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":265520993,"uuid":"yv0WgwpNNgsAAAAAoRVCQQ==","ip":"120.242.151.175","name":"[scarlet]（未绑定杂鱼~）[]卡奴猫娘[gray]57213[]"}
+{"timestamp":"2026-04-02T03:32:52.3632859Z","kind":"tcp_closed","detail":"EOF","conn_id":265520993,"uuid":"yv0WgwpNNgsAAAAAoRVCQQ==","ip":"120.242.151.175","name":"[scarlet]（未绑定杂鱼~）[]卡奴猫娘[gray]57213[]"}
+{"timestamp":"2026-04-02T03:32:52.3726706Z","kind":"connection_close","trigger":13,"conn_id":265520993,"uuid":"yv0WgwpNNgsAAAAAoRVCQQ==","ip":"120.242.151.175:53698","name":"[scarlet]（未绑定杂鱼~）[]卡奴猫娘[gray]57213[]"}

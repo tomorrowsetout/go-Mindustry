@@ -107,6 +107,23 @@ func (b *Building) ItemAmount(item ItemID) int32 {
 	return 0
 }
 
+func (b *Building) SetItemAmount(item ItemID, amount int32) {
+	for i, stack := range b.Items {
+		if stack.Item != item {
+			continue
+		}
+		if amount <= 0 {
+			b.Items = append(b.Items[:i], b.Items[i+1:]...)
+			return
+		}
+		b.Items[i].Amount = amount
+		return
+	}
+	if amount > 0 {
+		b.Items = append(b.Items, ItemStack{Item: item, Amount: amount})
+	}
+}
+
 func (b *Building) AddLiquid(liquid LiquidID, amount float32) {
 	for i, stack := range b.Liquids {
 		if stack.Liquid == liquid {
@@ -208,36 +225,64 @@ type RawEntity struct {
 	ShieldRegen float32
 	Armor       float32
 
-	AttackRange           float32
-	AttackFireMode        string
-	AttackDamage          float32
-	AttackInterval        float32
-	AttackCooldown        float32
-	AttackBulletType      int16
-	AttackBulletSpeed     float32
-	AttackSplashRadius    float32
-	AttackSlowSec         float32
-	AttackSlowMul         float32
-	AttackPierce          int32
-	AttackChainCount      int32
-	AttackChainRange      float32
-	AttackPreferBuildings bool
-	AttackFragmentCount   int32
-	AttackFragmentSpread  float32
-	AttackFragmentSpeed   float32
-	AttackFragmentLife    float32
-	AttackShootEffect     string
-	AttackSmokeEffect     string
-	AttackHitEffect       string
-	AttackDespawnEffect   string
-	AttackTargetAir       bool
-	AttackTargetGround    bool
-	AttackTargetPriority  string
-	AttackBuildings       bool
-	RuntimeInit           bool
-	SlowRemain            float32
-	SlowMul               float32
-	HitRadius             float32
+	AttackRange             float32
+	AttackFireMode          string
+	AttackDamage            float32
+	AttackSplashDamage      float32
+	AttackInterval          float32
+	AttackCooldown          float32
+	AttackBulletType        int16
+	AttackBulletSpeed       float32
+	AttackBulletLifetime    float32
+	AttackBulletHitSize     float32
+	AttackSplashRadius      float32
+	AttackBuildingDamage    float32
+	AttackBuildingDamageSet bool
+	AttackSlowSec           float32
+	AttackSlowMul           float32
+	AttackPierce            int32
+	AttackPierceBuilding    bool
+	AttackChainCount        int32
+	AttackChainRange        float32
+	AttackPreferBuildings   bool
+	AttackStatusID          int16
+	AttackStatusName        string
+	AttackStatusDuration    float32
+	AttackShootStatusID     int16
+	AttackShootStatusName   string
+	AttackShootStatusDur    float32
+	AttackFragmentCount     int32
+	AttackFragmentSpread    float32
+	AttackFragmentSpeed     float32
+	AttackFragmentLife      float32
+	AttackFragmentRand      float32
+	AttackFragmentAngle     float32
+	AttackFragmentVelMin    float32
+	AttackFragmentVelMax    float32
+	AttackFragmentLifeMin   float32
+	AttackFragmentLifeMax   float32
+	AttackFragmentBullet    *bulletRuntimeProfile
+	AttackShootEffect       string
+	AttackSmokeEffect       string
+	AttackHitEffect         string
+	AttackDespawnEffect     string
+	AttackTargetAir         bool
+	AttackTargetGround      bool
+	AttackTargetPriority    string
+	AttackBuildings         bool
+	RuntimeInit             bool
+	Statuses                []entityStatusState
+	StatusDamageMul         float32
+	StatusHealthMul         float32
+	StatusSpeedMul          float32
+	StatusReloadMul         float32
+	StatusBuildSpeedMul     float32
+	StatusDragMul           float32
+	StatusArmorOverride     float32
+	Disarmed                bool
+	SlowRemain              float32
+	SlowMul                 float32
+	HitRadius               float32
 
 	Behavior  string
 	TargetID  int32
@@ -335,7 +380,12 @@ func (w *WorldModel) Clone() *WorldModel {
 	} else {
 		out.Units = make(map[int32]*Unit)
 	}
-	out.Entities = append([]RawEntity(nil), w.Entities...)
+	if len(w.Entities) > 0 {
+		out.Entities = make([]RawEntity, len(w.Entities))
+		for i := range w.Entities {
+			out.Entities[i] = cloneRawEntity(w.Entities[i])
+		}
+	}
 	return out
 }
 

@@ -12,6 +12,7 @@ type TeamRule struct {
 	InfiniteResources        bool    `json:"infiniteResources"`
 	BuildSpeedMultiplier     float32 `json:"buildSpeedMultiplier"`
 	UnitBuildSpeedMultiplier float32 `json:"unitBuildSpeedMultiplier"`
+	UnitCostMultiplier       float32 `json:"unitCostMultiplier"`
 }
 
 // Rules 游戏规则 (完整实现，对应原版 Rules.java)
@@ -325,6 +326,64 @@ func normalizeGamemodeName(v string) string {
 	return ""
 }
 
+func tagValue(tags map[string]string, keys ...string) string {
+	if len(tags) == 0 || len(keys) == 0 {
+		return ""
+	}
+	for _, key := range keys {
+		if v, ok := tags[key]; ok && strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	for k, v := range tags {
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			continue
+		}
+		lk := strings.ToLower(strings.TrimSpace(k))
+		for _, key := range keys {
+			if lk == strings.ToLower(strings.TrimSpace(key)) {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+func inferGamemodeFromTags(tags map[string]string) string {
+	for _, key := range []string{"gamemode", "mode", "modeName"} {
+		if mode := normalizeGamemodeName(tagValue(tags, key)); mode != "" {
+			return mode
+		}
+	}
+	return ""
+}
+
+func inferGamemodeFromRules(overlay *Rules) string {
+	if overlay == nil {
+		return ""
+	}
+	if mode := normalizeGamemodeName(overlay.ModeName); mode != "" {
+		return mode
+	}
+	if overlay.Editor {
+		return "editor"
+	}
+	if overlay.Pvp {
+		return "pvp"
+	}
+	if overlay.AttackMode {
+		return "attack"
+	}
+	if overlay.InfiniteResources || overlay.AllowEditRules {
+		if overlay.InstantBuild {
+			return "editor"
+		}
+		return "sandbox"
+	}
+	return ""
+}
+
 func applyGamemodeDefaults(dst *Rules, mode string) {
 	if dst == nil {
 		return
@@ -363,37 +422,53 @@ func applyGamemodeDefaults(dst *Rules, mode string) {
 }
 
 func inferGamemodeFromModel(m *WorldModel, overlay *Rules) string {
-	if overlay != nil {
-		if mode := normalizeGamemodeName(overlay.ModeName); mode != "" {
+	if m != nil {
+		if mode := inferGamemodeFromTags(m.Tags); mode != "" {
 			return mode
 		}
-		if overlay.Editor {
-			return "editor"
-		}
-		if overlay.Pvp {
-			return "pvp"
-		}
-		if overlay.AttackMode {
-			return "attack"
-		}
-		if overlay.InfiniteResources || overlay.AllowEditRules {
-			if overlay.InstantBuild {
-				return "editor"
-			}
-			return "sandbox"
-		}
 	}
-	if m != nil && m.Tags != nil {
-		for _, key := range []string{"gamemode", "mode", "modeName"} {
-			if mode := normalizeGamemodeName(m.Tags[key]); mode != "" {
-				return mode
-			}
-		}
+	if mode := inferGamemodeFromRules(overlay); mode != "" {
+		return mode
 	}
 	if mapHasMultipleCoreTeams(m) {
 		return "attack"
 	}
 	return "survival"
+}
+
+func decodeRulesWithGamemodeDefaults(data []byte, tags map[string]string, model *WorldModel) (*Rules, error) {
+	base := DefaultRules()
+	if base == nil {
+		base = &Rules{}
+	}
+
+	var overlay Rules
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &overlay); err != nil {
+			return nil, err
+		}
+	}
+
+	mode := inferGamemodeFromTags(tags)
+	if mode == "" {
+		if model != nil {
+			mode = inferGamemodeFromModel(model, &overlay)
+		} else if mode = inferGamemodeFromRules(&overlay); mode == "" {
+			mode = "survival"
+		}
+	}
+
+	applyGamemodeDefaults(base, mode)
+
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, base); err != nil {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(base.ModeName) == "" {
+		base.ModeName = mode
+	}
+	return base, nil
 }
 
 func mapHasMultipleCoreTeams(m *WorldModel) bool {
@@ -664,11 +739,8 @@ func (rm *RulesManager) Clone() *Rules {
 
 // 来自 JSON 字符串解析
 func (rm *RulesManager) FromJSON(data []byte) error {
-	base := DefaultRules()
-	if base == nil {
-		base = &Rules{}
-	}
-	if err := json.Unmarshal(data, base); err != nil {
+	base, err := decodeRulesWithGamemodeDefaults(data, nil, nil)
+	if err != nil {
 		return err
 	}
 	rm.Set(base)
@@ -677,9 +749,12 @@ func (rm *RulesManager) FromJSON(data []byte) error {
 
 // 来自 tags map 解析（从 msav）
 func (rm *RulesManager) FromTags(tags map[string]string) error {
-	if rulesJSON, ok := tags["rules"]; ok && rulesJSON != "" {
-		return rm.FromJSON([]byte(rulesJSON))
+	rulesJSON := strings.TrimSpace(tagValue(tags, "rules"))
+	base, err := decodeRulesWithGamemodeDefaults([]byte(rulesJSON), tags, nil)
+	if err != nil {
+		return err
 	}
+	rm.Set(base)
 	return nil
 }
 

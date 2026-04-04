@@ -102,7 +102,7 @@ func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]stri
 	if err := w.WriteInt32(playerID); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalPlayer(w); err != nil {
+	if err := writeTemplatePlayerForContent(w, model.Content); err != nil {
 		return nil, err
 	}
 

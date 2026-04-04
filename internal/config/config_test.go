@@ -223,3 +223,184 @@ desc = [accent]欢迎[] [#87ceeb]测试[]
 		t.Fatalf("server desc color tags lost: %q", cfg.Runtime.ServerDesc)
 	}
 }
+
+func TestLoadJoinPopupSidecarPreservesMultilineAndColorTags(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+
+	payload := `
+[join_popup]
+enabled = 1
+delay_ms = 150
+
+[title]
+[accent]入服菜单[]
+
+[message]
+第一行
+[accent]
+第二行[]
+
+[announcement]
+[accent]公告[]
+
+[#87ceeb]第三行[]
+
+[link_url]
+https://example.com/rules
+
+[help]
+[white]/help[] 查看帮助
+[white]/sync[] 请求同步
+`
+	if err := os.WriteFile(filepath.Join(dir, "Join popup.ini"), []byte(payload), 0o644); err != nil {
+		t.Fatalf("write join popup ini: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.JoinPopup.Enabled || cfg.JoinPopup.DelayMs != 150 {
+		t.Fatalf("join popup meta not loaded: %+v", cfg.JoinPopup)
+	}
+	if cfg.JoinPopup.Title != "[accent]入服菜单[]" {
+		t.Fatalf("join popup title lost: %q", cfg.JoinPopup.Title)
+	}
+	if cfg.JoinPopup.Message != "第一行\n[accent]\n第二行[]" {
+		t.Fatalf("join popup message lost multiline/color tags: %q", cfg.JoinPopup.Message)
+	}
+	if cfg.JoinPopup.AnnouncementText != "[accent]公告[]\n\n[#87ceeb]第三行[]" {
+		t.Fatalf("join popup announcement lost multiline/color tags: %q", cfg.JoinPopup.AnnouncementText)
+	}
+	if cfg.JoinPopup.LinkURL != "https://example.com/rules" {
+		t.Fatalf("join popup link not loaded: %q", cfg.JoinPopup.LinkURL)
+	}
+	if cfg.JoinPopup.HelpText != "[white]/help[] 查看帮助\n[white]/sync[] 请求同步" {
+		t.Fatalf("join popup help not loaded: %q", cfg.JoinPopup.HelpText)
+	}
+}
+
+func TestSaveJoinPopupSidecarSeparatesPopupContent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+
+	cfg := Default()
+	cfg.JoinPopup.Enabled = true
+	cfg.JoinPopup.DelayMs = 480
+	cfg.JoinPopup.Title = "[accent]测试公告[]"
+	cfg.JoinPopup.Message = "第一行\n第二行"
+	cfg.JoinPopup.AnnouncementText = "[accent]公告[]\n\n[#87ceeb]内容[]"
+	cfg.JoinPopup.LinkURL = "https://example.com/join"
+	cfg.JoinPopup.HelpText = "[white]/help[]\n[white]/sync[]"
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	popupRaw, err := os.ReadFile(filepath.Join(dir, "Join popup.ini"))
+	if err != nil {
+		t.Fatalf("read join popup ini: %v", err)
+	}
+	popupText := string(popupRaw)
+	for _, want := range []string{
+		"[join_popup]",
+		"enabled = 1",
+		"delay_ms = 480",
+		"[title]\n[accent]测试公告[]",
+		"[message]\n第一行\n第二行",
+		"[announcement]\n[accent]公告[]\n\n[#87ceeb]内容[]",
+		"[link_url]\nhttps://example.com/join",
+		"[help]\n[white]/help[]\n[white]/sync[]",
+	} {
+		if !strings.Contains(popupText, want) {
+			t.Fatalf("expected join popup ini to contain %q, got:\n%s", want, popupText)
+		}
+	}
+
+	personalizationRaw, err := os.ReadFile(filepath.Join(dir, "Personalization.ini"))
+	if err != nil {
+		t.Fatalf("read personalization ini: %v", err)
+	}
+	personalizationText := string(personalizationRaw)
+	if strings.Contains(personalizationText, "join_popup_") {
+		t.Fatalf("personalization ini should not contain join popup fields, got:\n%s", personalizationText)
+	}
+}
+
+func TestLoadMapVoteSidecar(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+
+	payload := `
+[map_vote]
+duration_sec = 21
+status_refresh_ms = 1200
+popup_duration_ms = 1600
+home_link_url = https://example.com/maps
+align = left
+top = 32
+left = 14
+bottom = 7
+right = 3
+`
+	if err := os.WriteFile(filepath.Join(dir, "Vote map.ini"), []byte(payload), 0o644); err != nil {
+		t.Fatalf("write vote map ini: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.MapVote.DurationSec != 21 || cfg.MapVote.StatusRefreshMs != 1200 || cfg.MapVote.PopupDurationMs != 1600 {
+		t.Fatalf("map vote timing not loaded: %+v", cfg.MapVote)
+	}
+	if cfg.MapVote.HomeLinkURL != "https://example.com/maps" {
+		t.Fatalf("map vote link not loaded: %+v", cfg.MapVote)
+	}
+	if cfg.MapVote.Align != "left" || cfg.MapVote.Top != 32 || cfg.MapVote.Left != 14 || cfg.MapVote.Bottom != 7 || cfg.MapVote.Right != 3 {
+		t.Fatalf("map vote popup position not loaded: %+v", cfg.MapVote)
+	}
+}
+
+func TestSaveMapVoteSidecar(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+
+	cfg := Default()
+	cfg.MapVote.DurationSec = 25
+	cfg.MapVote.StatusRefreshMs = 900
+	cfg.MapVote.PopupDurationMs = 1300
+	cfg.MapVote.HomeLinkURL = "https://example.com/votemap"
+	cfg.MapVote.Align = "left"
+	cfg.MapVote.Top = 48
+	cfg.MapVote.Left = 12
+	cfg.MapVote.Bottom = 5
+	cfg.MapVote.Right = 1
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "Vote map.ini"))
+	if err != nil {
+		t.Fatalf("read vote map ini: %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"[map_vote]",
+		"duration_sec = 25",
+		"status_refresh_ms = 900",
+		"popup_duration_ms = 1300",
+		"home_link_url = https://example.com/votemap",
+		"align = left",
+		"top = 48",
+		"left = 12",
+		"bottom = 5",
+		"right = 1",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected vote map ini to contain %q, got:\n%s", want, text)
+		}
+	}
+}

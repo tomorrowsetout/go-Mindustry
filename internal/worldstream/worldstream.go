@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"unicode/utf16"
 
 	"mdt-server/internal/protocol"
+	"mdt-server/internal/runtimeassets"
 )
 
 var ErrInvalidMSAV = errors.New("invalid msav file")
@@ -107,7 +107,7 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err := w.WriteInt32(1); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalPlayer(w); err != nil {
+	if err := writeTemplatePlayerForContent(w, data.Content); err != nil {
 		return nil, err
 	}
 
@@ -705,6 +705,17 @@ func (r *javaReader) SkipUTF() error {
 	return r.Skip(int(n))
 }
 
+func (r *javaReader) SkipTypeIOString() error {
+	exists, err := r.ReadByte()
+	if err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	return r.SkipUTF()
+}
+
 type javaWriter struct {
 	buf *bytes.Buffer
 }
@@ -716,6 +727,13 @@ func (w *javaWriter) WriteBytes(b []byte) error {
 
 func (w *javaWriter) WriteByte(v byte) error {
 	return w.buf.WriteByte(v)
+}
+
+func (w *javaWriter) WriteBool(v bool) error {
+	if v {
+		return w.WriteByte(1)
+	}
+	return w.WriteByte(0)
 }
 
 func (w *javaWriter) WriteInt16(v int16) error {
@@ -768,6 +786,16 @@ func (w *javaWriter) WriteStringMap(m map[string]string) error {
 	return nil
 }
 
+func (w *javaWriter) WriteTypeIOString(s *string) error {
+	if s == nil {
+		return w.WriteByte(0)
+	}
+	if err := w.WriteByte(1); err != nil {
+		return err
+	}
+	return w.WriteUTF(*s)
+}
+
 func writeMinimalTeamBlocks(w *javaWriter) error {
 	if err := w.WriteInt32(1); err != nil {
 		return err
@@ -783,51 +811,56 @@ func writeMinimalCustomChunks(w *javaWriter) error {
 }
 
 func writeMinimalPlayer(w *javaWriter) error {
-	pw := protocol.NewWriter()
-	if err := pw.WriteInt16(1); err != nil {
-		return err
-	}
-	if err := pw.WriteBool(false); err != nil {
-		return err
-	}
-	if err := pw.WriteBool(false); err != nil {
-		return err
-	}
-	if err := protocol.WriteColor(pw, protocol.Color{RGBA: 0}); err != nil {
-		return err
-	}
-	if err := protocol.WriteCommand(pw, nil); err != nil {
-		return err
-	}
-	if err := pw.WriteFloat32(0); err != nil {
-		return err
-	}
-	if err := pw.WriteFloat32(0); err != nil {
-		return err
-	}
 	empty := ""
-	if err := protocol.WriteString(pw, &empty); err != nil {
+	if err := w.WriteInt16(2); err != nil {
 		return err
 	}
-	if err := pw.WriteBool(false); err != nil {
+	if err := w.WriteBool(false); err != nil {
 		return err
 	}
-	if err := protocol.WriteTeam(pw, &protocol.Team{ID: 1}); err != nil {
+	if err := w.WriteBool(false); err != nil {
 		return err
 	}
-	if err := pw.WriteBool(false); err != nil {
+	if err := w.WriteInt32(0); err != nil {
 		return err
 	}
-	if err := protocol.WriteUnit(pw, nil); err != nil {
+	if err := w.WriteByte(255); err != nil {
 		return err
 	}
-	if err := pw.WriteFloat32(0); err != nil {
+	if err := w.WriteFloat32(0); err != nil {
 		return err
 	}
-	if err := pw.WriteFloat32(0); err != nil {
+	if err := w.WriteFloat32(0); err != nil {
 		return err
 	}
-	return w.WriteBytes(pw.Bytes())
+	if err := w.WriteTypeIOString(&empty); err != nil {
+		return err
+	}
+	if err := w.WriteInt16(-1); err != nil {
+		return err
+	}
+	if err := w.WriteInt32(0); err != nil {
+		return err
+	}
+	if err := w.WriteBool(false); err != nil {
+		return err
+	}
+	if err := w.WriteByte(1); err != nil {
+		return err
+	}
+	if err := w.WriteBool(false); err != nil {
+		return err
+	}
+	if err := w.WriteByte(0); err != nil {
+		return err
+	}
+	if err := w.WriteInt32(0); err != nil {
+		return err
+	}
+	if err := w.WriteFloat32(0); err != nil {
+		return err
+	}
+	return w.WriteFloat32(0)
 }
 
 var templateRawOnce sync.Once
@@ -861,32 +894,14 @@ func templatePlayerPayloadForContent(content []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	playerStart, err := locatePlayerStart(raw)
+	payload, err := extractPlayerPayloadFromWorldStream(raw)
 	if err != nil {
 		return nil, err
 	}
-	if playerStart < 0 || playerStart >= len(raw) {
-		return nil, io.ErrUnexpectedEOF
-	}
-
-	// Prefer exact content header match: locate the content chunk bytes in template raw.
-	if idx := bytes.Index(raw[playerStart:], content); idx >= 0 {
-		payload := append([]byte(nil), raw[playerStart:playerStart+idx]...)
-		templatePlayerCacheMu.Lock()
-		templatePlayerCache[key] = payload
-		templatePlayerCacheMu.Unlock()
-		return payload, nil
-	}
-
-	// Fallback: heuristic scan when content differs (e.g., mods) or template mismatch.
-	if payload, err := extractPlayerPayloadFromWorldStream(raw); err == nil && len(payload) > 0 {
-		templatePlayerCacheMu.Lock()
-		templatePlayerCache[key] = payload
-		templatePlayerCacheMu.Unlock()
-		return payload, nil
-	}
-	return nil, errors.New("unable to locate player payload in template world stream")
+	templatePlayerCacheMu.Lock()
+	templatePlayerCache[key] = payload
+	templatePlayerCacheMu.Unlock()
+	return payload, nil
 }
 
 func loadTemplateWorldRaw() ([]byte, error) {
@@ -897,27 +912,20 @@ func loadTemplateWorldRaw() ([]byte, error) {
 }
 
 func readBootstrapWorldRaw() ([]byte, error) {
-	candidates := []string{
-		filepath.Join("assets", "bootstrap-world.bin"),
-		filepath.Join("go-server", "assets", "bootstrap-world.bin"),
+	data, _, err := runtimeassets.LoadBootstrapWorld("")
+	if err != nil || len(data) == 0 {
+		return nil, errors.New("template world stream not found")
 	}
-	for _, p := range candidates {
-		data, err := os.ReadFile(p)
-		if err != nil || len(data) == 0 {
-			continue
-		}
-		zr, err := zlib.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		raw, err := io.ReadAll(zr)
-		_ = zr.Close()
-		if err != nil {
-			return nil, err
-		}
-		return raw, nil
+	zr, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("template world stream not found")
+	raw, err := io.ReadAll(zr)
+	_ = zr.Close()
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 func extractPlayerPayloadFromWorldStream(raw []byte) ([]byte, error) {
@@ -928,29 +936,33 @@ func extractPlayerPayloadFromWorldStream(raw []byte) ([]byte, error) {
 	if playerStart >= len(raw) {
 		return nil, io.ErrUnexpectedEOF
 	}
+	r := newJavaReader(raw[playerStart:])
+	playerRev, err := r.ReadInt16()
+	if err != nil {
+		return nil, err
+	}
+	if err := skipPlayerPayload(r, playerRev); err != nil {
+		return nil, err
+	}
+	playerEnd := playerStart + r.Offset()
+	if playerEnd > len(raw) {
+		return nil, io.ErrUnexpectedEOF
+	}
 
-	const minPlayerLen = 8
-	const maxScan = 8192
-	limit := maxScan
-	if playerStart+limit > len(raw) {
-		limit = len(raw) - playerStart
+	validate := newJavaReader(raw[playerEnd:])
+	if err := skipContentHeader(validate); err != nil {
+		return nil, fmt.Errorf("template content header validation failed: %w", err)
 	}
-	for delta := minPlayerLen; delta <= limit; delta++ {
-		rr := newJavaReader(raw[playerStart+delta:])
-		if err := skipContentHeader(rr); err != nil {
-			continue
-		}
-		if err := skipContentPatches(rr); err != nil {
-			continue
-		}
-		if err := skipMapData(rr); err != nil {
-			continue
-		}
-		out := make([]byte, delta)
-		copy(out, raw[playerStart:playerStart+delta])
-		return out, nil
+	if err := skipContentPatches(validate); err != nil {
+		return nil, fmt.Errorf("template content patches validation failed: %w", err)
 	}
-	return nil, errors.New("unable to locate content header in template world stream")
+	if err := skipMapData(validate); err != nil {
+		return nil, fmt.Errorf("template map validation failed: %w", err)
+	}
+
+	out := make([]byte, playerEnd-playerStart)
+	copy(out, raw[playerStart:playerEnd])
+	return out, nil
 }
 
 func locatePlayerStart(raw []byte) (int, error) {
@@ -1496,7 +1508,7 @@ func RebuildLegacyCompatibleWorldStream(payload []byte) ([]byte, error) {
 	if err := w.WriteBytes(raw[:playerStart]); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalPlayer(w); err != nil {
+	if err := writeTemplatePlayerForContent(w, raw[contentStart:contentEnd]); err != nil {
 		return nil, err
 	}
 	if err := w.WriteBytes(raw[contentStart:contentEnd]); err != nil {
@@ -1532,7 +1544,10 @@ func RebuildLegacyCompatibleWorldStream(payload []byte) ([]byte, error) {
 }
 
 func skipPlayerPayload(r *javaReader, rev int16) error {
-	// admin, boosting, color, command, mouseX, mouseY, name, [selected], shooting, team, typing, unit, x, y
+	// Matches Player.write()/read() revisions from Mindustry 156.2:
+	// rev0: admin, boosting, color, mouseX, mouseY, name, shooting, team, typing, unit, x, y
+	// rev1: admin, boosting, color, lastCommand, mouseX, mouseY, name, shooting, team, typing, unit, x, y
+	// rev2: admin, boosting, color, lastCommand, mouseX, mouseY, name, selectedBlock, selectedRotation, shooting, team, typing, unit, x, y
 	switch rev {
 	case 0:
 		// admin + boosting
@@ -1547,7 +1562,7 @@ func skipPlayerPayload(r *javaReader, rev int16) error {
 		if err := r.Skip(8); err != nil {
 			return err
 		}
-		if err := r.SkipUTF(); err != nil {
+		if err := r.SkipTypeIOString(); err != nil {
 			return err
 		}
 	case 1:
@@ -1564,7 +1579,7 @@ func skipPlayerPayload(r *javaReader, rev int16) error {
 		if err := r.Skip(8); err != nil {
 			return err
 		}
-		if err := r.SkipUTF(); err != nil {
+		if err := r.SkipTypeIOString(); err != nil {
 			return err
 		}
 	case 2:
@@ -1580,7 +1595,7 @@ func skipPlayerPayload(r *javaReader, rev int16) error {
 		if err := r.Skip(8); err != nil {
 			return err
 		}
-		if err := r.SkipUTF(); err != nil {
+		if err := r.SkipTypeIOString(); err != nil {
 			return err
 		}
 		// selectedBlock short + selectedRotation int
