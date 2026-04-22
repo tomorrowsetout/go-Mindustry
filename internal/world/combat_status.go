@@ -17,6 +17,11 @@ type bulletRuntimeProfile struct {
 	HitSize             float32
 	SplashRadius        float32
 	BuildingDamage      float32
+	ArmorMultiplier     float32
+	MaxDamageFraction   float32
+	ShieldDamageMul     float32
+	PierceDamageFactor  float32
+	PierceArmor         bool
 	Pierce              int32
 	PierceBuilding      bool
 	StatusID            int16
@@ -73,6 +78,14 @@ type statusEffectProfile struct {
 	Affinities           []string
 }
 
+type damageApplyProfile struct {
+	ArmorMultiplier    float32
+	MaxDamageFraction  float32
+	ShieldDamageMul    float32
+	PierceDamageFactor float32
+	PierceArmor        bool
+}
+
 func cloneBulletRuntimeProfile(src *bulletRuntimeProfile) *bulletRuntimeProfile {
 	if src == nil {
 		return nil
@@ -87,6 +100,28 @@ func cloneRawEntity(src RawEntity) RawEntity {
 	if len(src.Statuses) > 0 {
 		copy.Statuses = append([]entityStatusState(nil), src.Statuses...)
 	}
+	if len(src.Plans) > 0 {
+		copy.Plans = make([]entityBuildPlan, len(src.Plans))
+		for i, plan := range src.Plans {
+			copy.Plans[i] = entityBuildPlan{
+				Breaking: plan.Breaking,
+				Pos:      plan.Pos,
+				Rotation: plan.Rotation,
+				BlockID:  plan.BlockID,
+				Config:   plan.Config,
+			}
+		}
+	}
+	if len(src.Abilities) > 0 {
+		copy.Abilities = append([]entityAbilityState(nil), src.Abilities...)
+	}
+	if len(src.Payloads) > 0 {
+		copy.Payloads = make([]payloadData, len(src.Payloads))
+		for i := range src.Payloads {
+			copy.Payloads[i] = clonePayloadData(src.Payloads[i])
+		}
+	}
+	copy.Payload = append([]byte(nil), src.Payload...)
 	copy.AttackFragmentBullet = cloneBulletRuntimeProfile(src.AttackFragmentBullet)
 	return copy
 }
@@ -94,6 +129,14 @@ func cloneRawEntity(src RawEntity) RawEntity {
 func convertVanillaBulletProfile(src *vanillaBulletProfile) *bulletRuntimeProfile {
 	if src == nil {
 		return nil
+	}
+	armorMultiplier := src.ArmorMultiplier
+	if armorMultiplier <= 0 {
+		armorMultiplier = 1
+	}
+	shieldDamageMul := src.ShieldDamageMultiplier
+	if shieldDamageMul <= 0 {
+		shieldDamageMul = 1
 	}
 	return &bulletRuntimeProfile{
 		ClassName:           src.ClassName,
@@ -105,6 +148,11 @@ func convertVanillaBulletProfile(src *vanillaBulletProfile) *bulletRuntimeProfil
 		HitSize:             src.HitSize,
 		SplashRadius:        src.SplashRadius,
 		BuildingDamage:      src.BuildingDamageMultiplier,
+		ArmorMultiplier:     armorMultiplier,
+		MaxDamageFraction:   src.MaxDamageFraction,
+		ShieldDamageMul:     shieldDamageMul,
+		PierceDamageFactor:  src.PierceDamageFactor,
+		PierceArmor:         src.PierceArmor,
 		Pierce:              src.Pierce,
 		PierceBuilding:      src.PierceBuilding,
 		StatusID:            src.StatusID,
@@ -149,6 +197,11 @@ func applyWeaponProfileToEntity(e *RawEntity, p weaponProfile) {
 	e.AttackSplashRadius = p.SplashRadius
 	e.AttackBuildingDamage = p.BuildingDamage
 	e.AttackBuildingDamageSet = true
+	e.AttackArmorMultiplier = p.ArmorMultiplier
+	e.AttackMaxDamageFraction = p.MaxDamageFraction
+	e.AttackShieldDamageMul = p.ShieldDamageMul
+	e.AttackPierceDamageFactor = p.PierceDamageFactor
+	e.AttackPierceArmor = p.PierceArmor
 	e.AttackSlowSec = p.SlowSec
 	e.AttackSlowMul = p.SlowMul
 	e.AttackPierce = p.Pierce
@@ -293,6 +346,16 @@ func entityBuildingDamageMultiplier(e RawEntity) float32 {
 	return 1
 }
 
+func defaultBuildingDamageMultiplier(multiplier float32, hitBuildings bool) float32 {
+	if multiplier != 0 {
+		return multiplier
+	}
+	if hitBuildings {
+		return 1
+	}
+	return 0
+}
+
 func entityHealthMultiplier(e RawEntity) float32 {
 	if e.StatusHealthMul <= 0 {
 		return 1
@@ -328,6 +391,54 @@ func entityArmorValue(e RawEntity) float32 {
 	return 0
 }
 
+func normalizeArmorMultiplier(v float32) float32 {
+	if v <= 0 {
+		return 1
+	}
+	return v
+}
+
+func normalizeShieldDamageMultiplier(v float32) float32 {
+	if v <= 0 {
+		return 1
+	}
+	return v
+}
+
+func attackDamageApplyProfile(src RawEntity) damageApplyProfile {
+	return damageApplyProfile{
+		ArmorMultiplier:    src.AttackArmorMultiplier,
+		MaxDamageFraction:  src.AttackMaxDamageFraction,
+		ShieldDamageMul:    src.AttackShieldDamageMul,
+		PierceDamageFactor: src.AttackPierceDamageFactor,
+		PierceArmor:        src.AttackPierceArmor,
+	}
+}
+
+func bulletDamageApplyProfile(b simBullet) damageApplyProfile {
+	return damageApplyProfile{
+		ArmorMultiplier:    b.ArmorMultiplier,
+		MaxDamageFraction:  b.MaxDamageFraction,
+		ShieldDamageMul:    b.ShieldDamageMul,
+		PierceDamageFactor: b.PierceDamageFactor,
+		PierceArmor:        b.PierceArmor,
+	}
+}
+
+func applyPierceDamageLoss(damage *float32, factor, initialHealth float32) {
+	if damage == nil || *damage <= 0 || factor <= 0 || initialHealth <= 0 {
+		return
+	}
+	sub := maxf(initialHealth*factor, 0)
+	if sub <= 0 {
+		return
+	}
+	if sub > *damage {
+		sub = *damage
+	}
+	*damage -= sub
+}
+
 func attackCooldownScale(e RawEntity) float32 {
 	scale := entityReloadMultiplier(e)
 	if e.SlowMul > 0 {
@@ -354,13 +465,41 @@ func (w *World) outgoingDamageScale(e RawEntity, sourceIsBuilding bool) float32 
 }
 
 func (w *World) applyDamageToBuildingDetailed(pos int32, damage float32) bool {
+	return w.applyDamageToBuildingProfile(pos, damage, damageApplyProfile{})
+}
+
+func (w *World) buildingArmorLocked(pos int32) float32 {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return 0
+	}
+	tile := &w.model.Tiles[pos]
+	if tile.Block == 0 {
+		return 0
+	}
+	name := strings.ToLower(strings.TrimSpace(w.blockNameByID(int16(tile.Block))))
+	if name == "" {
+		return 0
+	}
+	return w.blockArmorByName[name]
+}
+
+func (w *World) applyDamageToBuildingProfile(pos int32, damage float32, prof damageApplyProfile) bool {
 	if w == nil || w.model == nil || damage <= 0 {
 		return false
+	}
+	if !prof.PierceArmor {
+		armor := w.buildingArmorLocked(pos)
+		if armor > 0 {
+			damage = maxf(damage-armor*normalizeArmorMultiplier(prof.ArmorMultiplier), damage*minArmorDamageFraction)
+		}
 	}
 	if w.rulesMgr != nil {
 		if rules := w.rulesMgr.Get(); rules != nil && rules.BlockHealthMultiplier > 0 {
 			damage /= rules.BlockHealthMultiplier
 		}
+	}
+	if damage <= 0 {
+		return false
 	}
 	return w.applyDamageToBuildingRaw(pos, damage)
 }
@@ -414,7 +553,7 @@ func (w *World) fireBeamAtEntity(src RawEntity, target *RawEntity, targetIdx int
 	}
 	scale := w.outgoingDamageScale(src, sourceIsBuilding)
 	w.emitAttackFireEffectsLocked(src)
-	w.applyDamageToEntityDetailed(target, src.AttackDamage*scale, false)
+	w.applyDamageToEntityProfile(target, src.AttackDamage*scale, attackDamageApplyProfile(src))
 	w.applyAttackStatus(target, src)
 	w.emitAttackHitEffectLocked(src, target.X, target.Y)
 	w.applyBeamChainFromSource(src, targetIdx, sourceIsBuilding)
@@ -424,7 +563,7 @@ func (w *World) fireBeamAtBuilding(src RawEntity, pos int32, tx, ty float32, sou
 	scale := w.outgoingDamageScale(src, sourceIsBuilding)
 	buildingMul := entityBuildingDamageMultiplier(src)
 	w.emitAttackFireEffectsLocked(src)
-	_ = w.applyDamageToBuildingDetailed(pos, src.AttackDamage*scale*buildingMul)
+	_ = w.applyDamageToBuildingProfile(pos, src.AttackDamage*scale*buildingMul, attackDamageApplyProfile(src))
 	w.emitAttackHitEffectLocked(src, tx, ty)
 }
 
@@ -516,16 +655,27 @@ func (w *World) applyStatusTransition(e *RawEntity, idx int, incoming statusEffe
 }
 
 func (w *World) applyDamageToEntityDetailed(e *RawEntity, dmg float32, pierceArmor bool) {
+	w.applyDamageToEntityProfile(e, dmg, damageApplyProfile{PierceArmor: pierceArmor})
+}
+
+func (w *World) applyDamageToEntityProfile(e *RawEntity, dmg float32, prof damageApplyProfile) float32 {
 	if e == nil || dmg <= 0 {
-		return
+		return 0
 	}
-	if e.PlayerID != 0 {
-		return
+	effectiveHealth := maxf(e.Health, 0) + maxf(e.Shield, 0)
+	if prof.MaxDamageFraction > 0 && e.MaxHealth > 0 {
+		cap := e.MaxHealth*prof.MaxDamageFraction + maxf(e.Shield, 0)
+		if dmg > cap {
+			dmg = cap
+		}
+		if effectiveHealth > cap {
+			effectiveHealth = cap
+		}
 	}
-	if !pierceArmor {
+	if !prof.PierceArmor {
 		armor := entityArmorValue(*e)
 		if armor > 0 {
-			dmg = maxf(dmg-armor, dmg*minArmorDamageFraction)
+			dmg = maxf(dmg-armor*normalizeArmorMultiplier(prof.ArmorMultiplier), dmg*minArmorDamageFraction)
 		}
 	}
 	healthMul := entityHealthMultiplier(*e)
@@ -538,7 +688,7 @@ func (w *World) applyDamageToEntityDetailed(e *RawEntity, dmg float32, pierceArm
 		}
 	}
 	if dmg <= 0 {
-		return
+		return effectiveHealth
 	}
 	if e.Shield > 0 {
 		absorb := minf(e.Shield, dmg)
@@ -548,4 +698,5 @@ func (w *World) applyDamageToEntityDetailed(e *RawEntity, dmg float32, pierceArm
 	if dmg > 0 {
 		e.Health -= dmg
 	}
+	return effectiveHealth
 }

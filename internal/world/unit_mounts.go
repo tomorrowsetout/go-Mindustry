@@ -43,6 +43,11 @@ func convertVanillaMountProfile(src vanillaWeaponMountProfile) unitWeaponMountPr
 		BulletHitSize:        src.BulletHitSize,
 		SplashRadius:         src.SplashRadius,
 		BuildingDamage:       src.BuildingDamageMultiplier,
+		ArmorMultiplier:      src.ArmorMultiplier,
+		MaxDamageFraction:    src.MaxDamageFraction,
+		ShieldDamageMul:      src.ShieldDamageMultiplier,
+		PierceDamageFactor:   src.PierceDamageFactor,
+		PierceArmor:          src.PierceArmor,
 		Pierce:               src.Pierce,
 		PierceBuilding:       src.PierceBuilding,
 		StatusID:             src.StatusID,
@@ -170,6 +175,11 @@ func applyMountWeaponProfile(src *RawEntity, mount unitWeaponMountProfile) {
 	src.AttackSplashRadius = mount.SplashRadius
 	src.AttackBuildingDamage = mount.BuildingDamage
 	src.AttackBuildingDamageSet = true
+	src.AttackArmorMultiplier = mount.ArmorMultiplier
+	src.AttackMaxDamageFraction = mount.MaxDamageFraction
+	src.AttackShieldDamageMul = mount.ShieldDamageMul
+	src.AttackPierceDamageFactor = mount.PierceDamageFactor
+	src.AttackPierceArmor = mount.PierceArmor
 	src.AttackSlowSec = mount.SlowSec
 	src.AttackSlowMul = mount.SlowMul
 	src.AttackPierce = mount.Pierce
@@ -507,6 +517,9 @@ func (w *World) fireEntityMountShot(e *RawEntity, mount unitWeaponMountProfile, 
 	src.X = sx
 	src.Y = sy
 	src.Rotation = angle
+	if !w.tryConsumeEntityAmmoLocked(e, maxf(e.AmmoPerShot, 1)) {
+		return false
+	}
 
 	if src.AttackFireMode == "beam" {
 		if mount.Continuous && isPersistentBeamBulletProfile(mount.Bullet) {

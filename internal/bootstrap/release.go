@@ -21,7 +21,7 @@ func defaultReleasePolicy() releasePolicy {
 }
 
 func releaseINIPath(configDir string) string {
-	return filepath.Join(configDir, "release.ini")
+	return filepath.Join(configDir, "release.toml")
 }
 
 func parseReleaseINI(path string, p releasePolicy) (releasePolicy, error) {
@@ -71,34 +71,20 @@ func parseReleaseINI(path string, p releasePolicy) (releasePolicy, error) {
 }
 
 func writeReleaseINI(path string, p releasePolicy) error {
-	toI := func(v bool) string {
-		if v {
-			return "1"
-		}
-		return "0"
-	}
-	content := fmt.Sprintf(`; mdt-server 启动释放控制
-;
-; 这个文件只控制“是否释放内置资源到磁盘”。
-; 目录/文件的正常生成位置为 EXE 根目录（assets/data/mods/logs），configs 目录存放 INI 与 JSON 配置文件。
-;
-; 重要概念
-; - “释放(release)”：把 EXE 内置打包的资源释放到磁盘（assets/worlds 与 configs 下的配置文件）。
-;
-; 二次启动不再释放的逻辑
-; - 当程序完成一次释放后，会自动把 [release].released 写为 1，表示“已释放过”。
-; - 想强制再次释放：把 released 改为 0，然后重启。
-;
-; 注意
-; - configs/ 目录永远会保留/创建，但 configs 目录里只放配置文件（INI/JSON），不要放 assets/data/mods/logs。
-; - released=0 会执行释放，释放阶段会覆盖写入目标文件；如果你不希望被覆盖，请保持 released=1。
+	content := fmt.Sprintf(`# mdt-server 资源释放控制
+#
+# 本文件只控制“是否把程序内置资源释放到磁盘”。
+# 首次释放会把内置地图与 configs 下的配置文件写到工作区。
+#
+# released:
+#   false = 下次启动执行释放
+#   true  = 标记为已释放，后续启动默认不再重复覆盖
+#
+# 如果你想强制重新释放内置资源，把它改回 false 后重启即可。
 
 [release]
-; released:
-;   0 = 下次启动会执行释放
-;   1 = 标记为已释放（正常情况下程序释放完会自动写 1，二次启动不会释放）
-released = %s
-`, toI(p.Released))
+released = %t
+`, p.Released)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -111,13 +97,13 @@ func loadReleasePolicy(configDir string) (releasePolicy, error) {
 	st, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Do not auto-generate release.ini on boot. It should be shipped with the server.
+			// 不在启动时自动生成 release.toml；应由程序包直接提供。
 			return p, nil
 		}
 		return p, err
 	}
 	if st.IsDir() {
-		return p, fmt.Errorf("release.ini is a directory: %s", path)
+		return p, fmt.Errorf("release.toml is a directory: %s", path)
 	}
 	return parseReleaseINI(path, p)
 }
@@ -181,7 +167,8 @@ func releaseEmbeddedConfigs(configDir string) error {
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		isJSONConfig := strings.HasPrefix(filepath.ToSlash(path), "configs/json/")
-		if ext != ".ini" && !(isJSONConfig && ext == ".json") {
+		isConfigDoc := strings.HasPrefix(filepath.ToSlash(path), "configs/")
+		if ext != ".toml" && !(isJSONConfig && ext == ".json") && !(isConfigDoc && ext == ".md") {
 			return nil
 		}
 		data, err := fs.ReadFile(mdtserver.BundledFiles, path)

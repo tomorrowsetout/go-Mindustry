@@ -1,5 +1,0 @@
-{"timestamp":"2026-03-31T16:12:08.0795066Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":1604488643,"uuid":"mZQbc2Gv5noAAAAAcEMMqA==","ip":"117.25.101.67"}
-{"timestamp":"2026-03-31T16:12:08.21493Z","kind":"world_handshake_sent","conn_id":1604488643,"uuid":"mZQbc2Gv5noAAAAAcEMMqA==","ip":"117.25.101.67","name":"[scarlet]（未绑定杂鱼~）[]满满触手的柠檬（红润的洞穴）[gray]85987[]"}
-{"timestamp":"2026-03-31T16:12:09.5395171Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":1604488643,"uuid":"mZQbc2Gv5noAAAAAcEMMqA==","ip":"117.25.101.67","name":"[scarlet]（未绑定杂鱼~）[]满满触手的柠檬（红润的洞穴）[gray]85987[]"}
-{"timestamp":"2026-03-31T16:13:41.5349275Z","kind":"tcp_closed","detail":"EOF","conn_id":1604488643,"uuid":"mZQbc2Gv5noAAAAAcEMMqA==","ip":"117.25.101.67","name":"[scarlet]（未绑定杂鱼~）[]满满触手的柠檬（红润的洞穴）[gray]85987[]"}
-{"timestamp":"2026-03-31T16:13:41.5381785Z","kind":"connection_close","trigger":13,"conn_id":1604488643,"uuid":"mZQbc2Gv5noAAAAAcEMMqA==","ip":"117.25.101.67:3303","name":"[scarlet]（未绑定杂鱼~）[]满满触手的柠檬（红润的洞穴）[gray]85987[]"}

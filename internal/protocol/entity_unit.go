@@ -241,7 +241,18 @@ func (u *UnitEntitySync) WriteEntity(w *Writer) error {
 	return w.WriteFloat32(u.Y)
 }
 
+func (u *UnitEntitySync) ReadEntity(r *Reader) error {
+	if _, err := r.ReadInt16(); err != nil {
+		return err
+	}
+	return u.read(r, readAllPlansQueue)
+}
+
 func (u *UnitEntitySync) ReadSync(r *Reader) error {
+	return u.read(r, ReadPlansQueue)
+}
+
+func (u *UnitEntitySync) read(r *Reader, readPlans func(*Reader, *TypeIOContext) ([]*BuildPlan, error)) error {
 	layout := u.layout()
 	var err error
 	if u.Abilities, err = ReadAbilities(r, u.Abilities); err != nil {
@@ -291,7 +302,7 @@ func (u *UnitEntitySync) ReadSync(r *Reader) error {
 			return err
 		}
 	}
-	if u.Plans, err = ReadPlansQueue(r, r.Ctx); err != nil {
+	if u.Plans, err = readPlans(r, r.Ctx); err != nil {
 		return err
 	}
 	if u.Rotation, err = r.ReadFloat32(); err != nil {
@@ -383,6 +394,28 @@ func readPayloadSeq(r *Reader) ([]Payload, error) {
 		}
 	}
 	return payloads, nil
+}
+
+func readAllPlansQueue(r *Reader, ctx *TypeIOContext) ([]*BuildPlan, error) {
+	n, err := r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+	if n < 0 {
+		return nil, ErrUnsupportedTypeIO
+	}
+	if n == 0 {
+		return []*BuildPlan{}, nil
+	}
+	out := make([]*BuildPlan, 0, n)
+	for i := 0; i < int(n); i++ {
+		plan, err := ReadPlan(r, ctx)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, plan)
+	}
+	return out, nil
 }
 
 func writeAllPlansQueue(w *Writer, plans []*BuildPlan, ctx *TypeIOContext) error {

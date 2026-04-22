@@ -1,0 +1,316 @@
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79427 totalItems=64 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79427 (353,191) block=ground-factory kind=13 team=2 items=64 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79759 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79759 (271,192) block=ground-factory kind=13 team=2 items=0 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79762 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79762 (274,192) block=ground-factory kind=13 team=2 items=0 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 3 snapshots from 3 positions (fallback=false)
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79006 totalItems=500 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79006 (346,190) block=multiplicative-reconstructor kind=16 team=2 items=500 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79424 totalItems=160 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79424 (350,191) block=additive-reconstructor kind=16 team=2 items=160 dataLen=61 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 2 snapshots from 2 positions (fallback=false)
+2026/04/10 00:34:43 [blocksync] filterSynced: input=2415 filtered=210 filteredOut=2205
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=9399 (291,22) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=9401 (293,22) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=10225 (289,24) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=10637 (287,25) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=11053 (289,26) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=11056 (292,26) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=11465 (287,27) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=11881 (289,28) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=12293 (287,29) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=13119 (285,31) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=13531 (283,32) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=13947 (285,33) block=thermal-generator kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=13949 (287,33) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=14773 (283,35) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=14778 (288,35) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=15190 (286,36) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=15209 (305,36) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=15620 (302,37) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=16036 (304,38) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=16454 (308,39) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=20590 totalItems=30 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=20590 (304,49) block=thorium-reactor kind=21 team=2 items=30 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=21833 totalItems=30 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=21833 (305,52) block=thorium-reactor kind=21 team=2 items=30 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=21839 (311,52) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=21841 (313,52) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=21843 (315,52) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=22666 (310,54) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=23901 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=23901 (303,57) block=cryofluid-mixer kind=17 team=2 items=10 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=23903 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=23903 (305,57) block=cryofluid-mixer kind=17 team=2 items=10 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=23908 (310,57) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=25143 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=25143 (303,60) block=cryofluid-mixer kind=17 team=2 items=10 dataLen=51 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=25545 (291,61) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=25547 (293,61) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=25957 (289,62) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=25973 totalItems=9 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=25973 (305,62) block=plastanium-compressor kind=17 team=2 items=9 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=26369 (287,63) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=26781 (285,64) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=26790 totalItems=1000 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=26790 (294,64) block=vault kind=11 team=2 items=1000 dataLen=19 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=26801 totalItems=3 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=26801 (305,64) block=plastanium-compressor kind=17 team=2 items=3 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=26810 (314,64) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=26812 (316,64) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=27629 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=27629 (305,66) block=plastanium-compressor kind=17 team=2 items=0 dataLen=43 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=27640 (316,66) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=28026 (288,67) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=28032 (294,67) block=solar-panel-large kind=20 team=2 items=0 dataLen=29 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=28049 (311,67) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=28052 (314,67) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=28885 (319,69) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=28888 (322,69) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=29274 (294,70) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=29713 (319,71) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=29716 (322,71) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30097 (289,72) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30516 (294,73) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30533 (311,73) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30536 (314,73) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30541 (319,73) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30544 (322,73) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=30941 totalItems=7 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=30941 (305,74) block=rtg-generator kind=20 team=2 items=7 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=31767 totalItems=6 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=31767 (303,76) block=rtg-generator kind=20 team=2 items=6 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=33822 totalItems=1000 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=33822 (288,81) block=vault kind=11 team=2 items=1000 dataLen=19 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=34239 (291,82) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=34656 (294,83) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=35470 (280,85) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=35506 (316,85) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=35896 (292,86) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=36750 (318,88) block=spectre kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=37126 (280,89) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=37140 (294,89) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=37551 (291,90) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=38780 (278,93) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=40022 (278,96) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=42091 (277,101) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=42509 (281,102) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=42512 (284,102) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=42930 (288,103) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56129 (239,135) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56540 (236,136) block=duo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56547 (243,136) block=duo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56955 (237,137) block=duo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56956 (238,137) block=duo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56959 (241,137) block=duo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=56960 (242,137) block=duo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=57066 (348,137) block=spectre kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=57484 (352,138) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=58724 (350,141) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=58728 (354,141) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=59146 (358,142) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=59562 (360,143) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=60382 totalItems=116 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=60382 (352,145) block=mass-driver kind=4 team=2 items=116 dataLen=34 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=60789 (345,146) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=60811 (367,146) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=61616 (344,148) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=61640 (368,148) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=62052 (366,149) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=62449 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=62449 (349,150) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=62451 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=62451 (351,150) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=63681 (339,153) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=63691 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=63691 (349,153) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=63693 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=63693 (351,153) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=64507 (337,155) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=65746 (334,158) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=66141 (315,159) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=66152 (326,159) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=66963 (309,161) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=67393 (325,162) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=67795 (313,163) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=67804 (322,163) block=spectre kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=68211 (315,164) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=69041 (317,166) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=69054 (330,166) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=70698 (318,170) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=70716 totalItems=30 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=70716 (336,170) block=kiln kind=17 team=2 items=30 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=71054 (260,171) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=71526 (318,172) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=71544 totalItems=30 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=71544 (336,172) block=kiln kind=17 team=2 items=30 dataLen=49 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=71554 (346,172) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=72231 (195,174) block=salvo kind=6 team=1 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=72362 (326,174) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=72372 totalItems=30 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=72372 (336,174) block=kiln kind=17 team=2 items=30 dataLen=49 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=72382 (346,174) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=73060 (196,176) block=salvo kind=6 team=1 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=73200 totalItems=30 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=73200 (336,176) block=kiln kind=17 team=2 items=30 dataLen=49 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=73533 (255,177) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=73887 (195,178) block=salvo kind=6 team=1 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74362 (256,179) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74364 (258,179) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74458 (352,179) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74474 (368,179) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=74782 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74782 (262,180) block=steam-generator kind=20 team=2 items=0 dataLen=27 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=74784 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74784 (264,180) block=steam-generator kind=20 team=2 items=0 dataLen=27 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=74869 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=74869 (349,180) block=mass-driver kind=4 team=2 items=0 dataLen=32 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=75286 (352,181) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=75301 (367,181) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=75305 (371,181) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=75607 (259,182) block=wave kind=5 team=2 items=0 dataLen=19 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=75702 (354,182) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=77269 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=77269 (265,186) block=silicon-smelter kind=17 team=2 items=0 dataLen=27 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=77272 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=77272 (268,186) block=silicon-smelter kind=17 team=2 items=0 dataLen=27 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=77334 (330,186) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=77337 (333,186) block=solar-panel-large kind=20 team=2 items=0 dataLen=29 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=77359 totalItems=39 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=77359 (355,186) block=multi-press kind=17 team=2 items=39 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=77775 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=77775 (357,187) block=coal-centrifuge kind=17 team=2 items=10 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78161 (329,188) block=solar-panel kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78166 (334,188) block=solar-panel kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=78195 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78195 (363,188) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=78603 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78603 (357,189) block=coal-centrifuge kind=17 team=2 items=0 dataLen=39 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78616 (370,189) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78990 (330,190) block=solar-panel-large kind=20 team=2 items=0 dataLen=29 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=78993 (333,190) block=solar-panel-large kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79006 totalItems=500 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79006 (346,190) block=multiplicative-reconstructor kind=16 team=2 items=500 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79023 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79023 (363,190) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79351 (277,191) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79359 (285,191) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79424 totalItems=160 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79424 (350,191) block=additive-reconstructor kind=16 team=2 items=160 dataLen=61 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79427 totalItems=64 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79427 (353,191) block=ground-factory kind=13 team=2 items=64 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79431 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79431 (357,191) block=coal-centrifuge kind=17 team=2 items=0 dataLen=39 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79444 (370,191) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79751 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79751 (263,192) block=steam-generator kind=20 team=2 items=0 dataLen=31 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79759 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79759 (271,192) block=ground-factory kind=13 team=2 items=0 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79762 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79762 (274,192) block=ground-factory kind=13 team=2 items=0 dataLen=47 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79851 totalItems=6 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79851 (363,192) block=steam-generator kind=20 team=2 items=6 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=80229 (327,193) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=80259 totalItems=2 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=80259 (357,193) block=coal-centrifuge kind=17 team=2 items=2 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=80272 (370,193) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=80640 (324,194) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=80664 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=80664 (348,194) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=80679 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=80679 (363,194) block=steam-generator kind=20 team=2 items=0 dataLen=27 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81076 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81076 (346,195) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81082 totalItems=117 uniqueTypes=4 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81082 (352,195) block=silicon-crucible kind=17 team=2 items=117 dataLen=51 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81087 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81087 (357,195) block=coal-centrifuge kind=17 team=2 items=10 dataLen=45 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81100 (370,195) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81493 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81493 (349,196) block=rtg-generator kind=20 team=2 items=10 dataLen=37 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81507 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81507 (363,196) block=steam-generator kind=20 team=2 items=0 dataLen=27 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81829 (271,197) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81883 (325,197) block=ripple kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81886 (328,197) block=cyclone kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81905 totalItems=9 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81905 (347,197) block=rtg-generator kind=20 team=2 items=9 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81912 totalItems=21 uniqueTypes=3 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81912 (354,197) block=pyratite-mixer kind=17 team=2 items=21 dataLen=49 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=82335 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=82335 (363,198) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83068 (268,200) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83154 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83154 (354,200) block=coal-centrifuge kind=17 team=2 items=0 dataLen=39 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83167 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83167 (367,200) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83462 (248,201) block=hail kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83575 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83575 (361,201) block=steam-generator kind=20 team=2 items=10 dataLen=37 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83577 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83577 (363,201) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83579 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83579 (365,201) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83876 (248,202) block=hail kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83890 (262,202) block=scatter kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83981 totalItems=0 uniqueTypes=0 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83981 (353,202) block=coal-centrifuge kind=17 team=2 items=0 dataLen=39 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=84704 (248,204) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=85207 (337,205) block=spectre kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=85632 (348,206) block=tsunami kind=5 team=2 items=0 dataLen=19 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=86358 (246,208) block=solar-panel kind=20 team=2 items=0 dataLen=29 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=86359 (247,208) block=solar-panel kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=86772 (246,209) block=solar-panel kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=86773 (247,209) block=solar-panel kind=20 team=2 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=87294 (354,210) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=87296 (356,210) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=87719 (365,211) block=tsunami kind=5 team=2 items=0 dataLen=19 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=87722 (368,211) block=tsunami kind=5 team=2 items=0 dataLen=19 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=88532 (350,213) block=salvo kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=88967 (371,214) block=spectre kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=89770 (346,216) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=89772 (348,216) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=90602 (350,218) block=parallax kind=9 team=2 items=0 dataLen=15 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=91014 (348,219) block=fuse kind=6 team=2 items=0 dataLen=20 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=100767 (165,243) block=thermal-generator kind=20 team=1 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=101183 (167,244) block=thermal-generator kind=20 team=1 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=101185 (169,244) block=thermal-generator kind=20 team=1 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=101187 (171,244) block=thermal-generator kind=20 team=1 items=0 dataLen=25 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 210 snapshots from 210 positions (fallback=false)
+2026/04/10 00:34:43 [blocksync] filterSynced: input=29 filtered=6 filteredOut=23
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=63691 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=63691 (349,153) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=63693 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=63693 (351,153) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79427 totalItems=65 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79427 (353,191) block=ground-factory kind=13 team=2 items=65 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83575 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83575 (361,201) block=steam-generator kind=20 team=2 items=10 dataLen=37 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83577 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83577 (363,201) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83167 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83167 (367,200) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 6 snapshots from 6 positions (fallback=false)
+2026/04/10 00:34:43 [blocksync] filterSynced: input=71 filtered=4 filteredOut=67
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=62449 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=62449 (349,150) block=rtg-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81082 totalItems=115 uniqueTypes=4 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81082 (352,195) block=silicon-crucible kind=17 team=2 items=115 dataLen=51 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79427 totalItems=67 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79427 (353,191) block=ground-factory kind=13 team=2 items=67 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=83579 totalItems=10 uniqueTypes=1 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=83579 (365,201) block=steam-generator kind=20 team=2 items=10 dataLen=33 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 4 snapshots from 4 positions (fallback=false)
+2026/04/10 00:34:43 [blocksync] filterSynced: input=9 filtered=2 filteredOut=7
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81082 totalItems=114 uniqueTypes=4 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81082 (352,195) block=silicon-crucible kind=17 team=2 items=114 dataLen=51 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79427 totalItems=68 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79427 (353,191) block=ground-factory kind=13 team=2 items=68 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 2 snapshots from 2 positions (fallback=false)
+2026/04/10 00:34:43 [blocksync] filterSynced: input=3 filtered=2 filteredOut=1
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=81082 totalItems=113 uniqueTypes=4 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=81082 (352,195) block=silicon-crucible kind=17 team=2 items=113 dataLen=51 fallback=false
+2026/04/10 00:34:43 [blocksync] writeItemModule pos=79427 totalItems=69 uniqueTypes=2 shared=false
+2026/04/10 00:34:43 [blocksync] SUCCESS serialize pos=79427 (353,191) block=ground-factory kind=13 team=2 items=69 dataLen=67 fallback=false
+2026/04/10 00:34:43 [blocksync] Generated 2 snapshots from 2 positions (fallback=false)

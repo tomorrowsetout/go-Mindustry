@@ -2,262 +2,173 @@
 
 ## 项目简介
 
-mdt-server 是一个用 Go 语言重写的 Mindustry 服务器实现，支持 Mindustry build 156。
+`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务器，目前仅支持官方 `build 157`。
 
-### 特性
+项目除了基础开服能力，还内置了 HTTP API，方便按需接入你自己的前端或管理工具。
 
-- ✅ 高性能网络协议实现
-- ✅ 完整的游戏逻辑支持
-- ✅ Mod 系统（支持 Java/JS/Node.js）
-- ✅ 事件日志记录
-- ✅ Web API 管理接口
-- ✅ 持久化存档支持
-- ✅ 虚拟玩家支持
-- ✅ OP 命令系统
+## 主要特性
 
-## 快速开始
+- 仅支持 Mindustry `build 157`
+- 使用 Go 编写，方便二次开发与部署
+- 内置 HTTP API，可按需对接前端
+- 支持基础管理与持久化能力
+- 配置已拆分为 `configs/*.toml`，比单文件配置更容易维护
 
-### 系统要求
+## 系统要求
 
-- Go 1.22 或更高版本
-- Windows/Linux/macOS
+- Go `1.22` 或更高版本
+- Windows / Linux / macOS
 
-### 编译
-
-#### 使用 Make（推荐）
-
-```bash
-# 构建服务器
-make build
-
-# 清理编译文件
-make clean
-
-# 测试
-make test
-```
-
-#### 手动编译
+## 编译
 
 ```bash
 # Windows
 go build -o bin/mdt-server.exe ./cmd/mdt-server
 
-# Linux/macOS
+# Linux / macOS
 go build -o bin/mdt-server ./cmd/mdt-server
 ```
 
-### 运行服务器
+## 快速开始
 
 ```bash
-# 方式 1：使用 Make
-make run
+# Windows
+.\bin\mdt-server.exe
 
-# 方式 2：直接运行
-./bin/mdt-server.exe
+# Linux / macOS
+./bin/mdt-server
 ```
 
-### 命令行参数
+常用启动示例：
 
 ```bash
--c, --config <path>     配置文件路径（默认：config.json）
--a, --addr <address>    监听地址（默认：0.0.0.0:6567）
--b, --build <version>   Mindustry 客户端版本（必须匹配，例如：156）
--w, --world <source>    世界源：random | <map-name> | <.msav 文件路径>
-    --version           显示版本信息
+# 使用默认配置启动
+.\bin\mdt-server.exe
+
+# 指定配置文件
+.\bin\mdt-server.exe -config configs/config.toml
+
+# 指定地图文件启动
+.\bin\mdt-server.exe -world assets/worlds/22908.msav
+
+# 按地图名启动
+.\bin\mdt-server.exe -world 22908
+
+# 随机地图
+.\bin\mdt-server.exe -world random
+
+# 自定义监听地址
+.\bin\mdt-server.exe -addr 0.0.0.0:6567
+
+# 输出版本号
+.\bin\mdt-server.exe -version
 ```
 
-### 运行示例
+## 启动参数
 
-```bash
-# 使用默认配置运行
-./bin/mdt-server.exe
+- `-config`：配置文件路径，默认 `configs/config.toml`
+- `-addr`：Mindustry 协议监听地址，默认 `0.0.0.0:6567`
+- `-build`：客户端版本，当前只支持 `157`
+- `-world`：地图来源，支持 `random`、地图名、`.msav` 文件路径
+- `-version`：输出版本信息并退出
+- `-record-video`：录制实时对局视频
+- `-video-dir`：视频输出目录，默认 `data/video`
 
-# 使用指定地图运行
-./bin/mdt-server.exe -w assets/worlds/23315.msav -b 156
+## 配置说明
 
-# 使用随机地图运行
-./bin/mdt-server.exe -w random -b 156
-```
+当前项目以 `configs/*.toml` 为准，不再推荐把主要说明写成 `config.json` 式配置。
 
-## 配置文件
+建议优先关注这些文件：
 
-配置文件 `config.json` 包含以下主要设置：
+- `configs/config.toml`：主配置入口
+- `configs/api.toml`：HTTP API 开关、监听地址、密钥
+- `configs/server.toml`：服务器名称、简介、虚拟人数
+- `configs/core.toml`：核心数、TPS、内存参数
+- `configs/misc.toml`：数据目录、脚本、mods 等杂项配置
+- `configs/sync.toml`：同步策略与同步参数
+- `configs/personalization.toml`：显示文案、前后缀、公告显示
+- `configs/join_popup.toml`：入服公告与帮助弹窗
+- `configs/status_bar.toml`：状态栏配置
+- `configs/map_vote.toml`：投票换图配置
+- `configs/sundries.toml`：日志输出相关配置
+- `configs/tracepoints.toml`：追踪日志配置
 
-### 基本配置
+配置文件总览可以查看 `configs/configs.md`。
 
-```json
-{
-  "runtime": {
-    "serverName": "我的服务器",
-    "serverDesc": "一个有趣的 Mindustry 服务器",
-    "vanillaProfiles": "data/vanilla/profiles.json"
-  },
-  "net": {
-    "udpRetryCount": 3,
-    "udpRetryDelayMs": 500,
-    "udpFallbackTCP": true,
-    "syncEntityMs": 200,
-    "syncStateMs": 1000
-  }
-}
-```
+## HTTP API
 
-### 启用持久化
+项目内置 HTTP API，默认监听 `0.0.0.0:8090`，配置文件位于 `configs/api.toml`。
 
-```json
-{
-  "persist": {
-    "enabled": true,
-    "path": "data/state",
-    "intervalSec": 30
-  }
-}
-```
+如果你只想开服，这部分可以先不管；如果后续要接前端，再根据 `configs/api.toml` 开关和密钥配置使用即可。
 
-### 启用 API
+## 游戏内聊天命令
 
-```json
-{
-  "api": {
-    "enabled": true,
-    "bind": "127.0.0.1:8080",
-    "keys": ["your-api-key-here"]
-  }
-}
-```
+游戏内命令不在这里展开写，进入服务器后可以直接使用 `/help` 查看。
 
-## Web API
+## 控制台命令
 
-启用 API 后，可以使用以下端点：
+服务端控制台支持管理命令，完整帮助可以直接输入 `help all` 查看。
 
-### 获取状态
+## 目录结构
 
-```bash
-curl http://127.0.0.1:8080/api/v1/status
-```
-
-### 召唤单位
-
-```bash
-curl -X POST http://127.0.0.1:8080/api/v1/summon \
-  -H "Authorization: Bearer your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"typeId": 1, "x": 100, "y": 100, "team": 1}'
-```
-
-### 其他端点
-
-- `GET /api/v1/status` - 获取服务器状态
-- `POST /api/v1/summon` - 召唤单位
-- `POST /api/v1/stop` - 关闭服务器
-
-## 游戏内命令
-
-### OP 命令
-
-只有 OP 用户可以使用这些命令：
-
-```
-/stop              保存并关闭服务器
-/summon <type>     召唤单位（需要 OP）
-/despawn <id>      移除单位（需要 OP）
-/umove <id> <vx> <vy>     设置单位运动（需要 OP）
-/uteleport <id> <x> <y>   传送单位（需要 OP）
-/ulife <id> <seconds>     设置单位寿命（需要 OP）
-/ufollow <id> <target>    设置单位跟随（需要 OP）
-/upatrol <id> <x1> <y1> <x2> <y2>  设置单位巡逻（需要 OP）
-/ubehavior clear <id>     清除单位行为（需要 OP）
-```
-
-### 私聊命令
-
-```
-/status            显示服务器状态
-/help              显示帮助信息
-```
-
-## Mod 系统
-
-服务器支持多种语言的 Mod：
-
-### Java Mod
-
-```java
-// mods/java/hello.java
-public class HelloMod {
-    public void onInit() {
-        System.out.println("Hello from Java Mod!");
-    }
-}
-```
-
-### JavaScript Mod
-
-```javascript
-// mods/js/hello.js
-function onInit() {
-    console.log("Hello from JS Mod!");
-}
-```
-
-### Node.js Mod
-
-```javascript
-// mods/node/hello.js
-console.log("Hello from Node.js Mod!");
-```
-
-## 文件结构
-
-```
+```text
 mdt-server/
-├── bin/                    # 编译输出目录
-│   └── mdt-server.exe     # 服务器可执行文件
+├── assets/                  # 地图与内置资源
+│   └── worlds/
+├── bin/                     # 编译输出目录
 ├── cmd/
-│   └── mdt-server/        # 主程序入口
-│       └── main.go
-├── internal/              # 内部包
-│   ├── api/              # API 服务
-│   ├── config/           # 配置管理
-│   ├── core/             # 核心架构
-│   ├── entity/           # 实体系统
-│   ├── mods/             # Mod 系统
-│   ├── net/              # 网络层
-│   ├── persist/          # 持久化
-│   ├── protocol/         # 协议实现
-│   ├── sim/              # 物理仿真
-│   ├── storage/          # 事件存储
-│   └── world/            # 世界管理
-├── data/                  # 运行时数据
-│   ├── events/           # 事件日志
-│   ├── maps/             # 地图文件
-│   ├── mods/             # Mod 文件
-│   ├── snapshots/        # 快照文件
-│   └── state/            # 游戏状态
-├── assets/                # 静态资源
-│   └── worlds/           # 地图文件
-├── logs/                  # 日志文件
-├── config.json            # 配置文件
-├── Makefile               # 构建脚本
-└── README.md              # 项目文档
+│   ├── mdt-headless-probe/  # 探测工具
+│   └── mdt-server/          # 主程序入口
+├── config/                  # 兼容或辅助配置资源
+├── configs/                 # 运行配置文件
+├── data/                    # 运行时数据、快照、状态、vanilla 数据
+├── internal/                # 内部实现
+│   ├── api/                 # HTTP API
+│   ├── bootstrap/           # 启动与工作区初始化
+│   ├── buildsvc/            # 原版数据生成与构建辅助
+│   ├── config/              # 配置加载
+│   ├── core/                # 多核与核心逻辑
+│   ├── entity/              # 实体定义
+│   ├── net/                 # 网络层
+│   ├── persist/             # 持久化
+│   ├── protocol/            # 协议实现
+│   ├── sim/                 # Tick 与仿真
+│   ├── storage/             # 数据存储
+│   ├── vanilla/             # 原版资料与 profiles
+│   ├── video/               # 对局视频录制
+│   ├── world/               # 世界逻辑
+│   └── worldstream/         # MSAV 与世界流处理
+├── logs/                    # 日志目录
+├── mods/                    # 扩展脚本目录
+├── tools/                   # 辅助工具
+├── go.mod
+├── Makefile
+└── README.md
 ```
+
+## 开发提示
+
+- 地图参数支持 `random`、地图名和 `.msav` 路径
+- 随机地图会优先从 `assets/worlds` 中选择
+- 当前服务端只接受 `build 157`
+- 如果后续要接前端，可以再去调整 `configs/api.toml`
 
 ## 许可证
 
-本项目使用 GPL-3.0 许可证。详情请参阅 `LICENSE` 文件。
+本项目使用 `GPL-3.0` 许可证，详情请参阅 `LICENSE`。
 
-## 社区和支持
+## 社区与支持
 
-- 项目地址: https://github.com/tomorrowsetout/go-Mindustry
-- 问题反馈: 请提交 issue
+- 项目地址：https://github.com/tomorrowsetout/go-Mindustry
+- 问题反馈：请提交 Issue
+- 欢迎提交 PR
 
-## 贡献
+## 贡献者
 
-欢迎贡献！请按照以下步骤：
+<a href="https://github.com/tomorrowsetout/go-Mindustry/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=tomorrowsetout/go-Mindustry" />
+</a>
 
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+## Star History
+
+[![Star History Chart](https://api.star-history.com/image?repos=tomorrowsetout/go-Mindustry&type=date&legend=bottom-right)](https://www.star-history.com/?repos=tomorrowsetout%2Fgo-Mindustry&type=date&legend=bottom-right)

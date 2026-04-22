@@ -12,6 +12,27 @@ import (
 
 type UnitProfile struct {
 	Name                     string               `json:"name"`
+	Health                   float32              `json:"health"`
+	Armor                    float32              `json:"armor"`
+	Speed                    float32              `json:"speed"`
+	HitSize                  float32              `json:"hit_size"`
+	RotateSpeed              float32              `json:"rotate_speed"`
+	BuildSpeed               float32              `json:"build_speed"`
+	MineSpeed                float32              `json:"mine_speed"`
+	MineTier                 int16                `json:"mine_tier"`
+	ItemCapacity             int32                `json:"item_capacity"`
+	AmmoCapacity             float32              `json:"ammo_capacity"`
+	AmmoRegen                float32              `json:"ammo_regen"`
+	AmmoPerShot              float32              `json:"ammo_per_shot"`
+	PayloadCapacity          float32              `json:"payload_capacity"`
+	Flying                   bool                 `json:"flying"`
+	LowAltitude              bool                 `json:"low_altitude"`
+	CanBoost                 bool                 `json:"can_boost"`
+	MineWalls                bool                 `json:"mine_walls"`
+	MineFloor                bool                 `json:"mine_floor"`
+	CoreUnitDock             bool                 `json:"core_unit_dock"`
+	AllowedInPayloads        bool                 `json:"allowed_in_payloads"`
+	PickupUnits              bool                 `json:"pickup_units"`
 	FireMode                 string               `json:"fire_mode"`
 	Range                    float32              `json:"range"`
 	Damage                   float32              `json:"damage"`
@@ -23,6 +44,11 @@ type UnitProfile struct {
 	BulletHitSize            float32              `json:"bullet_hit_size"`
 	SplashRadius             float32              `json:"splash_radius"`
 	BuildingDamageMultiplier float32              `json:"building_damage_multiplier"`
+	ArmorMultiplier          float32              `json:"armor_multiplier"`
+	MaxDamageFraction        float32              `json:"max_damage_fraction"`
+	ShieldDamageMultiplier   float32              `json:"shield_damage_multiplier"`
+	PierceDamageFactor       float32              `json:"pierce_damage_factor"`
+	PierceArmor              bool                 `json:"pierce_armor"`
 	Pierce                   int32                `json:"pierce"`
 	PierceBuilding           bool                 `json:"pierce_building"`
 	StatusID                 int16                `json:"status_id"`
@@ -52,6 +78,7 @@ type UnitProfile struct {
 	DespawnEffect            string               `json:"despawn_effect,omitempty"`
 	Bullet                   *BulletProfile       `json:"bullet,omitempty"`
 	Mounts                   []WeaponMountProfile `json:"mounts,omitempty"`
+	Abilities                []UnitAbilityProfile `json:"abilities,omitempty"`
 }
 
 type TurretProfile struct {
@@ -68,6 +95,11 @@ type TurretProfile struct {
 	BulletHitSize            float32        `json:"bullet_hit_size"`
 	SplashRadius             float32        `json:"splash_radius"`
 	BuildingDamageMultiplier float32        `json:"building_damage_multiplier"`
+	ArmorMultiplier          float32        `json:"armor_multiplier"`
+	MaxDamageFraction        float32        `json:"max_damage_fraction"`
+	ShieldDamageMultiplier   float32        `json:"shield_damage_multiplier"`
+	PierceDamageFactor       float32        `json:"pierce_damage_factor"`
+	PierceArmor              bool           `json:"pierce_armor"`
 	Pierce                   int32          `json:"pierce"`
 	PierceBuilding           bool           `json:"pierce_building"`
 	StatusID                 int16          `json:"status_id"`
@@ -106,6 +138,11 @@ type BulletProfile struct {
 	HitSize                  float32        `json:"hit_size"`
 	SplashRadius             float32        `json:"splash_radius"`
 	BuildingDamageMultiplier float32        `json:"building_damage_multiplier"`
+	ArmorMultiplier          float32        `json:"armor_multiplier"`
+	MaxDamageFraction        float32        `json:"max_damage_fraction"`
+	ShieldDamageMultiplier   float32        `json:"shield_damage_multiplier"`
+	PierceDamageFactor       float32        `json:"pierce_damage_factor"`
+	PierceArmor              bool           `json:"pierce_armor"`
 	Pierce                   int32          `json:"pierce"`
 	PierceBuilding           bool           `json:"pierce_building"`
 	StatusID                 int16          `json:"status_id"`
@@ -164,6 +201,7 @@ type BlockRequirementProfile struct {
 
 type BlockProfile struct {
 	Name                string                    `json:"name"`
+	Armor               float32                   `json:"armor"`
 	BuildCostMultiplier float32                   `json:"build_cost_multiplier"`
 	BuildTimeSec        float32                   `json:"build_time_sec"`
 	Requirements        []BlockRequirementProfile `json:"requirements"`
@@ -199,7 +237,10 @@ func GenerateProfiles(repoRoot, outPath string) (int, int, int, error) {
 
 	itemsByVar := extractItems(string(itemSrc))
 	statuses, statusLookup := extractStatuses(string(statusSrc))
-	units := extractUnits(string(unitSrc), statusLookup)
+	units, err := extractUnits(string(unitSrc), statusLookup)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	turrets := extractTurrets(string(blockSrc), statusLookup)
 	blocks := extractBlocks(string(blockSrc), itemsByVar)
 	payload := ProfilesFile{
@@ -233,7 +274,7 @@ func resolveSourcePaths(repoRoot string) (string, string) {
 
 var (
 	reItemDecl   = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+Item\s*\(\s*"([^"]+)"`)
-	reUnitDecl   = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+UnitType\("([^"]+)"\)\s*\{\{`)
+	reUnitDecl   = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+([A-Za-z0-9_$.]*UnitType)\("([^"]+)"\)\s*\{\{`)
 	reBlockDecl  = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+[A-Za-z0-9_$.]+\("([^"]+)"\)\s*\{\{`)
 	reTurretDecl = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+([A-Za-z0-9_$.]+)\("([^"]+)"\)\s*\{\{`)
 
@@ -306,9 +347,15 @@ func extractBlocks(src string, items map[string]itemMeta) []BlockProfile {
 		if !ok {
 			continue
 		}
+		flat := stripNestedInitBodies(body)
+		numVars := extractLocalNumericVars(body)
 		req := parseRequirements(body, items)
 		if len(req) == 0 {
 			continue
+		}
+		armor := float32(0)
+		if v, vok := lastNumericAssignWithVars(flat, "armor", numVars); vok && v > 0 {
+			armor = v
 		}
 		mul := float32(1.0)
 		if v, vok := lastValue(body, reBuildCostMul); vok && v > 0 {
@@ -326,6 +373,7 @@ func extractBlocks(src string, items map[string]itemMeta) []BlockProfile {
 		}
 		out = append(out, BlockProfile{
 			Name:                name,
+			Armor:               armor,
 			BuildCostMultiplier: mul,
 			BuildTimeSec:        buildTimeSec,
 			Requirements:        req,
@@ -379,23 +427,59 @@ func parseRequirements(body string, items map[string]itemMeta) []BlockRequiremen
 	return out
 }
 
-func extractUnits(src string, statusLookup map[string]statusLookupEntry) []UnitProfile {
+func extractUnits(src string, statusLookup map[string]statusLookupEntry) ([]UnitProfile, error) {
 	matches := reUnitDecl.FindAllStringSubmatchIndex(src, -1)
+	unitNamesByVar := make(map[string]string, len(matches))
+	for _, m := range matches {
+		if len(m) < 8 {
+			continue
+		}
+		varName := strings.TrimSpace(src[m[2]:m[3]])
+		name := strings.ToLower(strings.TrimSpace(src[m[6]:m[7]]))
+		if varName != "" && name != "" {
+			unitNamesByVar[varName] = name
+		}
+	}
 	out := make([]UnitProfile, 0, len(matches))
 	for _, m := range matches {
-		name := src[m[4]:m[5]]
+		ctorType := strings.TrimSpace(src[m[4]:m[5]])
+		name := src[m[6]:m[7]]
 		bodyStart := m[1]
 		body, ok := extractInitBody(src, bodyStart)
 		if !ok {
 			continue
 		}
 		p := parseCommonProfile(body, statusLookup)
-		wp := parseWeaponsProfile(body, statusLookup)
+		mounts := extractWeaponMountProfiles(body, statusLookup)
+		wp := mergeParsedWeaponMounts(extractParsedWeaponMounts(body, statusLookup))
 		p = mergeParsedProfiles(p, wp)
-		if (p.damage <= 0 && p.splashDamage <= 0) || p.interval <= 0 {
-			continue
+		meta := parseUnitMetadata(body, mounts, ctorType)
+		abilities, err := extractUnitAbilities(body, unitNamesByVar, statusLookup)
+		if err != nil {
+			return nil, fmt.Errorf("extract unit %s: %w", strings.ToLower(strings.TrimSpace(name)), err)
 		}
 		out = append(out, UnitProfile{
+			Health:                   meta.health,
+			Armor:                    meta.armor,
+			Speed:                    meta.speed,
+			HitSize:                  meta.hitSize,
+			RotateSpeed:              meta.rotateSpeed,
+			BuildSpeed:               meta.buildSpeed,
+			MineSpeed:                meta.mineSpeed,
+			MineTier:                 meta.mineTier,
+			ItemCapacity:             meta.itemCapacity,
+			AmmoCapacity:             meta.ammoCapacity,
+			AmmoRegen:                meta.ammoRegen,
+			AmmoPerShot:              meta.ammoPerShot,
+			PayloadCapacity:          meta.payloadCapacity,
+			Flying:                   meta.flying,
+			LowAltitude:              meta.lowAltitude,
+			CanBoost:                 meta.canBoost,
+			MineWalls:                meta.mineWalls,
+			MineFloor:                meta.mineFloor,
+			CoreUnitDock:             meta.coreUnitDock,
+			AllowedInPayloads:        meta.allowedInPayloads,
+			PickupUnits:              meta.pickupUnits,
 			Name:                     strings.ToLower(strings.TrimSpace(name)),
 			FireMode:                 p.fireMode,
 			Range:                    p.rangeV,
@@ -408,6 +492,11 @@ func extractUnits(src string, statusLookup map[string]statusLookupEntry) []UnitP
 			BulletHitSize:            p.bulletHitSize,
 			SplashRadius:             p.splashRadius,
 			BuildingDamageMultiplier: p.buildingDamageMultiplier,
+			ArmorMultiplier:          p.armorMultiplier,
+			MaxDamageFraction:        p.maxDamageFraction,
+			ShieldDamageMultiplier:   p.shieldDamageMultiplier,
+			PierceDamageFactor:       p.pierceDamageFactor,
+			PierceArmor:              p.pierceArmor,
 			Pierce:                   p.pierce,
 			PierceBuilding:           p.pierceBuilding,
 			StatusID:                 p.statusID,
@@ -436,10 +525,11 @@ func extractUnits(src string, statusLookup map[string]statusLookupEntry) []UnitP
 			HitEffect:                p.hitEffect,
 			DespawnEffect:            p.despawnEffect,
 			Bullet:                   cloneBulletProfile(p.bullet),
-			Mounts:                   extractWeaponMountProfiles(body, statusLookup),
+			Mounts:                   mounts,
+			Abilities:                abilities,
 		})
 	}
-	return out
+	return out, nil
 }
 
 func parseWeaponsProfile(body string, statusLookup map[string]statusLookupEntry) parsedProfile {
@@ -477,6 +567,19 @@ func mergeParsedProfiles(a, b parsedProfile) parsedProfile {
 	if b.buildingDamageMultiplier != 1 {
 		a.buildingDamageMultiplier = b.buildingDamageMultiplier
 	}
+	if b.armorMultiplier > 0 {
+		a.armorMultiplier = b.armorMultiplier
+	}
+	if b.maxDamageFraction > 0 {
+		a.maxDamageFraction = b.maxDamageFraction
+	}
+	if b.shieldDamageMultiplier > 0 {
+		a.shieldDamageMultiplier = b.shieldDamageMultiplier
+	}
+	if b.pierceDamageFactor > 0 {
+		a.pierceDamageFactor = b.pierceDamageFactor
+	}
+	a.pierceArmor = a.pierceArmor || b.pierceArmor
 	if b.pierce > a.pierce {
 		a.pierce = b.pierce
 	}
@@ -572,6 +675,11 @@ func extractTurrets(src string, statusLookup map[string]statusLookupEntry) []Tur
 			BulletHitSize:            p.bulletHitSize,
 			SplashRadius:             p.splashRadius,
 			BuildingDamageMultiplier: p.buildingDamageMultiplier,
+			ArmorMultiplier:          p.armorMultiplier,
+			MaxDamageFraction:        p.maxDamageFraction,
+			ShieldDamageMultiplier:   p.shieldDamageMultiplier,
+			PierceDamageFactor:       p.pierceDamageFactor,
+			PierceArmor:              p.pierceArmor,
 			Pierce:                   p.pierce,
 			PierceBuilding:           p.pierceBuilding,
 			StatusID:                 p.statusID,
@@ -622,6 +730,11 @@ type parsedProfile struct {
 	bulletHitSize            float32
 	splashRadius             float32
 	buildingDamageMultiplier float32
+	armorMultiplier          float32
+	maxDamageFraction        float32
+	shieldDamageMultiplier   float32
+	pierceDamageFactor       float32
+	pierceArmor              bool
 	pierce                   int32
 	pierceBuilding           bool
 	statusID                 int16
@@ -663,6 +776,8 @@ func parseCommonProfile(body string, statusLookup map[string]statusLookupEntry) 
 		bulletHitSize:            0,
 		splashRadius:             0,
 		buildingDamageMultiplier: 1,
+		armorMultiplier:          1,
+		shieldDamageMultiplier:   1,
 		pierce:                   0,
 		targetAir:                true,
 		targetGround:             true,
@@ -717,6 +832,21 @@ func parseCommonProfile(body string, statusLookup map[string]statusLookupEntry) 
 	}
 	if v, ok := lastValue(body, reBuildingDamageMultiplier); ok {
 		p.buildingDamageMultiplier = v
+	}
+	if v, ok := lastValue(body, reArmorMultiplier); ok && v > 0 {
+		p.armorMultiplier = v
+	}
+	if v, ok := lastValue(body, reMaxDamageFraction); ok && v > 0 {
+		p.maxDamageFraction = v
+	}
+	if v, ok := lastValue(body, reShieldDamageMultiplier); ok && v > 0 {
+		p.shieldDamageMultiplier = v
+	}
+	if v, ok := lastValue(body, rePierceDamageFactor); ok && v > 0 {
+		p.pierceDamageFactor = v
+	}
+	if m := rePierceArmor.FindAllStringSubmatch(body, -1); len(m) > 0 {
+		p.pierceArmor = strings.EqualFold(m[len(m)-1][1], "true")
 	}
 	if m := reTargetAir.FindAllStringSubmatch(body, -1); len(m) > 0 {
 		p.targetAir = strings.EqualFold(m[len(m)-1][1], "true")

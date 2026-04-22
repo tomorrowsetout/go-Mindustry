@@ -38,6 +38,8 @@ type Rules struct {
 	Waves                       bool    `json:"waves"`                       // 是否启用波次
 	WaveTimer                   bool    `json:"waveTimer"`                   // 波次自动计时
 	WaveSending                 bool    `json:"waveSending"`                 // 允许手动发送波次
+	AirUseSpawns                bool    `json:"airUseSpawns"`                // 空军是否使用地面出生点
+	WavesSpawnAtCores           bool    `json:"wavesSpawnAtCores"`           // 攻击图波次是否从敌方核心出生
 	WaitEnemies                 bool    `json:"waitEnemies"`                 // 等待所有敌人被击败后再开始波次
 	Pvp                         bool    `json:"pvp"`                         // PvP模式
 	PvpAutoPause                bool    `json:"pvpAutoPause"`                // PvP自动暂停
@@ -102,7 +104,6 @@ type Rules struct {
 	BuildSpeedMultiplier        float32 `json:"buildSpeedMultiplier"`        // 建造速度倍率
 	DeconstructRefundMultiplier float32 `json:"deconstructRefundMultiplier"` // 拆除退款倍率
 	ObjectiveTimerMultiplier    float32 `json:"objectiveTimerMultiplier"`    // 任务计时器倍率
-	SolarMultiplierVal          float32 `json:"solarMultiplier"`             // 太阳能倍率（替代字段）
 	DropZoneRadius              float32 `json:"dropZoneRadius"`              // 投放区域半径
 	DragMultiplier              float32 `json:"dragMultiplier"`              // 拖拽倍率
 	EnemyCoreBuildRadius        float32 `json:"enemyCoreBuildRadius"`        // 敌方核心建造半径
@@ -131,10 +132,8 @@ type Rules struct {
 	BackgroundOffsetY float32 `json:"backgroundOffsetY"` // 背景偏移Y
 
 	// 队伍相关
-	DefaultTeam             string  `json:"defaultTeam"`          // 默认队伍
-	WaveTeam                string  `json:"waveTeam"`             // 波次队伍
-	EnemyExplosionDamageVal float32 `json:"enemyExplosionDamage"` // 敌人爆炸伤害值
-	AllowEditRulesVal       bool    `json:"allowEditRules"`       // 允许编辑规则值
+	DefaultTeam string `json:"defaultTeam"` // 默认队伍
+	WaveTeam    string `json:"waveTeam"`    // 波次队伍
 
 	// 其他字段
 	ModeName        string  `json:"modeName"`        // 自定义模式名称
@@ -175,7 +174,6 @@ type Rules struct {
 	BurstSpacing    float32 `json:"burstSpacing"`    // 连发间隔
 	Cooldown        float32 `json:"cooldown"`        // 冷却时间
 	FireMode        string  `json:"fireMode"`        // 射击模式
-	RangeVal        float32 `json:"range"`           // 范围值
 	Interval        float32 `json:"interval"`        // 间隔
 	Duration        float32 `json:"duration"`        // 持续时间
 	Length          float32 `json:"length"`          // 长度
@@ -210,12 +208,6 @@ type Rules struct {
 	ItemID          int32   `json:"itemId"`          // 物品ID
 	LiquidID        int32   `json:"liquidId"`        // 液体ID
 	BlockID         int32   `json:"blockId"`         // 块ID
-	RotationVal     int32   `json:"rotation"`        // 旋转值
-	team            int32   `json:"team"`            // 队伍值
-	XVal            float32 `json:"x"`               // X坐标值
-	YVal            float32 `json:"y"`               // Y坐标值
-	WidthVal        int32   `json:"width"`           // 宽度值
-	HeightVal       int32   `json:"height"`          // 高度值
 	Science         float32 `json:"science"`         // 科学
 	Resources       string  `json:"resources"`       // 资源
 	Cost            string  `json:"cost"`            // 成本
@@ -282,6 +274,13 @@ func (r *Rules) teamInfiniteResources(team TeamID) bool {
 		return tr.InfiniteResources
 	}
 	return false
+}
+
+func (r *Rules) TeamInfiniteResources(team TeamID) bool {
+	if r == nil {
+		return false
+	}
+	return r.teamInfiniteResources(team)
 }
 
 func parseTeamKey(v string) (TeamID, bool) {
@@ -442,9 +441,14 @@ func decodeRulesWithGamemodeDefaults(data []byte, tags map[string]string, model 
 		base = &Rules{}
 	}
 
+	normalizedData, err := normalizeRulesTagToJSON(data)
+	if err != nil {
+		return nil, err
+	}
+
 	var overlay Rules
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &overlay); err != nil {
+	if len(normalizedData) > 0 {
+		if err := json.Unmarshal(normalizedData, &overlay); err != nil {
 			return nil, err
 		}
 	}
@@ -460,8 +464,8 @@ func decodeRulesWithGamemodeDefaults(data []byte, tags map[string]string, model 
 
 	applyGamemodeDefaults(base, mode)
 
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, base); err != nil {
+	if len(normalizedData) > 0 {
+		if err := json.Unmarshal(normalizedData, base); err != nil {
 			return nil, err
 		}
 	}
@@ -556,6 +560,9 @@ func DefaultRules() *Rules {
 		UnitPayloadUpdate:           false, // 单位有效载荷更新
 		UnitPayloadsExplode:         false, // 单位有效载荷不爆炸
 		ShowSpawns:                  false, // 不显示出生点
+		AirUseSpawns:                false, // 空军默认从地图边缘出生
+		WavesSpawnAtCores:           true,  // 攻击图默认允许从敌方核心出生
+		AiCoreSpawn:                 true,  // 原版 team rule 默认允许核心刷 builder/core unit
 
 		// 数值规则
 		WaveSpacing:                 90.0,  // 原版 5400 ticks / 60 = 90秒
@@ -567,6 +574,7 @@ func DefaultRules() *Rules {
 		UnitBuildSpeedMultiplier:    1.0,   // 单位建造速度倍率
 		UnitCostMultiplier:          1.0,   // 单位成本倍率
 		UnitMineSpeedMultiplier:     1.0,   // 单位采矿速度倍率
+		BuildAiTier:                 1,     // 原版 team rule 默认 buildAiTier=1
 		BuildCostMultiplier:         1.0,   // 建造成本倍率
 		BuildSpeedMultiplier:        1.0,   // 建造速度倍率
 		DeconstructRefundMultiplier: 0.5,   // 拆除退款倍率（原版 0.5）
@@ -603,9 +611,8 @@ func DefaultRules() *Rules {
 		WaveTeam:    "crux",    // 波次队伍（原版 crux）
 
 		// 其他字段（留空或设为零值，这些通常从其他地方获取）
-		ModeName:          "",
-		Mission:           "",
-		AllowEditRulesVal: false,
+		ModeName: "",
+		Mission:  "",
 	}
 }
 

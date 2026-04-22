@@ -12,6 +12,15 @@ func TestRulesDefault(t *testing.T) {
 	if rules.UnitHealthMultiplier != 1.0 {
 		t.Fatalf("expected default unitHealthMultiplier=1.0, got %f", rules.UnitHealthMultiplier)
 	}
+	if !rules.AiCoreSpawn {
+		t.Fatalf("expected default aiCoreSpawn=true to match official team rule defaults")
+	}
+	if !rules.WavesSpawnAtCores {
+		t.Fatalf("expected default wavesSpawnAtCores=true to match official rules")
+	}
+	if rules.BuildAiTier != 1 {
+		t.Fatalf("expected default buildAiTier=1 to match official team rule defaults, got %d", rules.BuildAiTier)
+	}
 }
 
 func TestRulesManagerClone(t *testing.T) {
@@ -122,5 +131,43 @@ func TestRulesManagerEmptyTags(t *testing.T) {
 	rm := NewRulesManager(nil)
 	if err := rm.FromTags(tags); err != nil {
 		t.Fatalf("expected no error for empty rules, got %v", err)
+	}
+}
+
+func TestRulesManagerFromTagsSupportsMindustryJsonIOStyleRules(t *testing.T) {
+	tags := map[string]string{
+		"rules": `{attackMode:true,infiniteResources:true,waveTimer:false,staticFog:false,teams:{2:{fillItems:true,infiniteResources:true}},waveTeam:crux}`,
+	}
+
+	rm := NewRulesManager(nil)
+	if err := rm.FromTags(tags); err != nil {
+		t.Fatalf("expected Java-style rules tag to parse, got %v", err)
+	}
+
+	rules := rm.Get()
+	if !rules.AttackMode {
+		t.Fatal("expected attackMode=true from Java-style rules tag")
+	}
+	if !rules.InfiniteResources {
+		t.Fatal("expected infiniteResources=true from Java-style rules tag")
+	}
+	if rules.WaveTimer {
+		t.Fatal("expected waveTimer=false from Java-style rules tag")
+	}
+	if rules.StaticFog {
+		t.Fatal("expected staticFog=false from Java-style rules tag")
+	}
+	if rules.WaveTeam != "crux" {
+		t.Fatalf("expected waveTeam=crux, got %q", rules.WaveTeam)
+	}
+	team2, ok := rules.teamRule(2)
+	if !ok {
+		t.Fatal("expected team 2 rules to be present")
+	}
+	if !team2.FillItems {
+		t.Fatal("expected teams[2].fillItems=true")
+	}
+	if !team2.InfiniteResources {
+		t.Fatal("expected teams[2].infiniteResources=true")
 	}
 }

@@ -1,5 +1,0 @@
-{"timestamp":"2026-03-30T12:27:05.056269Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":2142858207,"uuid":"ngZrf2di23QAAAAA/U+9Eg==","ip":"176.208.126.235","name":"[scarlet]（未绑定）[]未知玩家[gray]2142858207[]"}
-{"timestamp":"2026-03-30T12:27:05.0781506Z","kind":"world_handshake_sent","conn_id":2142858207,"uuid":"ngZrf2di23QAAAAA/U+9Eg==","ip":"176.208.126.235","name":"[scarlet]（未绑定）[]Akira[gray]65007[]"}
-{"timestamp":"2026-03-30T12:27:06.5238594Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":2142858207,"uuid":"ngZrf2di23QAAAAA/U+9Eg==","ip":"176.208.126.235","name":"[scarlet]（未绑定）[]Akira[gray]65007[]"}
-{"timestamp":"2026-03-30T12:27:13.5273597Z","kind":"tcp_closed","detail":"EOF","conn_id":2142858207,"uuid":"ngZrf2di23QAAAAA/U+9Eg==","ip":"176.208.126.235","name":"[scarlet]（未绑定）[]Akira[gray]65007[]"}
-{"timestamp":"2026-03-30T12:27:13.5336496Z","kind":"connection_close","trigger":13,"conn_id":2142858207,"uuid":"ngZrf2di23QAAAAA/U+9Eg==","ip":"176.208.126.235:1287","name":"[scarlet]（未绑定）[]Akira[gray]65007[]"}

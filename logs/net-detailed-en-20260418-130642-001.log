@@ -1,0 +1,19 @@
+2026-04-18T05:07:19.6071362Z [NET] kind=tcp_accept packet= conn_id=1195234151 uuid= ip=127.0.0.1 name="" detail=
+2026-04-18T05:07:27.1778098Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]1195234151[]" detail=version=157 type=official mods=0
+2026-04-18T05:07:42.9152088Z [NET] kind=world_handshake_sent packet= conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=
+2026-04-18T05:07:42.9383435Z [NET] kind=connect_confirm packet=*protocol.Remote_NetServer_connectConfirm_50 conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=
+2026-04-18T05:07:42.9393552Z [NET] kind=tcp_closed packet= conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=EOF
+2026-04-18T05:08:20.0502798Z [NET] kind=tcp_accept packet= conn_id=1758539498 uuid= ip=127.0.0.1 name="" detail=
+2026-04-18T05:08:31.9870648Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=version=157 type=official mods=0
+2026-04-18T05:08:32.188194Z [NET] kind=world_handshake_sent packet= conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=
+2026-04-18T05:08:32.2042302Z [NET] kind=connect_confirm packet=*protocol.Remote_NetServer_connectConfirm_50 conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=
+2026-04-18T05:08:32.2047578Z [NET] kind=tcp_closed packet= conn_id=45503 uuid=AAAAAAAAAAAAAAAAAAAAAA== ip=127.0.0.1 name="[scarlet]（未绑定）[]headless-probe[gray]45503[]" detail=EOF
+2026-04-18T05:13:52.4933581Z [NET] kind=tcp_accept packet= conn_id=1984565065 uuid= ip=127.0.0.1 name="" detail=
+2026-04-18T05:13:52.5055667Z [NET] kind=read_error packet= conn_id=1984565065 uuid= ip=127.0.0.1 name="" detail=packet_id=3 framework_id=-1 err=unknown packet id: 3
+2026-04-18T05:14:04.5287006Z [NET] kind=tcp_closed packet= conn_id=1984565065 uuid= ip=127.0.0.1 name="[scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[]未知玩家[gray]1984565065[][gray]1984565065[][gray]1984565065[]" detail=EOF
+2026-04-18T06:27:34.2120621Z [NET] kind=tcp_accept packet= conn_id=1663166865 uuid= ip=127.0.0.1 name="" detail=
+2026-04-18T06:27:34.2251783Z [NET] kind=read_error packet= conn_id=1663166865 uuid= ip=127.0.0.1 name="" detail=packet_id=3 framework_id=-1 err=unknown packet id: 3
+2026-04-18T06:27:46.2473731Z [NET] kind=tcp_closed packet= conn_id=1663166865 uuid= ip=127.0.0.1 name="[scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[]未知玩家[gray]1663166865[][gray]1663166865[][gray]1663166865[]" detail=EOF
+2026-04-18T06:28:16.235385Z [NET] kind=tcp_accept packet= conn_id=37168435 uuid= ip=127.0.0.1 name="" detail=
+2026-04-18T06:28:16.2419608Z [NET] kind=read_error packet= conn_id=37168435 uuid= ip=127.0.0.1 name="" detail=packet_id=3 framework_id=-1 err=unknown packet id: 3
+2026-04-18T06:28:18.1554407Z [NET] kind=tcp_closed packet= conn_id=37168435 uuid= ip=127.0.0.1 name="" detail=EOF

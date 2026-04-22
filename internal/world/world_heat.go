@@ -6,7 +6,7 @@ func (w *World) stepHeatConductorsLocked() {
 	}
 	memo := make(map[int32]float32)
 	visiting := make(map[int32]struct{})
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.heatConductorTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}

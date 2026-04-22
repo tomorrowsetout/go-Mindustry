@@ -1,6 +1,9 @@
 package protocol
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 // ContentRegistry stores content by type/id and provides TypeIO lookups.
 type ContentRegistry struct {
@@ -18,9 +21,9 @@ type ContentRegistry struct {
 	effects     map[int16]Effect
 	sounds      map[int16]Sound
 
-	teams       map[byte]Team
-	commands    map[int16]UnitCommand
-	stances     map[int16]UnitStance
+	teams    map[byte]Team
+	commands map[int16]UnitCommand
+	stances  map[int16]UnitStance
 }
 
 func NewContentRegistry() *ContentRegistry {
@@ -291,4 +294,30 @@ func (r *ContentRegistry) IterateUnitTypes(fn func(UnitType) bool) {
 			break
 		}
 	}
+}
+
+func (r *ContentRegistry) SnapshotContentNames() map[ContentType]map[int16]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[ContentType]map[int16]string, len(r.contents))
+	for typ, items := range r.contents {
+		if len(items) == 0 {
+			continue
+		}
+		copied := make(map[int16]string, len(items))
+		for id, content := range items {
+			if content == nil {
+				continue
+			}
+			name := strings.TrimSpace(content.Name())
+			if name == "" {
+				continue
+			}
+			copied[id] = name
+		}
+		if len(copied) > 0 {
+			out[typ] = copied
+		}
+	}
+	return out
 }

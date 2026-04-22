@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"mdt-server/internal/buildinfo"
 	"mdt-server/internal/config"
 )
 
@@ -16,20 +17,20 @@ import (
 
 // APIServer API服务器
 type APIServer struct {
-	mu         sync.RWMutex
-	Config     config.Config
-	endpoints  map[string]EndpointHandler
-	keys       map[string]struct{}
-	stopFn     func()
+	mu        sync.RWMutex
+	Config    config.Config
+	endpoints map[string]EndpointHandler
+	keys      map[string]struct{}
+	stopFn    func()
 	// typeID, x, y, team
-	summonFn      func(int16, float32, float32, byte) error
-	moveFn        func(int32, float32, float32, float32) error
-	teleportFn    func(int32, float32, float32, float32) error
-	lifeFn        func(int32, float32) error
-	followFn      func(int32, int32, float32) error
-	patrolFn      func(int32, float32, float32, float32, float32, float32) error
-	behaviorFn    func(int32, string) error
-	opsChangedFn  func()
+	summonFn     func(int16, float32, float32, byte) error
+	moveFn       func(int32, float32, float32, float32) error
+	teleportFn   func(int32, float32, float32, float32) error
+	lifeFn       func(int32, float32) error
+	followFn     func(int32, int32, float32) error
+	patrolFn     func(int32, float32, float32, float32, float32, float32) error
+	behaviorFn   func(int32, string) error
+	opsChangedFn func()
 }
 
 // EndpointHandler 端点处理器接口
@@ -53,10 +54,10 @@ type APIResponse struct {
 
 // ListResponse 列表响应
 type ListResponse struct {
-	Items  []interface{} `json:"items"`
-	Page   int           `json:"page"`
-	PageSize int         `json:"page_size"`
-	Total  int           `json:"total"`
+	Items    []interface{} `json:"items"`
+	Page     int           `json:"page"`
+	PageSize int           `json:"page_size"`
+	Total    int           `json:"total"`
 }
 
 // Pages 分页信息
@@ -67,10 +68,10 @@ type Pages struct {
 
 // ConfigResponse 配置响应
 type ConfigResponse struct {
-	API      config.APIConfig     `json:"api"`
-	Runtime  config.RuntimeConfig `json:"runtime"`
-	Storage  string               `json:"storage,omitempty"`
-	Net      string               `json:"net,omitempty"`
+	API     config.APIConfig     `json:"api"`
+	Runtime config.RuntimeConfig `json:"runtime"`
+	Storage string               `json:"storage,omitempty"`
+	Net     string               `json:"net,omitempty"`
 }
 
 // NewAPIServer 创建新的API服务器
@@ -181,7 +182,7 @@ func (s *APIServer) RequiresAuth() bool {
 	return len(s.keys) > 0
 }
 
-//-handler 注册所有内置端点
+// -handler 注册所有内置端点
 // server: API服务器
 func RegisterAllEndpoints(server *APIServer) {
 	if server == nil {
@@ -190,7 +191,11 @@ func RegisterAllEndpoints(server *APIServer) {
 
 	// 内置端点
 	server.RegisterEndpoint("/api/version", &genericHandler{handler: func(w http.ResponseWriter, r *http.Request) error {
-		return writeJSON(w, http.StatusOK, map[string]string{"version": "1.0.0"})
+		return writeJSON(w, http.StatusOK, map[string]string{
+			"product": buildinfo.ProductName,
+			"version": buildinfo.Version,
+			"commit":  buildinfo.Commit,
+		})
 	}})
 	server.RegisterEndpoint("/api/health", &genericHandler{handler: func(w http.ResponseWriter, r *http.Request) error {
 		return writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

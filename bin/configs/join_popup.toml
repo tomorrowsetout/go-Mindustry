@@ -1,0 +1,32 @@
+# 入服公告配置
+# 控制玩家进入服务器后的弹窗与帮助文案。
+
+[join_popup]
+# 是否启用入服公告弹窗。
+enabled = true
+# 玩家进入后延迟多久弹出，单位毫秒。
+delay_ms = 100
+# 公告主标题。
+title = "[accent]服务器公告[]"
+# 首页弹窗正文，支持多行文本与占位符。
+message = """
+欢迎 [green]{player_name}[] 来到 [white]{server_name}[]
+当前地图: [white]{current_map}[]
+请选择下方按钮。
+"""
+# 查看公告详情时显示的长文本。
+announcement_text = """
+[accent]服务器公告[]
+
+1. 如果有任何问题请转移到交流群333641130
+2. 请保证友好的交流
+"""
+# 公告中的外部链接地址。
+link_url = "https://qm.qq.com/q/Op6STL0WMG"
+# 帮助页弹窗正文，支持多行文本。
+help_text = """
+[accent]帮助为分页弹窗[]
+第 1 页显示基础指令与投票换图；
+第 2 页显示常用与 OP 指令；
+第 3 页显示单位控制。
+"""

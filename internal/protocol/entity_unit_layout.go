@@ -75,6 +75,11 @@ func unitEntityLayoutByClassID(classID byte) (unitEntityLayout, bool) {
 	}
 }
 
+func IsKnownUnitEntityClassID(classID byte) bool {
+	_, ok := unitEntityLayoutByClassID(classID)
+	return ok
+}
+
 func unitEntityLayoutByName(name string) (unitEntityLayout, bool) {
 	switch normalizeUnitEntityName(name) {
 	case "alpha":

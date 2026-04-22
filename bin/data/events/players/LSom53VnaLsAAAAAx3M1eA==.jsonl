@@ -1,5 +1,0 @@
-{"timestamp":"2026-03-31T16:14:50.9146784Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":2015556866,"uuid":"LSom53VnaLsAAAAAx3M1eA==","ip":"212.35.187.166"}
-{"timestamp":"2026-03-31T16:14:52.3405983Z","kind":"world_handshake_sent","conn_id":2015556866,"uuid":"LSom53VnaLsAAAAAx3M1eA==","ip":"212.35.187.166","name":"[scarlet]（未绑定杂鱼~）[]SokRaT[gray]46545[]"}
-{"timestamp":"2026-03-31T16:14:54.8518563Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":2015556866,"uuid":"LSom53VnaLsAAAAAx3M1eA==","ip":"212.35.187.166","name":"[scarlet]（未绑定杂鱼~）[]SokRaT[gray]46545[]"}
-{"timestamp":"2026-03-31T16:16:58.1800123Z","kind":"tcp_closed","detail":"EOF","conn_id":2015556866,"uuid":"LSom53VnaLsAAAAAx3M1eA==","ip":"212.35.187.166","name":"[scarlet]（未绑定杂鱼~）[]SokRaT[gray]46545[]"}
-{"timestamp":"2026-03-31T16:16:58.1900142Z","kind":"connection_close","trigger":13,"conn_id":2015556866,"uuid":"LSom53VnaLsAAAAAx3M1eA==","ip":"212.35.187.166:4059","name":"[scarlet]（未绑定杂鱼~）[]SokRaT[gray]46545[]"}

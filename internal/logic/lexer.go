@@ -31,160 +31,239 @@ const (
 
 	// Operators
 	Operator
-	Plus        // +
-	Minus       // -
-	Multiply    // *
-	Divide      // /
-	Mod         // %
-	Power       // ^
-	Equal       // =
-	NotEqual    // !=
-	LessThan    // <
-	LessEqual   // <=
-	GreaterThan // >
+	Plus         // +
+	Minus        // -
+	Multiply     // *
+	Divide       // /
+	Mod          // %
+	Power        // ^
+	Equal        // =
+	NotEqual     // !=
+	LessThan     // <
+	LessEqual    // <=
+	GreaterThan  // >
 	GreaterEqual // >=
-	And         // &&
-	Or          // ||
-	Xor         // ^^
-	Not         // !
+	And          // &&
+	Or           // ||
+	Xor          // ^^
+	Not          // !
 
 	// Keywords
 	Keyword
-	Msg         // msg
-	Mov         // mov
-	Add         // add
-	Sub         // sub
-	Mul         // mul
-	Div         // div
-	ModOp       // mod
-	Pow         // pow
-	AndOp       // and
-	OrOp        // or
-	XorOp       // xor
-	NotOp       // not
-	Min         // min
-	Max         // max
-	Diff        // diff
-	Angle       // angle
-	Length      // length
-	Rotate      // rotate
-	Draw        // draw
-	DrawLine    // drawLine
-	DrawRect    // drawRect
-	DrawPoly    // drawPoly
-	DrawCircle  // drawCircle
-	Clk         // clk
-	ClkSet      // clkSet
-	Input       // input
-	Output      // output
-	Jump        // jump
-	Jz          // jz
-	Jnz         // jnz
-	Top         // top
-	Set         // set
-	SetCons     // setCons
-	GetPos      // getPos
-	SetPos      // setPos
-	Flag        // flag
-	End         // end
-	Label       // label
-	Call        // call
-	Ret         // ret
-	Halt        // halt
-	Wait        // wait
-	Uqueue      // uqueue
-	Ucontrol    // ucontrol
-	Ubuild      // ubuild
-	Udelete     // udelete
-	Umine       // umine
-	Umove       // umove
-	Utarget     // utarget
-	Upayload    // upayload
-	Ucore       // ucore
-	Syn         // syn
-	Pkilla      // pkilla
-	Pkillb      // pkillb
-	Pkillc      // pkillc
-	Pkilld      // pkilld
-	PkillAll    // pkillAll
+	Msg        // msg
+	Mov        // mov
+	Add        // add
+	Sub        // sub
+	Mul        // mul
+	Div        // div
+	ModOp      // mod
+	Pow        // pow
+	AndOp      // and
+	OrOp       // or
+	XorOp      // xor
+	NotOp      // not
+	Min        // min
+	Max        // max
+	Diff       // diff
+	Angle      // angle
+	Length     // length
+	Rotate     // rotate
+	Draw       // draw
+	DrawLine   // drawLine
+	DrawRect   // drawRect
+	DrawPoly   // drawPoly
+	DrawCircle // drawCircle
+	Clk        // clk
+	ClkSet     // clkSet
+	Input      // input
+	Output     // output
+	Jump       // jump
+	Jz         // jz
+	Jnz        // jnz
+	Top        // top
+	Set        // set
+	SetCons    // setCons
+	GetPos     // getPos
+	SetPos     // setPos
+	Flag       // flag
+	End        // end
+	Label      // label
+	Call       // call
+	Ret        // ret
+	Halt       // halt
+	Wait       // wait
+	Uqueue     // uqueue
+	Ucontrol   // ucontrol
+	Ubuild     // ubuild
+	Udelete    // udelete
+	Umine      // umine
+	Umove      // umove
+	Utarget    // utarget
+	Upayload   // upayload
+	Ucore      // ucore
+	Syn        // syn
+	Pkilla     // pkilla
+	Pkillb     // pkillb
+	Pkillc     // pkillc
+	Pkilld     // pkilld
+	PkillAll   // pkillAll
 
 	// Separators
 	Separator
-	LeftParen   // (
-	RightParen  // )
-	LeftBrace   // {
-	RightBrace  // }
-	Comma       // ,
-	Period      // .
-	Hash        // #
-	Dollar      // $
+	LeftParen  // (
+	RightParen // )
+	LeftBrace  // {
+	RightBrace // }
+	Comma      // ,
+	Period     // .
+	Hash       // #
+	Dollar     // $
 
 	// Literals
 	True  // true
 	False // false
 )
 
+func (t TokenType) String() string {
+	switch t {
+	case ErrorToken:
+		return "ERROR"
+	case EOF:
+		return "EOF"
+	case Ident:
+		return "IDENT"
+	case Int:
+		return "INT"
+	case Float:
+		return "FLOAT"
+	case String:
+		return "STRING"
+	case Bool:
+		return "BOOL"
+	case Operator:
+		return "OP"
+	case Plus:
+		return "+"
+	case Minus:
+		return "-"
+	case Multiply:
+		return "*"
+	case Divide:
+		return "/"
+	case Mod:
+		return "%"
+	case Power:
+		return "^"
+	case Equal:
+		return "="
+	case NotEqual:
+		return "!="
+	case LessThan:
+		return "<"
+	case LessEqual:
+		return "<="
+	case GreaterThan:
+		return ">"
+	case GreaterEqual:
+		return ">="
+	case And:
+		return "&&"
+	case Or:
+		return "||"
+	case Xor:
+		return "^^"
+	case Not:
+		return "!"
+	case Keyword:
+		return "KEYWORD"
+	case Separator:
+		return "SEP"
+	case LeftParen:
+		return "("
+	case RightParen:
+		return ")"
+	case LeftBrace:
+		return "{"
+	case RightBrace:
+		return "}"
+	case Comma:
+		return ","
+	case Period:
+		return "."
+	case Hash:
+		return "#"
+	case Dollar:
+		return "$"
+	case True:
+		return "true"
+	case False:
+		return "false"
+	default:
+		return fmt.Sprintf("TokenType(%d)", int(t))
+	}
+}
+
 // keywordMap maps keywords to their token types.
 var keywordMap = map[string]TokenType{
-	"msg":       Msg,
-	"mov":       Mov,
-	"add":       Add,
-	"sub":       Sub,
-	"mul":       Mul,
-	"div":       Div,
-	"mod":       ModOp,
-	"pow":       Pow,
-	"and":       AndOp,
-	"or":        OrOp,
-	"xor":       XorOp,
-	"not":       NotOp,
-	"min":       Min,
-	"max":       Max,
-	"diff":      Diff,
-	"angle":     Angle,
-	"length":    Length,
-	"rotate":    Rotate,
-	"draw":      Draw,
-	"drawLine":  DrawLine,
-	"drawRect":  DrawRect,
-	"drawPoly":  DrawPoly,
+	"msg":        Msg,
+	"mov":        Mov,
+	"add":        Add,
+	"sub":        Sub,
+	"mul":        Mul,
+	"div":        Div,
+	"mod":        ModOp,
+	"pow":        Pow,
+	"and":        AndOp,
+	"or":         OrOp,
+	"xor":        XorOp,
+	"not":        NotOp,
+	"min":        Min,
+	"max":        Max,
+	"diff":       Diff,
+	"angle":      Angle,
+	"length":     Length,
+	"rotate":     Rotate,
+	"draw":       Draw,
+	"drawLine":   DrawLine,
+	"drawRect":   DrawRect,
+	"drawPoly":   DrawPoly,
 	"drawCircle": DrawCircle,
-	"clk":       Clk,
-	"clkSet":    ClkSet,
-	"input":     Input,
-	"output":    Output,
-	"jump":      Jump,
-	"jz":        Jz,
-	"jnz":       Jnz,
-	"top":       Top,
-	"set":       Set,
-	"setCons":   SetCons,
-	"getPos":    GetPos,
-	"setPos":    SetPos,
-	"flag":      Flag,
-	"end":       End,
-	"label":     Label,
-	"call":      Call,
-	"ret":       Ret,
-	"halt":      Halt,
-	"wait":      Wait,
-	"uqueue":    Uqueue,
-	"ucontrol":  Ucontrol,
-	"ubuild":    Ubuild,
-	"udelete":   Udelete,
-	"umine":     Umine,
-	"umove":     Umove,
-	"utarget":   Utarget,
-	"upayload":  Upayload,
-	"ucore":     Ucore,
-	"syn":       Syn,
-	"pkilla":    Pkilla,
-	"pkillb":    Pkillb,
-	"pkillc":    Pkillc,
-	"pkilld":    Pkilld,
-	"pkillAll":  PkillAll,
-	"true":      True,
-	"false":     False,
+	"clk":        Clk,
+	"clkSet":     ClkSet,
+	"input":      Input,
+	"output":     Output,
+	"jump":       Jump,
+	"jz":         Jz,
+	"jnz":        Jnz,
+	"top":        Top,
+	"set":        Set,
+	"setCons":    SetCons,
+	"getPos":     GetPos,
+	"setPos":     SetPos,
+	"flag":       Flag,
+	"end":        End,
+	"label":      Label,
+	"call":       Call,
+	"ret":        Ret,
+	"halt":       Halt,
+	"wait":       Wait,
+	"uqueue":     Uqueue,
+	"ucontrol":   Ucontrol,
+	"ubuild":     Ubuild,
+	"udelete":    Udelete,
+	"umine":      Umine,
+	"umove":      Umove,
+	"utarget":    Utarget,
+	"upayload":   Upayload,
+	"ucore":      Ucore,
+	"syn":        Syn,
+	"pkilla":     Pkilla,
+	"pkillb":     Pkillb,
+	"pkillc":     Pkillc,
+	"pkilld":     Pkilld,
+	"pkillAll":   PkillAll,
+	"true":       True,
+	"false":      False,
 }
 
 // Position represents a position in the source code.
@@ -237,22 +316,22 @@ func (t Token) String() string {
 
 // Lexer represents a lexical analyzer for the logic language.
 type Lexer struct {
-	input     string // The input string to tokenize
-	pos       int    // Current position in the input
-	readPos   int    // Next position to read
-	ch        byte   // Current character
-	line      int    // Current line number
-	column    int    // Current column number
-	startPos  Position // Start position of current token
-	tokens    []Token // Buffer of tokens
+	input    string   // The input string to tokenize
+	pos      int      // Current position in the input
+	readPos  int      // Next position to read
+	ch       byte     // Current character
+	line     int      // Current line number
+	column   int      // Current column number
+	startPos Position // Start position of current token
+	tokens   []Token  // Buffer of tokens
 }
 
 // NewLexer creates a new lexer for the given input string.
 func NewLexer(input string) *Lexer {
 	l := &Lexer{
-		input:   input,
-		line:    1,
-		column:  1,
+		input:    input,
+		line:     1,
+		column:   1,
 		startPos: Position{Line: 1, Column: 1},
 	}
 	l.readChar()
@@ -335,7 +414,7 @@ func (l *Lexer) readString() (string, error) {
 		return "", fmt.Errorf("unterminated string at line %d", l.line)
 	}
 	l.readChar() // Skip closing quote
-	return l.input[start:l.pos-1], nil
+	return l.input[start : l.pos-1], nil
 }
 
 // skipWhitespace skips whitespace characters.

@@ -24,14 +24,14 @@
     "udp_retry_count": 2,
     "udp_retry_delay_ms": 5,
     "udp_fallback_tcp": true,
-    "sync_entity_ms": 100,
-    "sync_state_ms": 250
+    "sync_entity_ms": 150,
+    "sync_state_ms": 300
   },
   "persist": {
     "enabled": true,
     "directory": "data/state",
     "file": "server-state.json",
-    "interval_sec": 30,
+    "interval_sec": 60,
     "save_msav": true,
     "msav_dir": "data/snapshots",
     "msav_file": ""

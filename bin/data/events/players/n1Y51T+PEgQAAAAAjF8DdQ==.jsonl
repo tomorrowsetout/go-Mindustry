@@ -1,5 +1,0 @@
-{"timestamp":"2026-04-02T04:54:40.4277062Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":1066850192,"uuid":"n1Y51T+PEgQAAAAAjF8DdQ==","ip":"111.48.114.16"}
-{"timestamp":"2026-04-02T04:54:40.5521201Z","kind":"world_handshake_sent","conn_id":1066850192,"uuid":"n1Y51T+PEgQAAAAAjF8DdQ==","ip":"111.48.114.16","name":"[scarlet]（未绑定杂鱼~）[]大帅哥[gray]77498[]"}
-{"timestamp":"2026-04-02T04:54:41.9970275Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":1066850192,"uuid":"n1Y51T+PEgQAAAAAjF8DdQ==","ip":"111.48.114.16","name":"[scarlet]（未绑定杂鱼~）[]大帅哥[gray]77498[]"}
-{"timestamp":"2026-04-02T04:54:59.3918793Z","kind":"tcp_closed","detail":"EOF","conn_id":1066850192,"uuid":"n1Y51T+PEgQAAAAAjF8DdQ==","ip":"111.48.114.16","name":"[scarlet]（未绑定杂鱼~）[]大帅哥[gray]77498[]"}
-{"timestamp":"2026-04-02T04:54:59.4267806Z","kind":"connection_close","trigger":13,"conn_id":1066850192,"uuid":"n1Y51T+PEgQAAAAAjF8DdQ==","ip":"111.48.114.16:61098","name":"[scarlet]（未绑定杂鱼~）[]大帅哥[gray]77498[]"}

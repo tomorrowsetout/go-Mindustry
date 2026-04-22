@@ -1,0 +1,30 @@
+# 开发调试配置
+# 主要控制控制台调试输出与开发期日志开关。
+
+[development]
+# 是否同时启用收包/发包事件日志总开关。
+packet_events_enabled = false
+# 是否记录接收方向的协议事件。
+packet_recv_events_enabled = false
+# 是否记录发送方向的协议事件。
+packet_send_events_enabled = false
+# 是否在终端输出玩家相关运行日志。
+terminal_player_logs_enabled = true
+# 玩家终端日志中是否显示完整 UUID。
+terminal_player_uuid_enabled = false
+# 是否输出核心重生判定日志。
+respawn_core_logs_enabled = false
+# 是否输出单位重生日志。
+respawn_unit_logs_enabled = false
+# 是否输出重生相关协议包日志。
+respawn_packet_logs_enabled = false
+# 是否输出建筑快照调试日志。
+build_snapshot_logs_enabled = false
+# 是否输出建筑放置日志。
+build_place_logs_enabled = false
+# 是否输出建筑完成建造日志。
+build_finish_logs_enabled = false
+# 是否输出建筑开始拆除日志。
+build_break_start_logs_enabled = false
+# 是否输出建筑拆除完成日志。
+build_break_done_logs_enabled = false

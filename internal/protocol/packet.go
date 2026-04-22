@@ -25,7 +25,7 @@ type PacketRegistry struct {
 	factories []PacketFactory
 }
 
-func NewRegistry(buildVersion int) *PacketRegistry {
+func NewRegistry() *PacketRegistry {
 	r := &PacketRegistry{}
 	r.Register(func() Packet { return &StreamBegin{} })
 	r.Register(func() Packet { return &StreamChunk{} })

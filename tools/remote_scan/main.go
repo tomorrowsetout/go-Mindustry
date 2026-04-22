@@ -16,8 +16,12 @@ type entry struct {
 }
 
 func main() {
-	root := filepath.Join("..", "..", "core", "src")
-	outPath := filepath.Join("..", "..", "go-server", "docs", "remote-methods.csv")
+	if len(os.Args) < 3 {
+		fmt.Fprintf(os.Stderr, "usage: %s <mindustry-src-root> <output-csv>\n", os.Args[0])
+		os.Exit(1)
+	}
+	root := os.Args[1]
+	outPath := os.Args[2]
 
 	var entries []entry
 
@@ -37,6 +41,9 @@ func main() {
 
 		scanner := bufio.NewScanner(f)
 		var lastRemote string
+		var signature strings.Builder
+		inSignature := false
+
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if strings.HasPrefix(line, "@Remote") {
@@ -47,12 +54,24 @@ func main() {
 				if line == "" || strings.HasPrefix(line, "@") {
 					continue
 				}
-				entries = append(entries, entry{
-					File:       path,
-					Annotation: lastRemote,
-					Signature:  line,
-				})
-				lastRemote = ""
+				// Start collecting signature
+				if !inSignature {
+					signature.Reset()
+					inSignature = true
+				}
+				signature.WriteString(line)
+				signature.WriteString(" ")
+
+				// Check if signature is complete (ends with { or ;)
+				if strings.HasSuffix(line, "{") || strings.HasSuffix(line, ";") {
+					entries = append(entries, entry{
+						File:       path,
+						Annotation: lastRemote,
+						Signature:  strings.TrimSpace(signature.String()),
+					})
+					lastRemote = ""
+					inSignature = false
+				}
 			}
 		}
 		return scanner.Err()

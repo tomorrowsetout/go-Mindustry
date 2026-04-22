@@ -1,6 +1,25 @@
 package protocol
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
+
+const (
+	typeIOWriteMaxArraySize = 1000
+	typeIOReadMaxArraySize  = 200
+	typeIOMaxByteArraySize  = 40_000
+)
+
+func validateTypeIOArrayLength(kind string, length, max int) error {
+	if length < 0 {
+		return fmt.Errorf("%s length is negative: %d", kind, length)
+	}
+	if length > max {
+		return fmt.Errorf("%s length too large: %d > %d", kind, length, max)
+	}
+	return nil
+}
 
 type ContentType byte
 
@@ -434,11 +453,11 @@ type TypeIOContext struct {
 	// Optional full payload decoders. If set, DefaultPayloadRead will use them.
 	PayloadUnitRead  func(r *Reader, classID byte) (Payload, error)
 	PayloadBuildRead func(r *Reader, blockID int16, version byte) (Payload, error)
-	EntityByID         func(id int32) UnitSyncEntity
-	EntityFactory      func(classID byte) UnitSyncEntity
-	IsEntityUsed       func(id int32) bool
-	AddEntity          func(ent UnitSyncEntity)
-	AddRemovedEntity   func(id int32)
+	EntityByID       func(id int32) UnitSyncEntity
+	EntityFactory    func(classID byte) UnitSyncEntity
+	IsEntityUsed     func(id int32) bool
+	AddEntity        func(ent UnitSyncEntity)
+	AddRemovedEntity func(id int32)
 }
 
 func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
@@ -475,6 +494,9 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		}
 		return w.WriteInt16(v.ID())
 	case IntSeq:
+		if err := validateTypeIOArrayLength("int seq", len(v.Items), typeIOWriteMaxArraySize); err != nil {
+			return err
+		}
 		if err := w.WriteByte(6); err != nil {
 			return err
 		}
@@ -496,6 +518,9 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		}
 		return w.WriteInt32(v.Y)
 	case []Point2:
+		if err := validateTypeIOArrayLength("point array", len(v), 255); err != nil {
+			return err
+		}
 		if err := w.WriteByte(8); err != nil {
 			return err
 		}
@@ -545,6 +570,9 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		}
 		return w.WriteInt16(int16(v))
 	case []byte:
+		if err := validateTypeIOArrayLength("byte array", len(v), typeIOMaxByteArraySize); err != nil {
+			return err
+		}
 		if err := w.WriteByte(14); err != nil {
 			return err
 		}
@@ -553,6 +581,9 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		}
 		return w.WriteBytes(v)
 	case []bool:
+		if err := validateTypeIOArrayLength("bool array", len(v), typeIOWriteMaxArraySize); err != nil {
+			return err
+		}
 		if err := w.WriteByte(16); err != nil {
 			return err
 		}
@@ -576,6 +607,9 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		}
 		return w.WriteInt32(v.IDValue)
 	case []Vec2:
+		if err := validateTypeIOArrayLength("vec2 array", len(v), typeIOWriteMaxArraySize); err != nil {
+			return err
+		}
 		if err := w.WriteByte(18); err != nil {
 			return err
 		}
@@ -605,11 +639,17 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 		}
 		return w.WriteByte(v.ID)
 	case []int32:
+		if err := validateTypeIOArrayLength("int array", len(v), typeIOWriteMaxArraySize); err != nil {
+			return err
+		}
 		if err := w.WriteByte(21); err != nil {
 			return err
 		}
 		return WriteInts(w, v)
 	case []any:
+		if err := validateTypeIOArrayLength("object array", len(v), typeIOWriteMaxArraySize); err != nil {
+			return err
+		}
 		if err := w.WriteByte(22); err != nil {
 			return err
 		}
@@ -633,6 +673,10 @@ func WriteObject(w *Writer, obj any, ctx *TypeIOContext) error {
 }
 
 func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
+	return readObjectValue(r, box, ctx, true)
+}
+
+func readObjectValue(r *Reader, box bool, ctx *TypeIOContext, allowArrays bool) (any, error) {
 	t, err := r.ReadByte()
 	if err != nil {
 		return nil, err
@@ -671,8 +715,14 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return contentBox{typ: ContentType(ct), id: id}, nil
 	case 6:
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
 		l, err := r.ReadInt16()
 		if err != nil {
+			return nil, err
+		}
+		if err := validateTypeIOArrayLength("int seq", int(l), typeIOReadMaxArraySize); err != nil {
 			return nil, err
 		}
 		items := make([]int32, l)
@@ -695,6 +745,9 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return Point2{X: x, Y: y}, nil
 	case 8:
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
 		lb, err := r.ReadByte()
 		if err != nil {
 			return nil, err
@@ -750,8 +803,14 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return LAccess(uint16(s)), nil
 	case 14:
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
 		l, err := r.ReadInt32()
 		if err != nil {
+			return nil, err
+		}
+		if err := validateTypeIOArrayLength("byte array", int(l), typeIOMaxByteArraySize); err != nil {
 			return nil, err
 		}
 		return r.ReadBytes(int(l))
@@ -762,8 +821,14 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return nil, nil
 	case 16:
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
 		l, err := r.ReadInt32()
 		if err != nil {
+			return nil, err
+		}
+		if err := validateTypeIOArrayLength("bool array", int(l), typeIOReadMaxArraySize); err != nil {
 			return nil, err
 		}
 		bools := make([]bool, l)
@@ -785,8 +850,14 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return ctx.UnitLookup(id), nil
 	case 18:
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
 		l, err := r.ReadInt16()
 		if err != nil {
+			return nil, err
+		}
+		if err := validateTypeIOArrayLength("vec2 array", int(l), typeIOReadMaxArraySize); err != nil {
 			return nil, err
 		}
 		out := make([]Vec2, l)
@@ -822,15 +893,39 @@ func ReadObject(r *Reader, box bool, ctx *TypeIOContext) (any, error) {
 		}
 		return Team{ID: byte(b)}, nil
 	case 21:
-		return ReadInts(r)
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
+		l, err := r.ReadInt16()
+		if err != nil {
+			return nil, err
+		}
+		if err := validateTypeIOArrayLength("int array", int(l), typeIOReadMaxArraySize); err != nil {
+			return nil, err
+		}
+		out := make([]int32, l)
+		for i := 0; i < int(l); i++ {
+			v, err := r.ReadInt32()
+			if err != nil {
+				return nil, err
+			}
+			out[i] = v
+		}
+		return out, nil
 	case 22:
+		if !allowArrays {
+			return nil, errors.New("nested arrays are not allowed")
+		}
 		l, err := r.ReadInt32()
 		if err != nil {
 			return nil, err
 		}
+		if err := validateTypeIOArrayLength("object array", int(l), typeIOReadMaxArraySize); err != nil {
+			return nil, err
+		}
 		out := make([]any, l)
 		for i := 0; i < int(l); i++ {
-			o, err := ReadObject(r, box, ctx)
+			o, err := readObjectValue(r, box, ctx, false)
 			if err != nil {
 				return nil, err
 			}

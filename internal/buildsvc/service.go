@@ -206,10 +206,16 @@ func (s *Service) EnqueuePlans(owner int32, team world.TeamID, plans []*protocol
 	s.mu.Unlock()
 }
 
-// SyncPlans applies authoritative client queue snapshots for one team.
-// Unlike EnqueuePlans, this reconciles removals and order directly in world state.
+// SyncPlans applies client build plans into world state.
+// Mindustry 157 treats clientSnapshot plans as incremental queue updates; queue
+// removals come from deletePlans/removeQueueBlock packets instead of empty
+// snapshots. Keep empty snapshots as no-ops so queued plans are not wiped by
+// transient omissions during connect/load or client-side UI stalls.
 func (s *Service) SyncPlans(owner int32, team world.TeamID, plans []*protocol.BuildPlan) {
 	if s == nil || s.w == nil {
+		return
+	}
+	if len(plans) == 0 {
 		return
 	}
 	model := s.w.Model()
@@ -255,7 +261,7 @@ func (s *Service) SyncPlans(owner int32, team world.TeamID, plans []*protocol.Bu
 	s.lastAtByOwner[owner] = time.Now()
 	s.mu.Unlock()
 
-	s.w.ApplyBuildPlanSnapshotForOwner(owner, team, ops)
+	s.w.ApplyBuildPlansForOwner(owner, team, ops)
 }
 
 func (s *Service) Tick() int {

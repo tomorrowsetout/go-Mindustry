@@ -1,6 +1,7 @@
 package vanilla
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -59,7 +60,7 @@ func GenerateContentIDs(repoRoot, outPath string) (*ContentIDsFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	out.Units, err = parseNamedNewEntries(filepath.Join(base, "UnitTypes.java"), `=\s*new\s+UnitType\s*\(\s*"([^"]+)"`)
+	out.Units, err = parseNamedNewEntries(filepath.Join(base, "UnitTypes.java"), `=\s*new\s+[A-Za-z0-9_$.]*UnitType\s*\(\s*"([^"]+)"`)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,11 @@ func GenerateContentIDs(repoRoot, outPath string) (*ContentIDsFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	out.Bullets, err = parseBulletEntries(filepath.Join(base, "Bullets.java"))
+	out.Bullets, err = parseBulletEntries(
+		filepath.Join(base, "Bullets.java"),
+		filepath.Join(base, "UnitTypes.java"),
+		filepath.Join(base, "Blocks.java"),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -184,19 +189,19 @@ func ApplyContentIDs(reg *protocol.ContentRegistry, ids *ContentIDsFile) int {
 		total++
 	}
 	for _, e := range ids.Commands {
-		reg.RegisterUnitCommand(protocol.UnitCommand{ID: e.ID})
+		reg.RegisterUnitCommand(protocol.UnitCommand{ID: e.ID, Name: e.Name})
 		total++
 	}
 	for _, e := range ids.Stances {
-		reg.RegisterUnitStance(protocol.UnitStance{ID: e.ID})
+		reg.RegisterUnitStance(protocol.UnitStance{ID: e.ID, Name: e.Name})
 		total++
 	}
 	return total
 }
 
 type namedContent struct {
-	typ protocol.ContentType
-	id  int16
+	typ  protocol.ContentType
+	id   int16
 	name string
 }
 
@@ -240,28 +245,90 @@ func parseNamedNewEntries(path string, ctorPattern string) ([]ContentIDEntry, er
 	return out, nil
 }
 
-func parseBulletEntries(path string) ([]ContentIDEntry, error) {
-	src, err := os.ReadFile(path)
+type bulletEntryEvent struct {
+	column int
+	name   string
+}
+
+var (
+	reBulletCtorLine = regexp.MustCompile(`new\s+[A-Za-z0-9_$.]*BulletType\s*\(`)
+	reBuildWeapon    = regexp.MustCompile(`new\s+BuildWeapon\s*\(`)
+	reMineWeapon     = regexp.MustCompile(`new\s+MineWeapon\s*\(`)
+)
+
+func parseBulletEntries(paths ...string) ([]ContentIDEntry, error) {
+	out := make([]ContentIDEntry, 0, 256)
+	for _, path := range paths {
+		entries, err := parseBulletEntriesFromFile(path, int16(len(out)))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, entries...)
+	}
+	return out, nil
+}
+
+func parseBulletEntriesFromFile(path string, startID int16) ([]ContentIDEntry, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	re := regexp.MustCompile(`(?m)\b([A-Za-z_]\w*)\s*=\s*new\s+[A-Za-z0-9_$.]*BulletType\s*\(`)
-	ms := re.FindAllSubmatch(src, -1)
-	out := make([]ContentIDEntry, 0, len(ms))
-	seen := make(map[string]struct{}, len(ms))
-	for _, m := range ms {
-		name := strings.TrimSpace(strings.ToLower(string(m[1])))
-		if name == "" {
+	defer file.Close()
+
+	base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
+	scanner := bufio.NewScanner(file)
+	out := make([]ContentIDEntry, 0, 128)
+	lineNo := 0
+	nextID := startID
+
+	for scanner.Scan() {
+		lineNo++
+		line := scanner.Text()
+		events := make([]bulletEntryEvent, 0, 4)
+
+		for _, loc := range reBulletCtorLine.FindAllStringIndex(line, -1) {
+			events = append(events, bulletEntryEvent{
+				column: loc[0],
+				name:   fmt.Sprintf("%s:%d:%d", base, lineNo, len(events)),
+			})
+		}
+
+		// BuildWeapon / MineWeapon instantiate a default BulletType in their constructors,
+		// which also consumes a content ID during UnitTypes.load().
+		if base == "unittypes.java" {
+			for _, loc := range reBuildWeapon.FindAllStringIndex(line, -1) {
+				events = append(events, bulletEntryEvent{
+					column: loc[0],
+					name:   fmt.Sprintf("%s:%d:buildweapon", base, lineNo),
+				})
+			}
+			for _, loc := range reMineWeapon.FindAllStringIndex(line, -1) {
+				events = append(events, bulletEntryEvent{
+					column: loc[0],
+					name:   fmt.Sprintf("%s:%d:mineweapon", base, lineNo),
+				})
+			}
+		}
+
+		if len(events) == 0 {
 			continue
 		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		out = append(out, ContentIDEntry{
-			ID:   int16(len(out)),
-			Name: name,
+		sort.SliceStable(events, func(i, j int) bool {
+			if events[i].column == events[j].column {
+				return events[i].name < events[j].name
+			}
+			return events[i].column < events[j].column
 		})
+		for _, ev := range events {
+			out = append(out, ContentIDEntry{
+				ID:   nextID,
+				Name: ev.name,
+			})
+			nextID++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

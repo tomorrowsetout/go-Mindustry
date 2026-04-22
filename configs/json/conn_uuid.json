@@ -1,5 +1,20 @@
 {
   "version": 1,
-  "updated_at": "",
-  "by_uuid": {}
+  "updated_at": "2026-04-22T07:20:03Z",
+  "by_uuid": {
+    "AAAAAAAAAAAAAAAAAAAAAA==": {
+      "conn_uuid": "45503",
+      "name": "headless-probe",
+      "ip": "127.0.0.1",
+      "first_seen": "2026-04-18T05:07:27Z",
+      "last_seen": "2026-04-18T05:08:32Z"
+    },
+    "MAv3KaDNyXEAAAAAz4iNgQ==": {
+      "conn_uuid": "57062",
+      "name": "[#F285D1]月[#8982edff]子[#87ceebff]芳",
+      "ip": "127.0.0.1",
+      "first_seen": "2026-04-08T08:43:51Z",
+      "last_seen": "2026-04-22T07:20:03Z"
+    }
+  }
 }

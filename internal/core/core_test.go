@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,6 +113,35 @@ func TestCore2PacketHandlersDoNotRecordEventsByDefault(t *testing.T) {
 	}
 }
 
+func TestCore1StopStopsTickLoop(t *testing.T) {
+	c1 := NewCore1("tick-stop")
+	var ticks atomic.Int32
+	c1.SetTickFn(func(_ uint64, _ time.Duration) {
+		ticks.Add(1)
+	})
+
+	done := make(chan struct{})
+	go func() {
+		c1.Run(5 * time.Millisecond)
+		close(done)
+	}()
+
+	time.Sleep(25 * time.Millisecond)
+	c1.Stop()
+
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected Core1 run loop to stop after Stop")
+	}
+
+	got := ticks.Load()
+	time.Sleep(20 * time.Millisecond)
+	if ticks.Load() != got {
+		t.Fatalf("expected tick count to stop advancing after Stop, before=%d after=%d", got, ticks.Load())
+	}
+}
+
 func TestCore2PacketHandlersRecordEventsWhenVerbose(t *testing.T) {
 	c2 := NewCore2(Config{Name: "test", MessageBuf: 4, WorkerCount: 1, VerboseNetLog: true})
 	rec := &testRecorder{}
@@ -174,6 +204,185 @@ func TestCore2SaveLoadWorld(t *testing.T) {
 	}
 	if string(loadRes.WorldData) != string(want) {
 		t.Fatalf("loaded data mismatch: got=%v want=%v", loadRes.WorldData, want)
+	}
+}
+
+func TestCore2ModLifecycleUsesRealFilesystemState(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(wd)
+	})
+
+	modPath := filepath.Join("mods", "go", "hello.go")
+	if err := os.MkdirAll(filepath.Dir(modPath), 0o755); err != nil {
+		t.Fatalf("mkdir mods dir: %v", err)
+	}
+	if err := os.WriteFile(modPath, []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatalf("write mod file: %v", err)
+	}
+
+	c2 := NewCore2(Config{Name: "mods", MessageBuf: 4, WorkerCount: 1})
+
+	scanCh := make(chan ModResult, 1)
+	c2.handleModScan(&ModMessage{ID: 1, Action: "scan", ResultChan: scanCh})
+	scanRes := <-scanCh
+	if scanRes.Error != nil || !scanRes.Success {
+		t.Fatalf("scan failed: %+v", scanRes)
+	}
+	if len(c2.mods) != 1 {
+		t.Fatalf("expected 1 scanned mod, got %d", len(c2.mods))
+	}
+
+	loadCh := make(chan ModResult, 1)
+	c2.handleModLoad(&ModMessage{ID: 2, Action: "load", Path: modPath, ModType: "go", ResultChan: loadCh})
+	loadRes := <-loadCh
+	if loadRes.Error != nil || !loadRes.Success {
+		t.Fatalf("load failed: %+v", loadRes)
+	}
+
+	startCh := make(chan ModResult, 1)
+	c2.handleModStart(&ModMessage{ID: 3, Action: "start", Path: modPath, ModType: "go", ResultChan: startCh})
+	startRes := <-startCh
+	if startRes.Error != nil || !startRes.Success {
+		t.Fatalf("start failed: %+v", startRes)
+	}
+
+	reloadCh := make(chan ModResult, 1)
+	c2.handleModReload(&ModMessage{ID: 4, Action: "reload", Path: modPath, ModType: "go", ResultChan: reloadCh})
+	reloadRes := <-reloadCh
+	if reloadRes.Error != nil || !reloadRes.Success {
+		t.Fatalf("reload failed: %+v", reloadRes)
+	}
+
+	stopCh := make(chan ModResult, 1)
+	c2.handleModStop(&ModMessage{ID: 5, Action: "stop", Path: modPath, ModType: "go", ResultChan: stopCh})
+	stopRes := <-stopCh
+	if stopRes.Error != nil || !stopRes.Success {
+		t.Fatalf("stop failed: %+v", stopRes)
+	}
+
+	unloadCh := make(chan ModResult, 1)
+	c2.handleModUnload(&ModMessage{ID: 6, Action: "unload", Path: modPath, ModType: "go", ResultChan: unloadCh})
+	unloadRes := <-unloadCh
+	if unloadRes.Error != nil || !unloadRes.Success {
+		t.Fatalf("unload failed: %+v", unloadRes)
+	}
+
+	c2.modMu.RLock()
+	defer c2.modMu.RUnlock()
+	var got *managedMod
+	for _, mod := range c2.mods {
+		got = mod
+		break
+	}
+	if got == nil {
+		t.Fatal("expected managed mod to remain registered")
+	}
+	if filepath.Base(got.Path) != "hello.go" {
+		t.Fatalf("unexpected managed mod path: %s", got.Path)
+	}
+	if got.Loaded {
+		t.Fatal("expected unload to clear loaded state")
+	}
+	if got.Running {
+		t.Fatal("expected stop/unload to clear running state")
+	}
+}
+
+func TestCore3WorldCacheProvidesAndInvalidatesCachedPayload(t *testing.T) {
+	c3 := NewCore3(Config{Name: "snapshot", MessageBuf: 4, WorkerCount: 1})
+	path := filepath.Join("..", "..", "assets", "worlds", "file.msav")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("file.msav not present in workspace")
+		}
+		t.Fatalf("stat file.msav: %v", err)
+	}
+
+	res, err := c3.GetWorldCache(path)
+	if err != nil {
+		t.Fatalf("GetWorldCache: %v", err)
+	}
+	if len(res.Data) == 0 {
+		t.Fatal("expected cached worldstream payload")
+	}
+	if res.BaseModel == nil {
+		t.Fatal("expected cached base model")
+	}
+
+	if err := c3.InvalidateWorldCache(path); err != nil {
+		t.Fatalf("InvalidateWorldCache: %v", err)
+	}
+	if _, ok := c3.l1[path]; ok {
+		t.Fatal("expected invalidated path to be removed from L1")
+	}
+	if _, ok := c3.l2[path]; ok {
+		t.Fatal("expected invalidated path to be removed from L2")
+	}
+	if _, ok := c3.l3[path]; ok {
+		t.Fatal("expected invalidated path not to remain in caches")
+	}
+}
+
+func TestCore4PolicyRateLimitAndShardAssignment(t *testing.T) {
+	c4 := NewCore4(Config{Name: "policy", MessageBuf: 4, WorkerCount: 1})
+	c4.SetPolicyConfig(PolicyConfig{
+		ConnectionBurst:  1,
+		ConnectionWindow: time.Minute,
+		PacketBurst:      1,
+		PacketWindow:     time.Minute,
+		PlayerShards:     8,
+		CoreShards:       8,
+	})
+
+	firstConn, err := c4.AllowConnection("127.0.0.1", "uuid-a")
+	if err != nil || !firstConn.Allowed {
+		t.Fatalf("expected first connection to be allowed, got %+v err=%v", firstConn, err)
+	}
+	secondConn, err := c4.AllowConnection("127.0.0.1", "uuid-a")
+	if err != nil {
+		t.Fatalf("second AllowConnection error: %v", err)
+	}
+	if secondConn.Allowed {
+		t.Fatal("expected second connection in same window to be rate-limited")
+	}
+
+	firstPacket, err := c4.AllowPacket("127.0.0.1", 1, "uuid-a", "*protocol.ConnectPacket")
+	if err != nil || !firstPacket.Allowed {
+		t.Fatalf("expected first packet to be allowed, got %+v err=%v", firstPacket, err)
+	}
+	secondPacket, err := c4.AllowPacket("127.0.0.1", 1, "uuid-a", "*protocol.ConnectPacket")
+	if err != nil {
+		t.Fatalf("second AllowPacket error: %v", err)
+	}
+	if secondPacket.Allowed {
+		t.Fatal("expected second packet in same window to be rate-limited")
+	}
+
+	playerShardA, err := c4.PlayerShard("uuid-a", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("PlayerShard A: %v", err)
+	}
+	playerShardA2, err := c4.PlayerShard("uuid-a", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("PlayerShard A repeat: %v", err)
+	}
+	if playerShardA.PlayerShard != playerShardA2.PlayerShard || playerShardA.PlayerShard <= 0 {
+		t.Fatalf("expected stable positive player shard, got %d and %d", playerShardA.PlayerShard, playerShardA2.PlayerShard)
+	}
+
+	coreShard, err := c4.CoreShard("map:origin.msav")
+	if err != nil {
+		t.Fatalf("CoreShard: %v", err)
+	}
+	if coreShard.CoreShard <= 0 {
+		t.Fatalf("expected positive core shard, got %d", coreShard.CoreShard)
 	}
 }
 

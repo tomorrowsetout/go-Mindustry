@@ -337,7 +337,7 @@ func ReadTile(r *Reader, ctx *TypeIOContext) (Tile, error) {
 			return b, nil
 		}
 	}
-	return nil, nil
+	return TileBox{PosValue: pos}, nil
 }
 
 func WriteEntity(w *Writer, e Entity) error {

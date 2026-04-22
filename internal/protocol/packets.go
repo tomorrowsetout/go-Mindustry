@@ -1,7 +1,9 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/base64"
+	"fmt"
 	"hash/crc32"
 )
 
@@ -10,9 +12,9 @@ type Connect struct {
 	AddressTCP string
 }
 
-func (p *Connect) Read(r *Reader, _ int) error  { return nil }
-func (p *Connect) Write(w *Writer) error        { return nil }
-func (p *Connect) Priority() int                { return PriorityHigh }
+func (p *Connect) Read(r *Reader, _ int) error { return nil }
+func (p *Connect) Write(w *Writer) error       { return nil }
+func (p *Connect) Priority() int               { return PriorityHigh }
 
 // Disconnect is a generic disconnect event.
 type Disconnect struct {
@@ -118,74 +120,18 @@ type ConnectPacket struct {
 }
 
 func (p *ConnectPacket) Read(r *Reader, _ int) error {
-	version, err := r.ReadInt32()
+	payload, err := r.ReadBytes(r.Remaining())
 	if err != nil {
 		return err
 	}
-	versionType, err := r.ReadStringNullable()
+	decoded, err := parseConnectPacketPayload(payload, true)
 	if err != nil {
-		return err
-	}
-	name, err := r.ReadStringNullable()
-	if err != nil {
-		return err
-	}
-	locale, err := r.ReadStringNullable()
-	if err != nil {
-		return err
-	}
-	usid, err := r.ReadStringNullable()
-	if err != nil {
-		return err
-	}
-	uuidBytes, err := r.ReadBytes(16)
-	if err != nil {
-		return err
-	}
-	mobileByte, err := r.ReadByte()
-	if err != nil {
-		return err
-	}
-	color, err := r.ReadInt32()
-	if err != nil {
-		return err
-	}
-	modCount, err := r.ReadByte()
-	if err != nil {
-		return err
-	}
-
-	p.Version = version
-	if versionType != nil {
-		p.VersionType = *versionType
-	}
-	if name != nil {
-		p.Name = *name
-	}
-	if locale != nil {
-		p.Locale = *locale
-	}
-	if usid != nil {
-		p.USID = *usid
-	}
-	p.UUID = base64.StdEncoding.EncodeToString(uuidBytes)
-	p.Mobile = mobileByte == 1
-	p.Color = color
-
-	if modCount > 0 {
-		p.Mods = make([]string, 0, modCount)
-		for i := 0; i < int(modCount); i++ {
-			ms, err := r.ReadStringNullable()
-			if err != nil {
-				return err
-			}
-			if ms != nil {
-				p.Mods = append(p.Mods, *ms)
-			} else {
-				p.Mods = append(p.Mods, "")
-			}
+		decoded, err = parseConnectPacketPayload(payload, false)
+		if err != nil {
+			return err
 		}
 	}
+	*p = decoded
 	return nil
 }
 
@@ -252,4 +198,86 @@ func boolToByte(v bool) byte {
 		return 1
 	}
 	return 0
+}
+
+func parseConnectPacketPayload(payload []byte, consumeCRC bool) (ConnectPacket, error) {
+	r := &Reader{r: bytes.NewReader(payload)}
+	version, err := r.ReadInt32()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	versionType, err := r.ReadStringNullable()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	name, err := r.ReadStringNullable()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	locale, err := r.ReadStringNullable()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	usid, err := r.ReadStringNullable()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	uuidBytes, err := r.ReadBytes(16)
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	if consumeCRC {
+		if _, err := r.ReadInt64(); err != nil {
+			return ConnectPacket{}, err
+		}
+	}
+	mobileByte, err := r.ReadByte()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	color, err := r.ReadInt32()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+	modCount, err := r.ReadByte()
+	if err != nil {
+		return ConnectPacket{}, err
+	}
+
+	out := ConnectPacket{
+		Version: version,
+		UUID:    base64.StdEncoding.EncodeToString(uuidBytes),
+		Mobile:  mobileByte == 1,
+		Color:   color,
+	}
+	if versionType != nil {
+		out.VersionType = *versionType
+	}
+	if name != nil {
+		out.Name = *name
+	}
+	if locale != nil {
+		out.Locale = *locale
+	}
+	if usid != nil {
+		out.USID = *usid
+	}
+	if modCount > 0 {
+		out.Mods = make([]string, 0, modCount)
+		for i := 0; i < int(modCount); i++ {
+			ms, err := r.ReadStringNullable()
+			if err != nil {
+				return ConnectPacket{}, err
+			}
+			if ms != nil {
+				out.Mods = append(out.Mods, *ms)
+			} else {
+				out.Mods = append(out.Mods, "")
+			}
+		}
+	}
+	if rem := r.Remaining(); rem != 0 {
+		return ConnectPacket{}, fmt.Errorf("unexpected connect packet trailing bytes: %d", rem)
+	}
+	return out, nil
 }

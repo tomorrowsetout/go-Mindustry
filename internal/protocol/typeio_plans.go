@@ -168,10 +168,36 @@ func WriteClientPlans(w *Writer, plans []*BuildPlan, ctx *TypeIOContext) error {
 	if plans == nil {
 		return w.WriteInt16(0)
 	}
-	// Preview-plan snapshots are not required for server authority here.
-	// Keep them nullable/empty on write rather than failing the connection.
-	_ = ctx
-	return w.WriteInt16(0)
+	compact := make([]*BuildPlan, 0, len(plans))
+	for _, plan := range plans {
+		if plan == nil || plan.Breaking || plan.Block == nil {
+			continue
+		}
+		compact = append(compact, plan)
+	}
+	if err := w.WriteInt16(int16(len(compact))); err != nil {
+		return err
+	}
+	for _, plan := range compact {
+		if err := w.WriteUint16(uint16(plan.X)); err != nil {
+			return err
+		}
+		if err := w.WriteUint16(uint16(plan.Y)); err != nil {
+			return err
+		}
+		if err := w.WriteInt16(plan.Block.ID()); err != nil {
+			return err
+		}
+		if clientPlanBlockRotates(plan.Block) {
+			if err := w.WriteByte(plan.Rotation); err != nil {
+				return err
+			}
+		}
+		if err := WriteClientPlanConfig(w, plan.Config, ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ReadClientPlans(r *Reader, ctx *TypeIOContext) ([]*BuildPlan, error) {
@@ -185,45 +211,98 @@ func ReadClientPlans(r *Reader, ctx *TypeIOContext) ([]*BuildPlan, error) {
 	if amount < 0 {
 		return nil, nil
 	}
-	out := make([]*BuildPlan, 0, int(amount))
-	for i := 0; i < int(amount); i++ {
-		x, err := r.ReadUint16()
-		if err != nil {
-			return nil, err
-		}
-		y, err := r.ReadUint16()
-		if err != nil {
-			return nil, err
-		}
-		blockID, err := r.ReadInt16()
-		if err != nil {
-			return nil, err
-		}
-		var block Block
-		if ctx != nil && ctx.BlockLookup != nil {
-			block = ctx.BlockLookup(blockID)
-		}
-		rotation := byte(0)
-		if clientPlanBlockRotates(block) {
-			rot, err := r.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			rotation = rot
-		}
-		cfg, err := ReadClientPlanConfig(r, ctx)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, &BuildPlan{
-			X:        int32(x),
-			Y:        int32(y),
-			Rotation: rotation,
-			Block:    block,
-			Config:   cfg,
-		})
+	payload, err := r.ReadBytes(r.Remaining())
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	plans, used, ok := readClientPlansPayload(payload, int(amount), ctx)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse %d client plans", amount)
+	}
+	if used != len(payload) {
+		return nil, fmt.Errorf("unexpected trailing client plan bytes: %d", len(payload)-used)
+	}
+	return plans, nil
+}
+
+func readClientPlansPayload(payload []byte, amount int, ctx *TypeIOContext) ([]*BuildPlan, int, bool) {
+	if amount == 0 {
+		return nil, 0, true
+	}
+
+	var parse func(offset int, index int) ([]*BuildPlan, int, bool)
+	parse = func(offset int, index int) ([]*BuildPlan, int, bool) {
+		if index == amount {
+			return nil, offset, offset == len(payload)
+		}
+		rd := NewReaderWithContext(payload[offset:], ctx)
+		x, err := rd.ReadUint16()
+		if err != nil {
+			return nil, 0, false
+		}
+		y, err := rd.ReadUint16()
+		if err != nil {
+			return nil, 0, false
+		}
+		blockID, err := rd.ReadInt16()
+		if err != nil {
+			return nil, 0, false
+		}
+
+		var block Block = BlockRef{BlkID: blockID}
+		if ctx != nil && ctx.BlockLookup != nil {
+			if resolved := ctx.BlockLookup(blockID); resolved != nil {
+				block = resolved
+			}
+		}
+
+		rotationChoices := []bool{clientPlanBlockRotates(block)}
+		if _, ok := block.(BlockRef); ok {
+			rotationChoices = []bool{false, true}
+		}
+
+		baseUsed := offset + 6
+		for _, hasRotation := range rotationChoices {
+			localOffset := baseUsed
+			rotation := byte(0)
+			if hasRotation {
+				if localOffset >= len(payload) {
+					continue
+				}
+				rotation = payload[localOffset]
+				localOffset++
+			}
+
+			cfg, cfgUsed, ok := tryReadClientPlanConfigPayload(payload[localOffset:], ctx)
+			if !ok {
+				continue
+			}
+			nextPlans, used, ok := parse(localOffset+cfgUsed, index+1)
+			if !ok {
+				continue
+			}
+			plan := &BuildPlan{
+				X:        int32(x),
+				Y:        int32(y),
+				Rotation: rotation,
+				Block:    block,
+				Config:   cfg,
+			}
+			return append([]*BuildPlan{plan}, nextPlans...), used, true
+		}
+		return nil, 0, false
+	}
+
+	return parse(0, 0)
+}
+
+func tryReadClientPlanConfigPayload(payload []byte, ctx *TypeIOContext) (any, int, bool) {
+	rd := NewReaderWithContext(payload, ctx)
+	value, err := ReadClientPlanConfig(rd, ctx)
+	if err != nil {
+		return nil, 0, false
+	}
+	return value, len(payload) - rd.Remaining(), true
 }
 
 func ReadClientPlanConfig(r *Reader, ctx *TypeIOContext) (any, error) {
@@ -261,6 +340,54 @@ func ReadClientPlanConfig(r *Reader, ctx *TypeIOContext) (any, error) {
 		return r.ReadFloat64()
 	default:
 		return nil, fmt.Errorf("unknown client plan config object type: %d", t)
+	}
+}
+
+func WriteClientPlanConfig(w *Writer, value any, ctx *TypeIOContext) error {
+	switch v := value.(type) {
+	case nil:
+		return w.WriteByte(0)
+	case int:
+		if err := w.WriteByte(1); err != nil {
+			return err
+		}
+		return w.WriteInt32(int32(v))
+	case int32:
+		if err := w.WriteByte(1); err != nil {
+			return err
+		}
+		return w.WriteInt32(v)
+	case int64:
+		if err := w.WriteByte(2); err != nil {
+			return err
+		}
+		return w.WriteInt64(v)
+	case float32:
+		if err := w.WriteByte(3); err != nil {
+			return err
+		}
+		return w.WriteFloat32(v)
+	case Content:
+		if err := w.WriteByte(5); err != nil {
+			return err
+		}
+		if err := w.WriteByte(byte(v.ContentType())); err != nil {
+			return err
+		}
+		return w.WriteInt16(v.ID())
+	case bool:
+		if err := w.WriteByte(10); err != nil {
+			return err
+		}
+		return w.WriteBool(v)
+	case float64:
+		if err := w.WriteByte(11); err != nil {
+			return err
+		}
+		return w.WriteFloat64(v)
+	default:
+		_ = ctx
+		return w.WriteByte(0)
 	}
 }
 

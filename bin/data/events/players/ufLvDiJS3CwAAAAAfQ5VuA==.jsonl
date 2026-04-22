@@ -1,5 +1,0 @@
-{"timestamp":"2026-03-30T06:16:46.3942906Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":664442725,"uuid":"ufLvDiJS3CwAAAAAfQ5VuA==","ip":"31.173.240.215"}
-{"timestamp":"2026-03-30T06:16:46.4093182Z","kind":"world_handshake_sent","conn_id":664442725,"uuid":"ufLvDiJS3CwAAAAAfQ5VuA==","ip":"31.173.240.215","name":"[scarlet]（未绑定）[]Богдан[gray]46677[]"}
-{"timestamp":"2026-03-30T06:16:48.354276Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":664442725,"uuid":"ufLvDiJS3CwAAAAAfQ5VuA==","ip":"31.173.240.215","name":"[scarlet]（未绑定）[]Богдан[gray]46677[]"}
-{"timestamp":"2026-03-30T06:17:08.831394Z","kind":"tcp_closed","detail":"EOF","conn_id":664442725,"uuid":"ufLvDiJS3CwAAAAAfQ5VuA==","ip":"31.173.240.215","name":"[scarlet]（未绑定）[]Богдан[gray]46677[]"}
-{"timestamp":"2026-03-30T06:17:08.8347466Z","kind":"connection_close","trigger":13,"conn_id":664442725,"uuid":"ufLvDiJS3CwAAAAAfQ5VuA==","ip":"31.173.240.215:4880","name":"[scarlet]（未绑定）[]Богдан[gray]46677[]"}

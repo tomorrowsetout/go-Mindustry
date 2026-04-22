@@ -11,7 +11,7 @@ import (
 )
 
 func TestSendUnreliableUDPSuccessDoesNotMirrorTCP(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 
 	udpServer, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestSendUnreliableUDPSuccessDoesNotMirrorTCP(t *testing.T) {
 }
 
 func TestSendUnreliableFallsBackToTCPWhenNoUDPAddr(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.UdpFallbackTCP = true
 
 	tcpConn, peer := net.Pipe()
@@ -104,7 +104,7 @@ func TestSendUnreliableFallsBackToTCPWhenNoUDPAddr(t *testing.T) {
 }
 
 func TestHandleUDPDatagramRegistersMultipleConnections(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 
 	udpServer, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
 	if err != nil {

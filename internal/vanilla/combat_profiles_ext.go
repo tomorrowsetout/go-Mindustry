@@ -14,6 +14,11 @@ var (
 	reHitSize                  = regexp.MustCompile(`(?m)\bhitSize\s*=\s*([^;]+);`)
 	reLifetime                 = regexp.MustCompile(`(?m)\blifetime\s*=\s*([^;]+);`)
 	reBuildingDamageMultiplier = regexp.MustCompile(`(?m)\bbuildingDamageMultiplier\s*=\s*([^;]+);`)
+	reArmorMultiplier          = regexp.MustCompile(`(?m)\barmorMultiplier\s*=\s*([^;]+);`)
+	reMaxDamageFraction        = regexp.MustCompile(`(?m)\bmaxDamageFraction\s*=\s*([^;]+);`)
+	reShieldDamageMultiplier   = regexp.MustCompile(`(?m)\bshieldDamageMultiplier\s*=\s*([^;]+);`)
+	rePierceDamageFactor       = regexp.MustCompile(`(?m)\bpierceDamageFactor\s*=\s*([^;]+);`)
+	rePierceArmor              = regexp.MustCompile(`(?m)\bpierceArmor\s*=\s*(true|false)\s*;`)
 	rePierceBuilding           = regexp.MustCompile(`(?m)\bpierceBuilding\s*=\s*(true|false)\s*;`)
 	reTargetBlocks             = regexp.MustCompile(`(?m)\btargetBlocks\s*=\s*(true|false)\s*;`)
 	reStatusDuration           = regexp.MustCompile(`(?m)\bstatusDuration\s*=\s*([^;]+);`)
@@ -94,6 +99,19 @@ func applyBulletProfile(dst *parsedProfile, bullet BulletProfile) {
 	if bullet.BuildingDamageMultiplier != 1 {
 		dst.buildingDamageMultiplier = bullet.BuildingDamageMultiplier
 	}
+	if bullet.ArmorMultiplier > 0 {
+		dst.armorMultiplier = bullet.ArmorMultiplier
+	}
+	if bullet.MaxDamageFraction > 0 {
+		dst.maxDamageFraction = bullet.MaxDamageFraction
+	}
+	if bullet.ShieldDamageMultiplier > 0 {
+		dst.shieldDamageMultiplier = bullet.ShieldDamageMultiplier
+	}
+	if bullet.PierceDamageFactor > 0 {
+		dst.pierceDamageFactor = bullet.PierceDamageFactor
+	}
+	dst.pierceArmor = dst.pierceArmor || bullet.PierceArmor
 	if bullet.Pierce > dst.pierce {
 		dst.pierce = bullet.Pierce
 	}
@@ -167,6 +185,8 @@ func parseInlineBulletProfile(className, args, body string, statusLookup map[str
 	out := BulletProfile{
 		ClassName:                strings.TrimSpace(className),
 		BuildingDamageMultiplier: 1,
+		ArmorMultiplier:          1,
+		ShieldDamageMultiplier:   1,
 		HitBuildings:             true,
 		TargetAir:                true,
 		TargetGround:             true,
@@ -239,6 +259,21 @@ func parseInlineBulletProfile(className, args, body string, statusLookup map[str
 	}
 	if v, ok := lastValue(body, reBuildingDamageMultiplier); ok {
 		out.BuildingDamageMultiplier = v
+	}
+	if v, ok := lastValue(body, reArmorMultiplier); ok && v > 0 {
+		out.ArmorMultiplier = v
+	}
+	if v, ok := lastValue(body, reMaxDamageFraction); ok && v > 0 {
+		out.MaxDamageFraction = v
+	}
+	if v, ok := lastValue(body, reShieldDamageMultiplier); ok && v > 0 {
+		out.ShieldDamageMultiplier = v
+	}
+	if v, ok := lastValue(body, rePierceDamageFactor); ok && v > 0 {
+		out.PierceDamageFactor = v
+	}
+	if m := rePierceArmor.FindAllStringSubmatch(body, -1); len(m) > 0 {
+		out.PierceArmor = strings.EqualFold(m[len(m)-1][1], "true")
 	}
 	if strings.Contains(body, "pierce = true") {
 		out.Pierce = 1

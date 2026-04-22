@@ -19,6 +19,11 @@ type WeaponMountProfile struct {
 	BulletHitSize            float32        `json:"bullet_hit_size"`
 	SplashRadius             float32        `json:"splash_radius"`
 	BuildingDamageMultiplier float32        `json:"building_damage_multiplier"`
+	ArmorMultiplier          float32        `json:"armor_multiplier"`
+	MaxDamageFraction        float32        `json:"max_damage_fraction"`
+	ShieldDamageMultiplier   float32        `json:"shield_damage_multiplier"`
+	PierceDamageFactor       float32        `json:"pierce_damage_factor"`
+	PierceArmor              bool           `json:"pierce_armor"`
 	Pierce                   int32          `json:"pierce"`
 	PierceBuilding           bool           `json:"pierce_building"`
 	StatusID                 int16          `json:"status_id"`
@@ -183,6 +188,8 @@ func mergeParsedWeaponMounts(mounts []parsedWeaponMount) parsedProfile {
 	out := parsedProfile{
 		fireMode:                 "projectile",
 		buildingDamageMultiplier: 1,
+		armorMultiplier:          1,
+		shieldDamageMultiplier:   1,
 		targetAir:                true,
 		targetGround:             true,
 		hitBuildings:             true,
@@ -304,6 +311,11 @@ func applyParsedProfileToMount(dst *WeaponMountProfile, src parsedProfile) {
 	dst.BulletHitSize = src.bulletHitSize
 	dst.SplashRadius = src.splashRadius
 	dst.BuildingDamageMultiplier = src.buildingDamageMultiplier
+	dst.ArmorMultiplier = src.armorMultiplier
+	dst.MaxDamageFraction = src.maxDamageFraction
+	dst.ShieldDamageMultiplier = src.shieldDamageMultiplier
+	dst.PierceDamageFactor = src.pierceDamageFactor
+	dst.PierceArmor = src.pierceArmor
 	dst.Pierce = src.pierce
 	dst.PierceBuilding = src.pierceBuilding
 	dst.StatusID = src.statusID

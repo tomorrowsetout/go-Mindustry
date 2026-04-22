@@ -28,7 +28,7 @@ func (w *World) stepDrillProduction(delta time.Duration) {
 	if deltaFrames <= 0 || deltaSeconds <= 0 {
 		return
 	}
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.drillTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -73,10 +73,11 @@ func (w *World) stepSingleDrillLocked(pos int32, tile *Tile, name string, prof d
 		return
 	}
 	state.Progress += deltaFrames * float32(dominantCount) * speed * state.Warmup
-	for state.Progress >= delay && totalBuildingItems(tile.Build) < w.itemCapacityForBlockLocked(tile) {
-		tile.Build.AddItem(dominantItem, 1)
+	for state.Progress >= delay {
+		if !w.offloadProducedItemLocked(pos, tile, dominantItem) {
+			break
+		}
 		state.Progress -= delay
-		_ = w.dumpSingleItemLocked(pos, tile, &dominantItem, nil)
 	}
 }
 
@@ -107,7 +108,7 @@ func (w *World) countDrillOreLocked(tile *Tile, tier int) (ItemID, int, int, boo
 			counts[item]++
 			hardnessByItem[item] = hardness
 			count := counts[item]
-			if !found || count > bestCount || (count == bestCount && int(item) > int(bestItem)) {
+			if preferDrillOreCandidate(item, count, bestItem, bestCount, found) {
 				bestItem = item
 				bestCount = count
 				bestHardness = hardnessByItem[item]
@@ -116,6 +117,25 @@ func (w *World) countDrillOreLocked(tile *Tile, tier int) (ItemID, int, int, boo
 		}
 	}
 	return bestItem, bestCount, bestHardness, found
+}
+
+func preferDrillOreCandidate(candidate ItemID, candidateCount int, bestItem ItemID, bestCount int, found bool) bool {
+	if !found {
+		return true
+	}
+	candidateLowPriority := drillOreLowPriority(candidate)
+	bestLowPriority := drillOreLowPriority(bestItem)
+	if candidateLowPriority != bestLowPriority {
+		return !candidateLowPriority
+	}
+	if candidateCount != bestCount {
+		return candidateCount > bestCount
+	}
+	return candidate > bestItem
+}
+
+func drillOreLowPriority(item ItemID) bool {
+	return item == sandItemID
 }
 
 func drillMineItemFromTile(tile *Tile, w *World) (ItemID, int, bool) {

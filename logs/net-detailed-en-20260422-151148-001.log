@@ -1,0 +1,4 @@
+2026-04-22T07:12:13.5942507Z [NET] kind=tcp_accept packet= conn_id=900763254 uuid= ip=10.147.17.101 name="" detail=
+2026-04-22T07:12:18.0998353Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=version=157 type=official mods=0
+2026-04-22T07:12:25.6257399Z [NET] kind=tcp_closed packet= conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=EOF
+2026-04-22T07:12:25.6277461Z [NET] kind=connect_aborted_pre_confirm packet= conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=10.147.17.101 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=live_worldstream=false last_packet_id=-1 last_framework_id=2

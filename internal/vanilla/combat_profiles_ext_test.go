@@ -36,6 +36,32 @@ func TestApplyBulletProfilePreservesZeroBuildingDamageMultiplier(t *testing.T) {
 	}
 }
 
+func TestParseInlineBulletProfileParsesArmorAndPierceFields(t *testing.T) {
+	prof := parseInlineBulletProfile("BasicBulletType", "12f, 6f", `
+		armorMultiplier = 1.5f;
+		maxDamageFraction = 0.3f;
+		shieldDamageMultiplier = 0.2f;
+		pierceDamageFactor = 0.8f;
+		pierceArmor = true;
+	`, nil)
+
+	if math.Abs(float64(prof.ArmorMultiplier-1.5)) > 0.0001 {
+		t.Fatalf("expected armorMultiplier=1.5, got=%f", prof.ArmorMultiplier)
+	}
+	if math.Abs(float64(prof.MaxDamageFraction-0.3)) > 0.0001 {
+		t.Fatalf("expected maxDamageFraction=0.3, got=%f", prof.MaxDamageFraction)
+	}
+	if math.Abs(float64(prof.ShieldDamageMultiplier-0.2)) > 0.0001 {
+		t.Fatalf("expected shieldDamageMultiplier=0.2, got=%f", prof.ShieldDamageMultiplier)
+	}
+	if math.Abs(float64(prof.PierceDamageFactor-0.8)) > 0.0001 {
+		t.Fatalf("expected pierceDamageFactor=0.8, got=%f", prof.PierceDamageFactor)
+	}
+	if !prof.PierceArmor {
+		t.Fatalf("expected pierceArmor=true")
+	}
+}
+
 func TestParseInlineBulletProfileContinuousLaserDefaults(t *testing.T) {
 	prof := parseInlineBulletProfile("ContinuousLaserBulletType", "78f", `
 		length = 200f;

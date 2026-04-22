@@ -12,11 +12,12 @@ var (
 	ErrServerOutdated = errors.New("server_outdated")
 )
 
-// ValidateConnect checks protocol compatibility. It mirrors the Mindustry server's
-// version gating behavior and should be wired into connect handling.
+// ValidateConnect checks the official build-157 protocol gate used by the server.
 func ValidateConnect(pkt *protocol.ConnectPacket, serverBuild int) error {
 	if serverBuild <= 0 {
-		// Custom builds disable strict checking.
+		serverBuild = 157
+	}
+	if pkt == nil || pkt.Version == -1 {
 		return nil
 	}
 	if pkt.Version < int32(serverBuild) {

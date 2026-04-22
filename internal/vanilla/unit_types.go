@@ -32,7 +32,7 @@ type WeaponDef struct {
 	TargetGround bool
 }
 
-var reUnitDeclUT = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+UnitType\("([^"]+)"\)\s*\{\{`)
+var reUnitDeclUT = regexp.MustCompile(`(?m)(\w+)\s*=\s*new\s+([A-Za-z0-9_$.]*UnitType)\("([^"]+)"\)\s*\{\{`)
 var reAssign = func(name string) *regexp.Regexp {
 	return regexp.MustCompile(`(?m)\b` + name + `\s*=\s*([^;]+);`)
 }
@@ -61,7 +61,7 @@ func extractUnitTypes(src string) []UnitTypeDef {
 	matches := reUnitDeclUT.FindAllStringSubmatchIndex(src, -1)
 	out := make([]UnitTypeDef, 0, len(matches))
 	for _, m := range matches {
-		name := strings.ToLower(strings.TrimSpace(src[m[4]:m[5]]))
+		name := strings.ToLower(strings.TrimSpace(src[m[6]:m[7]]))
 		bodyStart := m[1]
 		body, ok := extractInitBodyUT(src, bodyStart)
 		if !ok {

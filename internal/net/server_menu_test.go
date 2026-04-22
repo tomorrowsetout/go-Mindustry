@@ -50,7 +50,7 @@ func readFramedPacketForMenuTest(t *testing.T, conn net.Conn) (byte, []byte) {
 }
 
 func TestHandlePacketInvokesOnMenuChoose(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	conn := &Conn{}
 
 	called := 0
@@ -64,7 +64,7 @@ func TestHandlePacketInvokesOnMenuChoose(t *testing.T) {
 		gotOption = option
 	}
 
-	srv.handlePacket(conn, &protocol.Remote_Menus_menuChoose_105{
+	srv.handlePacket(conn, &protocol.Remote_Menus_menuChoose_109{
 		MenuId: 77,
 		Option: 2,
 	}, true)
@@ -78,7 +78,7 @@ func TestHandlePacketInvokesOnMenuChoose(t *testing.T) {
 }
 
 func TestSendMenuEmitsMenuPacket(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	serverSide, clientSide := net.Pipe()
 	defer serverSide.Close()
 	defer clientSide.Close()
@@ -93,7 +93,7 @@ func TestSendMenuEmitsMenuPacket(t *testing.T) {
 	if packetID == 0 {
 		t.Fatal("expected non-zero packet id for menu packet")
 	}
-	packet := &protocol.Remote_Menus_menu_62{}
+	packet := &protocol.Remote_Menus_menu_106{}
 	if err := packet.Read(protocol.NewReader(payload), 0); err != nil {
 		t.Fatalf("decode menu packet failed: %v", err)
 	}
@@ -105,5 +105,33 @@ func TestSendMenuEmitsMenuPacket(t *testing.T) {
 	}
 	if len(packet.Options) != 2 || len(packet.Options[0]) != 2 || packet.Options[1][0] != "帮助" {
 		t.Fatalf("unexpected menu options: %#v", packet.Options)
+	}
+}
+
+func TestSendInfoPopupEmitsInfoPopupPacket(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	serverSide, clientSide := net.Pipe()
+	defer serverSide.Close()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.hasConnected = true
+
+	srv.SendInfoPopup(conn, "reactor unstable", 2.5, 1, 2, 3, 4, 5)
+
+	packetID, payload := readFramedPacketForMenuTest(t, clientSide)
+	if packetID == 0 {
+		t.Fatal("expected non-zero packet id for infoPopup packet")
+	}
+	packet := &protocol.Remote_Menus_infoPopup_118{}
+	if err := packet.Read(protocol.NewReader(payload), 0); err != nil {
+		t.Fatalf("decode infoPopup packet failed: %v", err)
+	}
+	if packet.Message != "reactor unstable" {
+		t.Fatalf("expected popup message %q, got %q", "reactor unstable", packet.Message)
+	}
+	if packet.Duration != 2.5 || packet.Align != 1 || packet.Top != 2 || packet.Left != 3 || packet.Bottom != 4 || packet.Right != 5 {
+		t.Fatalf("unexpected infoPopup payload: %+v", packet)
 	}
 }

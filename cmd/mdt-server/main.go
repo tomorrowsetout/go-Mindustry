@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	stdlog "log"
 	"math"
 	mathrand "math/rand"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -24,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"mdt-server/internal/api"
@@ -34,14 +37,15 @@ import (
 	coreio "mdt-server/internal/core"
 	"mdt-server/internal/devlog"
 	"mdt-server/internal/logging"
-	"mdt-server/internal/mods/java"
 	netserver "mdt-server/internal/net"
 	"mdt-server/internal/persist"
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/runtimeassets"
 	"mdt-server/internal/sim"
 	"mdt-server/internal/storage"
+	"mdt-server/internal/tracepoints"
 	"mdt-server/internal/vanilla"
+	"mdt-server/internal/video"
 	"mdt-server/internal/world"
 	"mdt-server/internal/worldstream"
 )
@@ -64,6 +68,96 @@ type bindStatusResolver struct {
 	identity *persist.PlayerIdentityStore
 	mu       sync.Mutex
 	cache    map[string]bindStatusCacheEntry
+}
+
+const defaultConfigPath = "configs/config.toml"
+
+func normalizeRelativePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(filepath.FromSlash(path))
+}
+
+func preferredConfigBases(preferExecutable bool) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 8)
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		clean := filepath.Clean(path)
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		out = append(out, clean)
+	}
+	addWithBinParent := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		clean := filepath.Clean(path)
+		if strings.EqualFold(filepath.Base(clean), "bin") {
+			add(filepath.Dir(clean))
+		}
+		add(clean)
+	}
+
+	addExecutable := func() {
+		if exe, err := os.Executable(); err == nil {
+			addWithBinParent(filepath.Dir(exe))
+		}
+	}
+	addWorkingDir := func() {
+		if wd, err := os.Getwd(); err == nil {
+			addWithBinParent(wd)
+		}
+	}
+
+	if preferExecutable {
+		addExecutable()
+		addWorkingDir()
+	} else {
+		addWorkingDir()
+		addExecutable()
+	}
+	return out
+}
+
+func resolvePathFromBases(path string, bases []string) string {
+	path = normalizeRelativePath(path)
+	if path == "" {
+		return ""
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	for _, base := range bases {
+		candidate := filepath.Join(base, path)
+		if exists(candidate) {
+			if abs, err := filepath.Abs(candidate); err == nil {
+				return abs
+			}
+			return filepath.Clean(candidate)
+		}
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
+}
+
+func resolveStartupConfigPath(raw string) string {
+	raw = normalizeRelativePath(raw)
+	if raw == "" {
+		raw = normalizeRelativePath(defaultConfigPath)
+	}
+	preferExecutable := strings.EqualFold(raw, normalizeRelativePath(defaultConfigPath))
+	return resolvePathFromBases(raw, preferredConfigBases(preferExecutable))
 }
 
 func newBindStatusResolver(mode, apiURL string, timeout, cacheTTL time.Duration, identity *persist.PlayerIdentityStore) *bindStatusResolver {
@@ -96,6 +190,9 @@ func (r *bindStatusResolver) Bound(connUUID string) bool {
 		return false
 	}
 	if r.mode != "api" {
+		if r.identity == nil {
+			return false
+		}
 		rec, ok := r.identity.Lookup(connUUID)
 		return ok && rec.Bound
 	}
@@ -430,6 +527,27 @@ func (w *detailedLogWriter) LogLine(line string) {
 	w.size += int64(n)
 }
 
+func (w *detailedLogWriter) Write(p []byte) (n int, err error) {
+	if w == nil {
+		return 0, nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file == nil {
+		if err := w.openNewLocked(); err != nil {
+			return 0, err
+		}
+	}
+	if w.maxSize > 0 && w.size+int64(len(p)) > w.maxSize {
+		if err := w.openNewLocked(); err != nil {
+			return 0, err
+		}
+	}
+	n, err = w.file.Write(p)
+	w.size += int64(n)
+	return n, err
+}
+
 func (w *detailedLogWriter) Close() error {
 	if w == nil || w.file == nil {
 		return nil
@@ -643,31 +761,61 @@ func printMapDetails(path string, model *world.WorldModel) {
 	fmt.Println("========================================")
 }
 
+func validateBuildVersion(build int) error {
+	if build != 157 {
+		return fmt.Errorf("仅支持 Mindustry build 157；请使用 -build 157")
+	}
+	return nil
+}
+
 func main() {
-	cfgPath := flag.String("config", filepath.FromSlash("configs/config.ini"), "path to config file")
+	cfgPath := flag.String("config", filepath.FromSlash(defaultConfigPath), "path to config file")
 	addr := flag.String("addr", "0.0.0.0:6567", "listen address for Mindustry protocol (TCP+UDP)")
-	buildVersion := flag.Int("build", 156, "Mindustry build version for strict check; must match client build")
+	buildVersion := flag.Int("build", 157, "Mindustry build version; only official build 157 is supported")
 	worldArg := flag.String("world", "random", "world source: random | <map-name> | <.msav file path>")
+	recordVideo := flag.Bool("record-video", false, "record a realtime top-down match video from live server state")
+	videoDir := flag.String("video-dir", filepath.FromSlash("data/video"), "base directory for recorded match video sessions")
+	videoFPS := flag.Int("video-fps", 30, "capture FPS for realtime match video recording; common values: 5,10,15,20,25,30")
+	videoWidth := flag.Int("video-width", 1920, "video output width in pixels")
+	videoHeight := flag.Int("video-height", 1080, "video output height in pixels")
+	videoTileSize := flag.Int("video-tile-size", 0, "optional max pixels per tile; 0 lets the recorder fit the whole map automatically")
+	coreRole := flag.String("core-role", "", "internal use only: child core role (core2|core3|core4)")
+	ipcEndpoint := flag.String("ipc-endpoint", "", "internal use only: child core IPC named pipe endpoint")
+	parentPID := flag.Int("parent-pid", 0, "internal use only: parent process ID for child cores")
 	printVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
 	if *printVersion {
-		fmt.Printf("mdt-server %s (%s)\n", buildinfo.Version, buildinfo.Commit)
+		name := strings.TrimSpace(buildinfo.DisplayName)
+		if name == "" {
+			name = "mdt-server"
+		}
+		fmt.Printf("%s %s (%s)\n", name, buildinfo.Version, buildinfo.Commit)
 		return
 	}
-	if *buildVersion <= 0 {
-		fmt.Fprintln(os.Stderr, "build 必须设置为客户端对应的 build 号，例如 156")
-		os.Exit(1)
-	}
 
+	resolvedCfgPath := resolveStartupConfigPath(*cfgPath)
 	cfg := config.Default()
-	cfg.Source = *cfgPath
+	cfg.Source = resolvedCfgPath
 	if loaded, err := config.Load(cfg.Source); err != nil {
 		fmt.Fprintf(os.Stderr, "读取配置失败: %v\n", err)
 		os.Exit(1)
 	} else {
 		cfg = loaded
-		cfg.Source = *cfgPath
+		cfg.Source = resolvedCfgPath
+	}
+	applyProcessConsoleTitle(cfg, strings.TrimSpace(*coreRole), cfg.Runtime.ServerName)
+	applyProcessWindowIcon()
+	if strings.TrimSpace(*coreRole) != "" {
+		if err := coreio.RunChildCore(*coreRole, *ipcEndpoint, *parentPID); err != nil {
+			fmt.Fprintf(os.Stderr, "child core %s failed: %v\n", *coreRole, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if err := validateBuildVersion(*buildVersion); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
 	configDir := filepath.Dir(cfg.Source)
 	if strings.TrimSpace(configDir) == "" {
@@ -684,6 +832,36 @@ func main() {
 		fmt.Fprintf(os.Stderr, "初始化 logs 详细日志失败: %v\n", detailLogErr)
 		os.Exit(1)
 	}
+	traceLog, traceLogErr := tracepoints.New(cfg.Tracepoints.File, cfg.Tracepoints.Enabled)
+	if traceLogErr != nil {
+		fmt.Fprintf(os.Stderr, "初始化 tracepoints 日志失败: %v\n", traceLogErr)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = traceLog.Close()
+	}()
+
+	// 设置标准log输出到文件和控制台
+	logMultiWriter := io.MultiWriter(os.Stdout, detailLog)
+	stdlog.SetOutput(logMultiWriter)
+
+	var runtimeTraceCfg atomic.Value
+	runtimeTraceCfg.Store(cfg.Tracepoints)
+	currentTraceCfg := func() config.TracepointsConfig {
+		if v := runtimeTraceCfg.Load(); v != nil {
+			if loaded, ok := v.(config.TracepointsConfig); ok {
+				return loaded
+			}
+		}
+		return config.Default().Tracepoints
+	}
+	logTrace := func(category, point string, fields map[string]any) {
+		if traceLog == nil || !traceLog.Enabled() {
+			return
+		}
+		traceLog.Log(category, point, fields)
+	}
+
 	runtimeConfigDir = configDir
 	runtimeAssetsDir = cfg.Runtime.AssetsDir
 	runtimeWorldRoots = []string{cfg.Runtime.WorldsDir}
@@ -706,7 +884,7 @@ func main() {
 		if cfg.Source == "" {
 			return nil
 		}
-		return config.Save(cfg.Source, cfg)
+		return config.SaveSidecars(cfg.Source, cfg)
 	}
 	keys, keyErr := mergeValidAPIKeys(cfg.API.Keys, cfg.API.Key)
 	if keyErr != nil {
@@ -720,10 +898,22 @@ func main() {
 		cfg.Script.DailyGCTime = st.DailyGCTime
 	}
 
-	fmt.Fprintf(os.Stdout, "mdt-server %s (%s)\n", buildinfo.Version, buildinfo.Commit)
-	fmt.Fprintf(os.Stdout, "config=%s cores=%d addr=%s build=%d world=%s vanilla=%s\n", cfg.Source, cfg.Runtime.Cores, *addr, *buildVersion, *worldArg, cfg.Runtime.VanillaProfiles)
+	nameForBanner := strings.TrimSpace(buildinfo.DisplayName)
+	if nameForBanner == "" {
+		nameForBanner = "mdt-server"
+	}
+	fmt.Fprintf(os.Stdout, "%s %s (%s)\n", nameForBanner, buildinfo.Version, buildinfo.Commit)
+	fmt.Fprintf(os.Stdout, "config=%s cores=%d tps=%d addr=%s build=%d world=%s vanilla=%s\n", cfg.Source, cfg.Runtime.Cores, cfg.Core.TPS, *addr, *buildVersion, *worldArg, cfg.Runtime.VanillaProfiles)
 	if len(bootstrapResult.CreatedDirs) > 0 || len(bootstrapResult.CreatedFiles) > 0 {
 		fmt.Fprintf(os.Stdout, "workspace initialized: dirs=%d files=%d\n", len(bootstrapResult.CreatedDirs), len(bootstrapResult.CreatedFiles))
+	}
+	gameVersion := strings.TrimSpace(buildinfo.GameVersion)
+	if gameVersion == "" {
+		gameVersion = fmt.Sprintf("Mindustry %d", *buildVersion)
+	}
+	startup.ok("游戏版本", gameVersion)
+	if strings.TrimSpace(buildinfo.Version) != "" {
+		startup.ok("外部版本", buildinfo.Version)
 	}
 
 	// 初始化开发者日志
@@ -735,17 +925,10 @@ func main() {
 		startup.info("开发者日志", "未启用")
 	}
 
-	modMgr := java.New(cfg.Mods)
+	// Mod system disabled for now
+	var modMgr interface{} = nil
 	if cfg.Mods.Enabled {
-		if err := modMgr.Scan(); err != nil {
-			log.Error("mods scan failed", logging.Field{Key: "error", Value: err.Error()})
-			startup.fail("Mods 扫描", err.Error())
-		} else if err := modMgr.Start(); err != nil {
-			log.Warn("mods start", logging.Field{Key: "error", Value: err.Error()})
-			startup.warn("Mods 启动", err.Error())
-		} else {
-			startup.ok("Mods 加载", fmt.Sprintf("count=%d", len(modMgr.Mods())))
-		}
+		startup.warn("模组系统", "暂未实现")
 	} else {
 		startup.info("Mods", "未启用")
 	}
@@ -793,6 +976,32 @@ func main() {
 	var playerIdentityStore *persist.PlayerIdentityStore
 
 	srv := netserver.NewServer(*addr, *buildVersion)
+	applyAdmissionPolicy := func(loaded config.Config) error {
+		var entries []netserver.AdmissionWhitelistEntry
+		if loaded.Admin.WhitelistEnabled {
+			loadedEntries, err := netserver.LoadAdmissionWhitelistFile(loaded.Admin.WhitelistFile)
+			if err != nil {
+				return err
+			}
+			entries = loadedEntries
+		}
+		srv.SetAdmissionPolicy(netserver.AdmissionPolicy{
+			StrictIdentity:     loaded.Admin.StrictIdentity,
+			AllowCustomClients: loaded.Admin.AllowCustomClients,
+			PlayerLimit:        loaded.Admin.PlayerLimit,
+			WhitelistEnabled:   loaded.Admin.WhitelistEnabled,
+			Whitelist:          entries,
+			ExpectedMods:       loaded.Mods.ExpectedClientMods,
+			BannedNames:        loaded.Admin.BannedNames,
+			BannedSubnets:      loaded.Admin.BannedSubnets,
+			RecentKickDuration: time.Duration(loaded.Admin.RecentKickSeconds) * time.Second,
+		})
+		return nil
+	}
+	if err := applyAdmissionPolicy(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "加载 admission 配置失败: %v\n", err)
+		os.Exit(1)
+	}
 	srv.SetVerboseNetLog(false)
 	srv.SetPacketRecvEventsEnabled(cfg.Development.PacketRecvEventsEnabled)
 	srv.SetPacketSendEventsEnabled(cfg.Development.PacketSendEventsEnabled)
@@ -802,6 +1011,36 @@ func main() {
 	srv.SetPlayerNameColorEnabled(cfg.Personalization.PlayerNameColorEnabled)
 	srv.SetTranslatedConnLog(cfg.Control.TranslatedConnLogEnabled)
 	srv.SetJoinLeaveChatEnabled(cfg.Personalization.JoinLeaveChatEnabled)
+	srv.OnTracePacket = func(direction string, c *netserver.Conn, obj any, packetID int, frameworkID int, size int) {
+		tc := currentTraceCfg()
+		if !tc.Enabled {
+			return
+		}
+		switch direction {
+		case "recv":
+			if !tc.ClientRequestsEnabled {
+				return
+			}
+			extra := map[string]any{}
+			if c != nil {
+				extra["conn_id"] = c.ConnID()
+				extra["player_id"] = c.PlayerID()
+				extra["uuid"] = c.UUID()
+			}
+			logTrace("client_request", "packet_recv", tracepoints.PacketFields(direction, obj, packetID, frameworkID, size, extra))
+		case "send":
+			if !tc.ServerSendsEnabled {
+				return
+			}
+			extra := map[string]any{}
+			if c != nil {
+				extra["conn_id"] = c.ConnID()
+				extra["player_id"] = c.PlayerID()
+				extra["uuid"] = c.UUID()
+			}
+			logTrace("server_send", "packet_send", tracepoints.PacketFields(direction, obj, packetID, frameworkID, size, extra))
+		}
+	}
 	startStatusBarLoop(srv)
 	srv.SetPlayerDisplayFormatter(func(c *netserver.Conn) string {
 		if c == nil {
@@ -854,8 +1093,76 @@ func main() {
 	srv.UdpRetryDelay = time.Duration(cfg.Net.UdpRetryDelayMs) * time.Millisecond
 	srv.UdpFallbackTCP = cfg.Net.UdpFallbackTCP
 	srv.SetSnapshotIntervals(cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
-	wld := world.New(world.Config{TPS: sim.DefaultTPS})
-	playerMining := newPlayerMiningService()
+	gameTPS := cfg.Core.TPS
+	if gameTPS <= 0 {
+		gameTPS = sim.DefaultTPS
+	}
+	wld := world.New(world.Config{
+		TPS:                    gameTPS,
+		UseMapSyncDataFallback: cfg.Sync.UseMapSyncDataFallback,
+		BlockSyncLogsEnabled:   cfg.Sync.BlockSyncLogsEnabled,
+	})
+	srv.EntitySnapshotHiddenFn = func(viewer *netserver.Conn, entity protocol.UnitSyncEntity) bool {
+		if viewer == nil || wld == nil {
+			return false
+		}
+		unit, ok := entity.(*protocol.UnitEntitySync)
+		if !ok || unit == nil {
+			return false
+		}
+		viewerX, viewerY := viewer.SnapshotPos()
+		return wld.UnitSyncHiddenForViewer(world.TeamID(viewer.TeamID()), viewerX, viewerY, unit)
+	}
+	srv.TypeIO.BuildingLookup = func(pos int32) protocol.Building {
+		if wld == nil {
+			return nil
+		}
+		if wld.CanControlBuildingPacked(pos) {
+			return protocol.ControlBuildingRef{
+				PosValue: pos,
+				UnitRef: protocol.BlockUnitRef{
+					TileRef: protocol.BlockUnitTileRef{PosValue: pos},
+				},
+			}
+		}
+		if _, ok := wld.BuildingInfoPacked(pos); ok {
+			return protocol.BuildingBox{PosValue: pos}
+		}
+		return nil
+	}
+	buildInfoToControlled := func(info world.BuildingInfo) netserver.ControlledBuildInfo {
+		return netserver.ControlledBuildInfo{
+			Pos:    info.Pos,
+			X:      float32(info.X*8 + 4),
+			Y:      float32(info.Y*8 + 4),
+			TeamID: byte(info.Team),
+		}
+	}
+	srv.ClaimControlledBuildFn = func(playerID int32, buildPos int32) (netserver.ControlledBuildInfo, bool) {
+		info, ok := wld.ClaimControlledBuildingPacked(playerID, buildPos)
+		if !ok {
+			return netserver.ControlledBuildInfo{}, false
+		}
+		return buildInfoToControlled(info), true
+	}
+	srv.ControlledBuildInfoFn = func(playerID int32, buildPos int32) (netserver.ControlledBuildInfo, bool) {
+		info, ok := wld.ControlledBuildingInfoPacked(playerID, buildPos)
+		if !ok {
+			return netserver.ControlledBuildInfo{}, false
+		}
+		return buildInfoToControlled(info), true
+	}
+	srv.ReleaseControlledBuildFn = func(playerID int32, buildPos int32) bool {
+		if buildPos != 0 {
+			if wld.ReleaseControlledBuildingPacked(playerID, buildPos) {
+				return true
+			}
+		}
+		return wld.ReleaseControlledBuildingByPlayer(playerID)
+	}
+	srv.SetControlledBuildInputFn = func(playerID int32, buildPos int32, aimX, aimY float32, shooting bool) bool {
+		return wld.SetControlledBuildingInputPacked(playerID, buildPos, aimX, aimY, shooting)
+	}
 	// clientSnapshot writes client motion/position back into the authoritative world model.
 	// This mirrors vanilla NetServer.clientSnapshot behavior; without it, entitySnapshot will
 	// keep snapping units back to stale positions.
@@ -867,6 +1174,74 @@ func main() {
 		_, ok := wld.SetEntityPosition(unitID, x, y, rotation)
 		return ok
 	}
+	srv.SetUnitRuntimeStateFn = func(unitID int32, state netserver.UnitRuntimeState) bool {
+		_, ok := wld.SetEntityRuntimeState(unitID, state.Shooting, state.Boosting, state.UpdateBuilding, state.MineTilePos, state.Plans)
+		return ok
+	}
+	srv.SetUnitStackFn = func(unitID int32, itemID int16, amount int32) bool {
+		_, ok := wld.SetEntityStack(unitID, world.ItemID(itemID), amount)
+		return ok
+	}
+	srv.SetUnitPlayerControllerFn = func(unitID int32, playerID int32) bool {
+		_, ok := wld.SetEntityPlayerController(unitID, playerID)
+		return ok
+	}
+	srv.OnRequestUnitPayload = func(c *netserver.Conn, targetID int32) {
+		if c == nil || wld == nil || c.UnitID() == 0 || targetID == 0 {
+			return
+		}
+		_, _ = wld.RequestUnitPayload(c.UnitID(), targetID)
+	}
+	srv.OnRequestBuildPayload = func(c *netserver.Conn, buildPos int32) {
+		if c == nil || wld == nil || c.UnitID() == 0 || buildPos < 0 {
+			return
+		}
+		_, _ = wld.RequestBuildPayloadPacked(c.UnitID(), buildPos)
+	}
+	srv.OnRequestDropPayload = func(c *netserver.Conn, x, y float32) {
+		if c == nil || wld == nil || c.UnitID() == 0 {
+			return
+		}
+		_, _ = wld.RequestDropPayload(c.UnitID(), x, y)
+	}
+	srv.OnRequestItem = func(c *netserver.Conn, pos int32, itemID int16, amount int32) {
+		if c == nil || wld == nil || c.UnitID() == 0 || amount <= 0 {
+			return
+		}
+		result, ok := wld.RequestItemFromBuildingPacked(c.UnitID(), pos, world.ItemID(itemID), amount)
+		if !ok || result.Amount <= 0 {
+			return
+		}
+		broadcastTakeItems(srv, pos, itemID, result.Amount, result.UnitID)
+	}
+	srv.OnTransferInventory = func(c *netserver.Conn, pos int32) {
+		if c == nil || wld == nil || c.UnitID() == 0 {
+			return
+		}
+		result, ok := wld.TransferUnitInventoryToBuildingPacked(c.UnitID(), pos)
+		if !ok || result.Amount <= 0 {
+			return
+		}
+		broadcastTransferItemTo(srv, result.UnitID, int16(result.Item), result.Amount, result.UnitX, result.UnitY, pos)
+	}
+	srv.OnDropItem = func(c *netserver.Conn, angle float32) {
+		if c == nil || wld == nil || c.UnitID() == 0 || c.PlayerID() == 0 {
+			return
+		}
+		if _, ok := wld.DropUnitItems(c.UnitID()); !ok {
+			return
+		}
+		broadcastDropItem(srv, c.PlayerID(), angle)
+	}
+	srv.OnUnitEnteredPayload = func(c *netserver.Conn, unitID, buildPos int32) {
+		if wld == nil || unitID == 0 || buildPos < 0 {
+			return
+		}
+		if wld.EnterUnitPayloadPacked(buildPos, unitID) && c != nil && c.UnitID() == unitID {
+			srv.ConsumeConnUnit(c, unitID)
+		}
+	}
+	unitCommands := newUnitCommandService()
 	buildService := buildsvc.New(wld, buildsvc.Options{
 		MaxQueuedBatches: 256,
 		MaxPlansPerBatch: 20,
@@ -971,6 +1346,7 @@ func main() {
 		if err != nil {
 			return 0, 0, false
 		}
+		_, _ = wld.SetEntitySpawnedByCore(ent.ID, true)
 		_, _ = wld.SetEntityPlayerController(ent.ID, c.PlayerID())
 		return x, y, true
 	}
@@ -985,6 +1361,7 @@ func main() {
 		if err != nil {
 			return 0, 0, false
 		}
+		_, _ = wld.SetEntitySpawnedByCore(ent.ID, spawnedByCore)
 		_, _ = wld.SetEntityPosition(ent.ID, x, y, rotation)
 		_, _ = wld.SetEntityPlayerController(ent.ID, c.PlayerID())
 		return x, y, true
@@ -1025,6 +1402,12 @@ func main() {
 			TypeID:    ent.TypeID,
 		}, true
 	}
+	srv.UnitSyncFn = func(unitID int32, controller protocol.UnitController) (*protocol.UnitEntitySync, bool) {
+		if wld == nil {
+			return nil, false
+		}
+		return wld.UnitSyncSnapshot(srv.Content, unitID, controller)
+	}
 	var unitNamesByID map[int16]string
 	var loadedModel *world.WorldModel
 	var loadedMapPath string
@@ -1055,6 +1438,29 @@ func main() {
 			return
 		}
 		wld.SetModel(model)
+		if srv.Content != nil && model != nil {
+			mapBlockRegs := 0
+			for id, name := range model.BlockNames {
+				normalized := strings.ToLower(strings.TrimSpace(name))
+				if normalized == "" {
+					continue
+				}
+				srv.Content.RegisterBlock(blockRef{id: id, name: normalized})
+				mapBlockRegs++
+			}
+			mapUnitRegs := 0
+			for id, name := range model.UnitNames {
+				normalized := strings.ToLower(strings.TrimSpace(name))
+				if normalized == "" {
+					continue
+				}
+				srv.Content.RegisterUnitType(unitTypeRef{id: id, name: normalized})
+				mapUnitRegs++
+			}
+			if mapBlockRegs > 0 || mapUnitRegs > 0 {
+				startup.info("地图内容注册", fmt.Sprintf("blocks=%d units=%d", mapBlockRegs, mapUnitRegs))
+			}
+		}
 		loadedModel = model
 		loadedMapPath = path
 		startup.ok("地图模型", fmt.Sprintf("%s (%dx%d)", path, model.Width, model.Height))
@@ -1070,7 +1476,17 @@ func main() {
 			spawnType = alphaID
 		}
 		atomic.StoreInt32(&playerSpawnTypeID, int32(spawnType))
-		wld.SetTeamBuilderSpeed(resolveDefaultPlayerTeam(wld), wld.BuilderSpeedForUnitType(spawnType))
+		for rawTeam := 1; rawTeam <= 255; rawTeam++ {
+			team := world.TeamID(rawTeam)
+			corePos, ok := resolveTeamCoreTile(wld, team, protocol.Point2{})
+			if !ok {
+				continue
+			}
+			unitType := resolveRespawnUnitTypeByCoreTile(wld, corePos, team, spawnType)
+			if speed := wld.BuilderSpeedForUnitType(unitType); speed > 0 {
+				wld.SetTeamBuilderSpeed(team, speed)
+			}
+		}
 		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
 	applyVotedWorld := func(next string) error {
@@ -1100,7 +1516,7 @@ func main() {
 			WaveTime: waveTime,
 			Wave:     persisted.Wave,
 			TimeData: persisted.TimeData,
-			Tps:      int8(sim.DefaultTPS),
+			Tps:      int8(gameTPS),
 			Rand0:    persisted.Rand0,
 			Rand1:    persisted.Rand1,
 			Tick:     persisted.Tick,
@@ -1127,7 +1543,6 @@ func main() {
 		log.Warn("public conn_uuid store init failed", logging.Field{Key: "error", Value: publicConnUUIDErr.Error()})
 		startup.warn("公开 conn_uuid", publicConnUUIDErr.Error())
 	} else {
-		startup.ok("公开 conn_uuid", publicConnUUIDPath)
 		runtimePublicConnUUIDStore = publicConnUUIDStore
 	}
 	playerIdentityPath := resolveConfigSidecarPath(runtimeConfigDir, cfg.Personalization.PlayerIdentityFile)
@@ -1136,7 +1551,6 @@ func main() {
 		log.Warn("player identity store init failed", logging.Field{Key: "error", Value: publicIdentityErr.Error()})
 		startup.warn("玩家身份配置", publicIdentityErr.Error())
 	} else {
-		startup.ok("玩家身份配置", playerIdentityPath)
 		runtimePlayerIdentityStore = playerIdentityStore
 	}
 	runtimeBindStatusResolver = newBindStatusResolver(
@@ -1167,6 +1581,29 @@ func main() {
 			ev.Timestamp.Format(time.RFC3339Nano), ev.Kind, ev.Packet, publicConnIDValue(publicConnUUIDStore, ev.UUID, ev.ConnID), ev.UUID, ev.IP, ev.Name, ev.Detail)
 		if shouldFileLogNetEvents() {
 			detailLog.LogLine(line)
+		}
+		tc := currentTraceCfg()
+		if tc.Enabled {
+			if tc.ClientRequestsEnabled && (ev.Kind == "packet_recv" || ev.Kind == "connect_packet" || strings.HasPrefix(ev.Kind, "connect_confirm") || strings.Contains(ev.Kind, "client_snapshot")) {
+				logTrace("client_request", ev.Kind, map[string]any{
+					"packet":  ev.Packet,
+					"detail":  ev.Detail,
+					"conn_id": ev.ConnID,
+					"uuid":    ev.UUID,
+					"ip":      ev.IP,
+					"name":    ev.Name,
+				})
+			}
+			if tc.ServerSendsEnabled && (ev.Kind == "packet_send" || ev.Kind == "world_handshake_sent" || strings.Contains(ev.Kind, "state_snapshot") || strings.Contains(ev.Kind, "entity_snapshot")) {
+				logTrace("server_send", ev.Kind, map[string]any{
+					"packet":  ev.Packet,
+					"detail":  ev.Detail,
+					"conn_id": ev.ConnID,
+					"uuid":    ev.UUID,
+					"ip":      ev.IP,
+					"name":    ev.Name,
+				})
+			}
 		}
 	}
 	srv.SetPublicConnIDFormatter(func(c *netserver.Conn) string {
@@ -1205,38 +1642,54 @@ func main() {
 	scriptCtl.ScheduleStartupTasks(cfg.Script.StartupTasks)
 	scriptCtl.SetDailyGC(cfg.Script.DailyGCTime)
 
-	cache := &worldCache{}
+	cache := &worldCache{content: srv.Content}
 	invalidateWorldCache = cache.invalidate
 	srv.WorldDataFn = func(conn *netserver.Conn, _ *protocol.ConnectPacket) ([]byte, error) {
-		path := state.get()
-		base, err := cache.get(path)
-		if err != nil {
-			return nil, err
-		}
-		snap := wld.Snapshot()
-		playerID := int32(1)
-		if conn != nil && conn.PlayerID() != 0 {
-			playerID = conn.PlayerID()
-		}
-		if patched, perr := worldstream.RewriteRuntimeStateInWorldStream(base, snap.Wave, snap.WaveTime*60, float64(snap.Tick), playerID); perr == nil {
-			return patched, nil
-		}
-		if conn != nil && conn.PlayerID() != 0 {
-			if patched, perr := worldstream.RewritePlayerIDInWorldStream(base, conn.PlayerID()); perr == nil {
-				return patched, nil
+		payload, err := buildInitialWorldDataPayload(conn, wld, cache, state.get())
+		if err == nil {
+			tc := currentTraceCfg()
+			if tc.Enabled && tc.WorldStreamEnabled {
+				playerID := int32(0)
+				connID := int32(0)
+				liveStream := false
+				if conn != nil {
+					playerID = conn.PlayerID()
+					connID = conn.ConnID()
+					liveStream = conn.UsesLiveWorldStream()
+				}
+				snap := world.Snapshot{}
+				if wld != nil {
+					snap = wld.Snapshot()
+				}
+				logTrace("world_stream", "build_initial_world_data_payload", map[string]any{
+					"conn_id":          connID,
+					"player_id":        playerID,
+					"map_path":         state.get(),
+					"payload_bytes":    len(payload),
+					"live_worldstream": liveStream,
+					"wave":             snap.Wave,
+					"wave_time":        snap.WaveTime,
+					"tick":             snap.Tick,
+				})
 			}
 		}
-		return base, nil
+		return payload, err
 	}
 	srv.OnPostConnect = func(conn *netserver.Conn) {
 		if conn == nil {
 			return
 		}
-		// Wait until client applies world stream, then only push lightweight runtime overlays.
+		if conn.UsesLiveWorldStream() {
+			showJoinPopupForConn(srv, conn)
+			return
+		}
+		// Wait until client applies world stream, then reconcile against the
+		// template map and finally overwrite with the current authoritative live state.
 		time.Sleep(350 * time.Millisecond)
-		syncRulesToConn(conn, wld)
-		syncWorldDiffToConn(conn, wld, cache.model(state.get()))
+		syncRulesToConn(conn, wld, state.get())
+		syncAuthoritativeWorldToConn(srv, conn, wld, cache.model(state.get()), cfg.Sync.Strategy)
 		showJoinPopupForConn(srv, conn)
+		conn.SetWorldReloadGrace(750 * time.Millisecond)
 	}
 	srv.OnMenuChoose = func(c *netserver.Conn, menuID, option int32) {
 		handleJoinPopupMenuChoice(srv, c, menuID, option)
@@ -1245,9 +1698,14 @@ func main() {
 		if conn == nil {
 			return
 		}
-		syncRulesToConn(conn, wld)
-		syncWorldDiffToConn(conn, wld, cache.model(state.get()))
+		if conn.UsesLiveWorldStream() {
+			srv.RefreshPlayerDisplayNames()
+			return
+		}
+		syncRulesToConn(conn, wld, state.get())
+		syncAuthoritativeWorldToConn(srv, conn, wld, cache.model(state.get()), cfg.Sync.Strategy)
 		srv.RefreshPlayerDisplayNames()
+		conn.SetWorldReloadGrace(750 * time.Millisecond)
 	}
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {
 		if pos, ok := resolveTeamCoreTile(wld, resolveDefaultPlayerTeam(wld), protocol.Point2{}); ok {
@@ -1291,11 +1749,16 @@ func main() {
 		if pos, ok := resolveTeamCoreTile(wld, team, spawnRefForConn(c)); ok {
 			return pos, true
 		}
+		if wld != nil {
+			if pos, ok := fallbackSpawnPosFromModel(wld.Model()); ok {
+				return pos, true
+			}
+		}
 		return srv.SpawnTileFn()
 	}
-	// Official 156 build authority comes from clientSnapshot/clientPlanSnapshot queues.
-	// Do not feed legacy/compat beginPlace packets into a second custom queue, otherwise
-	// cancelled plans continue building long after the client has removed them.
+	// Official 157 build authority comes from clientSnapshot queue updates.
+	// Keep the old shared OnBuildPlans queue disabled so cancelled plans are removed
+	// by authoritative snapshot reconciliation instead of lingering in a second queue.
 	srv.OnBuildPlans = nil
 	type snapshotLogKey struct {
 		count    int
@@ -1321,18 +1784,107 @@ func main() {
 		}
 		return fmt.Sprintf("team-%d", team)
 	}
+	rememberBuildOwner := func(c *netserver.Conn, owner int32) {
+		if c == nil || owner == 0 {
+			return
+		}
+		ownerActorMu.Lock()
+		ownerActorBy[owner] = displayPlayerName(c)
+		ownerActorMu.Unlock()
+	}
+	handleCoreBuildingControlSelect := func(c *netserver.Conn, info world.BuildingInfo) {
+		if c == nil || wld == nil || c.IsDead() || c.UnitID() == 0 {
+			return
+		}
+		if !strings.HasPrefix(info.Name, "core-") || info.Team != resolveConnTeam(c, wld) {
+			return
+		}
+		_ = srv.HandleCoreBuildingControlSelect(c, protocol.UnpackPoint2(info.Pos))
+	}
+	handlePlayerPayloadBuildingControlSelect := func(c *netserver.Conn, info world.BuildingInfo) {
+		if c == nil || wld == nil || c.IsDead() || c.UnitID() == 0 {
+			return
+		}
+		unitID := c.UnitID()
+		if !wld.ControlSelectPayloadUnitPacked(info.Pos, unitID) {
+			return
+		}
+		srv.ConsumeConnUnit(c, unitID)
+		broadcastRelatedBlockSnapshots(srv, wld, info.Pos)
+	}
+	handleUnitPayloadBuildingControlSelect := func(c *netserver.Conn, info world.BuildingInfo, unitID int32) {
+		if wld == nil || unitID == 0 {
+			return
+		}
+		if !wld.ControlSelectPayloadUnitPacked(info.Pos, unitID) {
+			return
+		}
+		if c != nil && c.UnitID() == unitID {
+			srv.ConsumeConnUnit(c, unitID)
+		}
+		broadcastRelatedBlockSnapshots(srv, wld, info.Pos)
+	}
+	srv.OnRotateBlock = func(c *netserver.Conn, pos int32, direction bool) {
+		res, ok := wld.RotateBuildingPacked(pos, direction)
+		if !ok {
+			return
+		}
+		broadcastSetTile(srv, pos, res.BlockID, res.Rotation, byte(res.Team))
+		if effectID, ok := lookupEffectID("rotateblock"); ok {
+			broadcastEffectReliable(srv, effectID, res.EffectX, res.EffectY, res.EffectRot)
+		}
+		broadcastRelatedBlockSnapshots(srv, wld, pos)
+	}
+	srv.OnRequestBlockSnapshot = func(c *netserver.Conn, pos int32) {
+		if c == nil || wld == nil {
+			return
+		}
+		if info, ok := wld.BuildingInfoPacked(pos); ok {
+			if info.Team != resolveConnTeam(c, wld) {
+				return
+			}
+		}
+		sendRequestedBlockSnapshotToConn(c, wld, pos)
+	}
+	srv.OnBuildingControlSelect = func(c *netserver.Conn, pos int32) {
+		if wld == nil || c == nil {
+			return
+		}
+		if !wld.CanControlSelectBuildingPacked(pos) {
+			return
+		}
+		info, ok := wld.BuildingInfoPacked(pos)
+		if !ok {
+			return
+		}
+		switch {
+		case strings.HasPrefix(info.Name, "core-"):
+			handleCoreBuildingControlSelect(c, info)
+		default:
+			handlePlayerPayloadBuildingControlSelect(c, info)
+		}
+	}
+	srv.OnUnitBuildingControlSelect = func(c *netserver.Conn, unitID, pos int32) {
+		if wld == nil || unitID == 0 {
+			return
+		}
+		if !wld.CanControlSelectBuildingPacked(pos) {
+			return
+		}
+		info, ok := wld.BuildingInfoPacked(pos)
+		if !ok || strings.HasPrefix(info.Name, "core-") {
+			return
+		}
+		handleUnitPayloadBuildingControlSelect(c, info, unitID)
+	}
 	srv.OnBuildPlanSnapshot = func(c *netserver.Conn, plans []*protocol.BuildPlan) {
 		if c == nil {
 			return
 		}
 		owner := resolveBuildOwner(c)
 		team := resolveConnTeam(c, wld)
-		snapX, snapY := c.SnapshotPos()
-		// UnitType.buildRange defaults to Vars.buildingRange in 156.
-		wld.UpdateBuilderState(owner, team, c.UnitID(), snapX, snapY, !c.IsDead() && c.IsBuilding() && c.UnitID() != 0, 220)
-		ownerActorMu.Lock()
-		ownerActorBy[owner] = displayPlayerName(c)
-		ownerActorMu.Unlock()
+		syncBuilderStateFromConnSnapshot(wld, c, owner, team, plans, false)
+		rememberBuildOwner(c, owner)
 		if len(plans) == 0 {
 			key := snapshotLogKey{count: 0}
 			snapshotLogMu.Lock()
@@ -1409,19 +1961,45 @@ func main() {
 		buildService.CancelPositions(owner, []int32{protocol.PackPoint2(x, y)})
 		wld.CancelBuildAtForOwner(owner, x, y, breaking)
 	}
+	srv.OnCommandUnits = func(c *netserver.Conn, unitIDs []int32, buildTarget any, unitTarget any, posTarget any, queueCommand bool, _ bool) {
+		unitCommands.applyCommandUnits(c, wld, unitIDs, buildTarget, unitTarget, posTarget, queueCommand)
+	}
+	srv.OnSetUnitCommand = func(c *netserver.Conn, unitIDs []int32, command *protocol.UnitCommand) {
+		unitCommands.applySetUnitCommand(c, wld, unitIDs, command)
+	}
+	srv.OnSetUnitStance = func(c *netserver.Conn, unitIDs []int32, stance protocol.UnitStance, enable bool) {
+		unitCommands.applySetUnitStance(c, wld, unitIDs, stance, enable)
+	}
+	srv.OnCommandBuilding = func(c *netserver.Conn, buildings []int32, target protocol.Vec2) {
+		wld.CommandBuildingsPacked(buildings, target)
+		for _, pos := range buildings {
+			broadcastRelatedBlockSnapshots(srv, wld, pos)
+		}
+	}
 	srv.OnTileConfig = func(c *netserver.Conn, pos int32, value any) {
 		wld.ConfigureBuildingPacked(pos, value)
 		if normalized, ok := wld.BuildingConfigPacked(pos); ok {
 			srv.BroadcastTileConfig(pos, normalized, c)
-			return
+		} else {
+			srv.BroadcastTileConfig(pos, value, c)
 		}
-		srv.BroadcastTileConfig(pos, value, c)
+		broadcastRelatedBlockSnapshots(srv, wld, pos)
 	}
 	srv.PlayerUnitTypeFn = func() int16 {
 		return int16(atomic.LoadInt32(&playerSpawnTypeID))
 	}
 	srv.StateSnapshotFn = func() *protocol.Remote_NetClient_stateSnapshot_35 {
 		snap := wld.Snapshot()
+		tc := currentTraceCfg()
+		if tc.Enabled && tc.StateBuildEnabled {
+			logTrace("state_build", "build_state_snapshot", map[string]any{
+				"wave":      snap.Wave,
+				"wave_time": snap.WaveTime,
+				"tick":      snap.Tick,
+				"time_data": snap.TimeData,
+				"tps":       snap.Tps,
+			})
+		}
 		return &protocol.Remote_NetClient_stateSnapshot_35{
 			// Mindustry state.wavetime is in "tick" units (~60 per second).
 			WaveTime: snap.WaveTime * 60,
@@ -1437,7 +2015,26 @@ func main() {
 		}
 	}
 	srv.ExtraEntitySnapshotEntitiesFn = func() ([]protocol.UnitSyncEntity, error) {
-		return wld.EntitySyncSnapshots(srv.Content, srv.PlayerUnitIDSet()), nil
+		return unitCommands.overlay(wld.EntitySyncSnapshots(srv.Content, srv.PlayerUnitIDSet())), nil
+	}
+	traceWorldRuntimeTick := func(stage string) {
+		tc := currentTraceCfg()
+		if !tc.Enabled || !tc.WorldRuntimeEnabled || wld == nil {
+			return
+		}
+		st := wld.TraceRuntimeState()
+		logTrace("world_runtime", stage, map[string]any{
+			"tick":           st.Tick,
+			"wave":           st.Wave,
+			"wave_time":      st.WaveTime,
+			"time_data":      st.TimeData,
+			"tps":            st.TPS,
+			"active_tiles":   st.ActiveTiles,
+			"entities":       st.Entities,
+			"bullets":        st.Bullets,
+			"pending_builds": st.PendingBuilds,
+			"pending_breaks": st.PendingBreaks,
+		})
 	}
 	go func() {
 		defer func() {
@@ -1445,22 +2042,28 @@ func main() {
 				fmt.Printf("[net] event-loop panic err=%v\n", rec)
 			}
 		}()
-		type teamItemSyncKey struct {
-			team world.TeamID
-			item world.ItemID
-		}
-		t := time.NewTicker(time.Second / time.Duration(sim.DefaultTPS))
+		t := time.NewTicker(time.Second / time.Duration(gameTPS))
 		defer t.Stop()
 		nextBlockSnapshotSync := time.Now()
+		nextUnitFactorySnapshotSync := time.Now()
+		nextPayloadProcessorSnapshotSync := time.Now()
+		nextPlanPreviewSync := time.Now()
 		for range t.C {
+			now := time.Now()
+			if !now.Before(nextPlanPreviewSync) {
+				srv.BroadcastStoredClientPlanPreviewsAt(now)
+				nextPlanPreviewSync = now.Add(500 * time.Millisecond)
+			}
 			evs := wld.DrainEntityEvents()
 			groupedExplosionBuilds := classifyReactorExplosionBuilds(wld, evs)
 			buildHealth := make([]int32, 0, len(evs)*2)
-			teamItemSync := make(map[teamItemSyncKey]int32)
+			blockItemSync := make(map[int32]struct{})
+			itemTurretAmmoSync := make(map[int32]struct{})
 			for i := range evs {
 				ev := evs[i]
 				switch ev.Kind {
 				case world.EntityEventRemoved:
+					unitCommands.remove(ev.Entity.ID)
 					broadcastUnitDestroy(srv, ev.Entity.ID)
 					if ev.Entity.Health <= 0 {
 						if _, ok := srv.PlayerUnitIDSet()[ev.Entity.ID]; ok {
@@ -1503,19 +2106,14 @@ func main() {
 							fmt.Printf("[buildtrace] constructed xy=(%d,%d) block=%d team=%d rot=%d\n", x, y, ev.BuildBlock, ev.BuildTeam, ev.BuildRot)
 						}
 					}
-					broadcastSetTile(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
-					broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
-					if cfgValue, ok := wld.BuildingConfigPacked(ev.BuildPos); ok {
-						srv.BroadcastTileConfig(ev.BuildPos, cfgValue, nil)
-					} else if ev.BuildConfig != nil {
-						srv.BroadcastTileConfig(ev.BuildPos, ev.BuildConfig, nil)
-					}
+					broadcastBuildConstructedState(srv, wld, ev)
 				case world.EntityEventBuildConfig:
 					if cfgValue, ok := wld.BuildingConfigPacked(ev.BuildPos); ok {
 						srv.BroadcastTileConfig(ev.BuildPos, cfgValue, nil)
 					} else if ev.BuildConfig != nil {
 						srv.BroadcastTileConfig(ev.BuildPos, ev.BuildConfig, nil)
 					}
+					broadcastRelatedBlockSnapshots(srv, wld, ev.BuildPos)
 				case world.EntityEventBuildDeconstructing:
 					x, y := unpackTilePos(ev.BuildPos)
 					if shouldFileLogBuildBreakStart() {
@@ -1550,18 +2148,33 @@ func main() {
 					}
 					if shouldLogBuildBreakDone() && groupedExplosionBuilds[i] == nil {
 						if cfg.Building.Translated {
-							actor := buildActor(ev.BuildOwner, ev.BuildTeam)
-							fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 拆除了 block=%d(%s) team=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
+							if ev.BuildOwner != 0 {
+								actor := buildActor(ev.BuildOwner, ev.BuildTeam)
+								fmt.Printf("[建筑] 玩家=%s (x%d-y%d) 拆除了 block=%d(%s) team=%d\n", actor, x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
+							} else {
+								fmt.Printf("[建筑] (x%d-y%d) 被摧毁了 block=%d(%s) team=%d\n", x, y, ev.BuildBlock, blockDisplayName(wld, ev.BuildBlock), ev.BuildTeam)
+							}
 						} else {
 							fmt.Printf("[buildtrace] destroyed xy=(%d,%d) block=%d team=%d\n", x, y, ev.BuildBlock, ev.BuildTeam)
 						}
 					}
-					broadcastSetTile(srv, ev.BuildPos, 0, 0, 0)
-					broadcastBuildDestroyed(srv, ev.BuildPos, ev.BuildBlock)
+					broadcastBuildDestroyedState(srv, ev)
 				case world.EntityEventBuildHealth:
 					buildHealth = append(buildHealth, ev.BuildPos, int32(math.Float32bits(ev.BuildHP)))
-				case world.EntityEventTeamItems:
-					teamItemSync[teamItemSyncKey{team: ev.BuildTeam, item: ev.ItemID}] = ev.ItemAmount
+				case world.EntityEventBlockItemSync:
+					blockItemSync[ev.BuildPos] = struct{}{}
+				case world.EntityEventItemTurretAmmoSync:
+					itemTurretAmmoSync[ev.BuildPos] = struct{}{}
+				case world.EntityEventTransferItemToUnit:
+					amount := ev.ItemAmount
+					if amount <= 0 {
+						amount = 1
+					}
+					for n := int32(0); n < amount; n++ {
+						broadcastTransferItemToUnit(srv, int16(ev.ItemID), ev.TransferX, ev.TransferY, ev.UnitID)
+					}
+				case world.EntityEventTransferItemToBuild:
+					broadcastTransferItemTo(srv, ev.UnitID, int16(ev.ItemID), ev.ItemAmount, ev.TransferX, ev.TransferY, ev.BuildPos)
 				case world.EntityEventBulletFired:
 					broadcastBulletCreate(srv, ev.Bullet)
 				case world.EntityEventEffect:
@@ -1582,26 +2195,31 @@ func main() {
 					broadcastBuildHealthUpdate(srv, buildHealth[i:end])
 				}
 			}
-			if len(teamItemSync) > 0 {
-				keys := make([]teamItemSyncKey, 0, len(teamItemSync))
-				for key := range teamItemSync {
-					keys = append(keys, key)
+			if len(blockItemSync) > 0 {
+				positions := make([]int32, 0, len(blockItemSync))
+				for packed := range blockItemSync {
+					positions = append(positions, packed)
 				}
-				sort.Slice(keys, func(i, j int) bool {
-					if keys[i].team == keys[j].team {
-						return keys[i].item < keys[j].item
-					}
-					return keys[i].team < keys[j].team
-				})
-				for _, key := range keys {
-					positions := wld.TeamItemSyncPositions(key.team)
-					if len(positions) == 0 {
-						continue
-					}
-					broadcastSetTileItems(srv, int16(key.item), teamItemSync[key], positions)
-				}
+				sort.Slice(positions, func(i, j int) bool { return positions[i] < positions[j] })
+				broadcastItemBlockSnapshotsForPacked(srv, wld, positions)
 			}
-			now := time.Now()
+			if len(itemTurretAmmoSync) > 0 {
+				positions := make([]int32, 0, len(itemTurretAmmoSync))
+				for packed := range itemTurretAmmoSync {
+					positions = append(positions, packed)
+				}
+				sort.Slice(positions, func(i, j int) bool { return positions[i] < positions[j] })
+				broadcastItemTurretAmmoSnapshotsForPacked(srv, wld, positions)
+			}
+			snapshotNow := time.Now()
+			if !snapshotNow.Before(nextUnitFactorySnapshotSync) {
+				broadcastUnitFactorySnapshots(srv, wld)
+				nextUnitFactorySnapshotSync = snapshotNow.Add(time.Second)
+			}
+			if !snapshotNow.Before(nextPayloadProcessorSnapshotSync) {
+				broadcastPayloadProcessorSnapshots(srv, wld)
+				nextPayloadProcessorSnapshotSync = snapshotNow.Add(time.Second)
+			}
 			if !now.Before(nextBlockSnapshotSync) {
 				broadcastBlockSnapshots(srv, wld)
 				nextBlockSnapshotSync = now.Add(6 * time.Second)
@@ -1641,11 +2259,10 @@ func main() {
 			if c == nil {
 				return true
 			}
-			if err := srv.SyncWorldToConn(c); err != nil {
-				srv.SendChat(c, "[scarlet]重同步失败[]")
-				return true
-			}
-			srv.SendChat(c, "[accent]正在重新同步世界状态...[]")
+			syncRulesToConn(c, wld, state.get())
+			syncCurrentWorldToConn(c, wld)
+			_ = srv.SyncEntitySnapshotsToConn(c)
+			srv.SendChat(c, "[accent]已同步当前运行状态[]")
 			return true
 		}
 		lowerTrimmed := strings.ToLower(trimmed)
@@ -2034,7 +2651,7 @@ func main() {
 			ioWorkers = 2
 		}
 		serverCore = coreio.NewServerCore(
-			time.Second/time.Duration(sim.DefaultTPS),
+			time.Second/time.Duration(gameTPS),
 			coreio.Config{
 				Name:          "io-core",
 				MessageBuf:    30000,
@@ -2043,6 +2660,16 @@ func main() {
 			},
 			cfg.Persist,
 		)
+		if exePath, err := os.Executable(); err == nil {
+			if err := serverCore.EnableChildRoles(exePath, []string{"--config=" + cfg.Source}, "core2", "core3", "core4"); err != nil {
+				startup.warn("子核心进程", fmt.Sprintf("启动失败，回退到进程内核心: %v", err))
+			} else {
+				startup.ok("子核心进程", "core2/core3/core4 IPC 已连接")
+			}
+		} else {
+			startup.warn("子核心进程", fmt.Sprintf("无法定位可执行文件，回退到进程内核心: %v", err))
+		}
+		cache.backend = serverCore.Core3
 		serverCore.Core2.SetVerboseNetLog(false)
 		serverCore.Core2.SetRecorder(recorder)
 		serverCore.SetPersistStateProvider(func() persist.State {
@@ -2059,14 +2686,17 @@ func main() {
 		})
 		serverCore.SetGameTickFn(func(_ uint64, delta time.Duration) {
 			wld.Step(delta)
-			playerMining.Tick(wld, srv, delta)
+			unitCommands.step(wld)
+			traceWorldRuntimeTick("game_tick")
 		})
 
 		netCore := netserver.NewNetworkCoreWithCore(srv, serverCore.Core2)
 		netCore.SetServerCore(serverCore)
 		netCore.SetRecorder(recorder)
-		srv.OnConnOpen = netCore.ConnectionOpen
-		srv.OnConnClose = func(c *netserver.Conn) {
+		baseConnOpen := func(c *netserver.Conn) {
+			netCore.ConnectionOpen(c)
+		}
+		baseConnClose := func(c *netserver.Conn) {
 			if c != nil {
 				if publicConnUUIDStore != nil && runtimePublicConnUUIDEnabled.Load() {
 					host := ""
@@ -2088,13 +2718,52 @@ func main() {
 			}
 			netCore.ConnectionClose(c)
 		}
-		srv.OnPacketDecoded = func(c *netserver.Conn, obj any, err error) bool {
+		srv.OnConnOpen = baseConnOpen
+		srv.OnConnClose = baseConnClose
+		basePacketDecoded := func(c *netserver.Conn, obj any, err error) bool {
 			if err != nil {
 				// Let server.handleConn run its normal close/error path to avoid duplicate close events.
 				return false
 			}
 			netCore.ProcessPacket(c, obj, nil)
 			return true
+		}
+		srv.OnPacketDecoded = basePacketDecoded
+
+		if serverCore.Core4 != nil {
+			srv.OnConnOpen = func(c *netserver.Conn) {
+				baseConnOpen(c)
+				if c != nil {
+					serverCore.Core4.RecordConnectionOpen(c.ConnID(), connRemoteIP(c), c.UUID())
+				}
+			}
+			srv.OnConnClose = func(c *netserver.Conn) {
+				if c != nil {
+					serverCore.Core4.RecordConnectionClose(c.ConnID())
+				}
+				baseConnClose(c)
+			}
+			srv.OnPacketDecoded = func(c *netserver.Conn, obj any, err error) bool {
+				if err != nil {
+					return basePacketDecoded(c, obj, err)
+				}
+				if serverCore.Core4 != nil && c != nil {
+					if pkt, ok := obj.(*protocol.ConnectPacket); ok {
+						if res, perr := serverCore.Core4.AllowConnection(connRemoteIP(c), pkt.UUID); perr == nil && !res.Allowed {
+							_ = c.Close()
+							return true
+						}
+						if connUUID := pkt.UUID; strings.TrimSpace(connUUID) != "" {
+							_, _ = serverCore.Core4.PlayerShard(connUUID, connRemoteIP(c))
+						}
+					}
+					if res, perr := serverCore.Core4.AllowPacket(connRemoteIP(c), c.ConnID(), c.UUID(), fmt.Sprintf("%T", obj)); perr == nil && !res.Allowed {
+						_ = c.Close()
+						return true
+					}
+				}
+				return basePacketDecoded(c, obj, err)
+			}
 		}
 		serverCore.StartAll()
 	} else {
@@ -2122,7 +2791,7 @@ func main() {
 			wld.CancelBuildPlansByOwner(resolveBuildOwner(c))
 		}
 		go func() {
-			interval := time.Second / time.Duration(sim.DefaultTPS)
+			interval := time.Second / time.Duration(gameTPS)
 			next := time.Now().Add(interval)
 			const maxCatchUp = 4
 			for {
@@ -2134,7 +2803,8 @@ func main() {
 				steps := 0
 				for !now.Before(next) && steps < maxCatchUp {
 					wld.Step(interval)
-					playerMining.Tick(wld, srv, interval)
+					unitCommands.step(wld)
+					traceWorldRuntimeTick("game_tick")
 					steps++
 					next = next.Add(interval)
 					now = time.Now()
@@ -2149,29 +2819,41 @@ func main() {
 	saveState = func() {}
 	if cfg.Persist.Enabled {
 		saveState = func() {
+			snap := wld.Snapshot()
+			stateData := persist.State{
+				MapPath:  state.get(),
+				WaveTime: snap.WaveTime,
+				Wave:     snap.Wave,
+				Tick:     snap.Tick,
+				TimeData: snap.TimeData,
+				Rand0:    snap.Rand0,
+				Rand1:    snap.Rand1,
+			}
+			savedState := false
 			if serverCore != nil {
 				ch := make(chan coreio.PersistenceResult, 1)
-				serverCore.SendToCore2(&coreio.PersistenceMessage{
+				if !serverCore.SendToCore2(&coreio.PersistenceMessage{
 					Action:     "save_state",
 					Path:       state.get(),
 					ResultChan: ch,
-				})
-				if res := <-ch; res.Error != nil {
-					fmt.Printf("persist save_state failed: %v\n", res.Error)
+				}) {
+					fmt.Println("persist save_state skipped: core2 queue unavailable, using direct save")
+				} else {
+					select {
+					case res := <-ch:
+						if res.Error != nil {
+							fmt.Printf("persist save_state failed: %v\n", res.Error)
+						} else {
+							savedState = true
+						}
+					case <-time.After(2 * time.Second):
+						fmt.Println("persist save_state timeout: using direct save")
+					}
 				}
-			} else {
-				snap := wld.Snapshot()
-				_ = persist.Save(cfg.Persist, persist.State{
-					MapPath:  state.get(),
-					WaveTime: snap.WaveTime,
-					Wave:     snap.Wave,
-					Tick:     snap.Tick,
-					TimeData: snap.TimeData,
-					Rand0:    snap.Rand0,
-					Rand1:    snap.Rand1,
-				})
 			}
-			snap := wld.Snapshot()
+			if !savedState {
+				_ = persist.Save(cfg.Persist, stateData)
+			}
 			_ = persist.SaveMSAVSnapshotFromModel(cfg.Persist, snap, wld.Model(), state.get())
 		}
 		interval := time.Duration(cfg.Persist.IntervalSec) * time.Second
@@ -2186,8 +2868,56 @@ func main() {
 			}
 		}()
 	}
-	var apiSrv *api.Server
+	var videoRecorder *video.Recorder
+	if *recordVideo {
+		rec, err := video.Start(video.Config{
+			Enabled:   true,
+			OutputDir: *videoDir,
+			FPS:       *videoFPS,
+			Width:     *videoWidth,
+			Height:    *videoHeight,
+			TileSize:  *videoTileSize,
+		}, wld.CloneModel, wld.Snapshot, state.get, func() []video.PlayerState {
+			snaps := srv.ListPlayerSnapshots()
+			out := make([]video.PlayerState, 0, len(snaps))
+			for _, snap := range snaps {
+				out = append(out, video.PlayerState{
+					Name:      snap.Name,
+					UUID:      snap.UUID,
+					UnitID:    snap.UnitID,
+					TeamID:    snap.TeamID,
+					X:         snap.X,
+					Y:         snap.Y,
+					Connected: snap.Connected,
+					Dead:      snap.Dead,
+				})
+			}
+			return out
+		})
+		if err != nil {
+			startup.warn("视频录制", err.Error())
+		} else {
+			videoRecorder = rec
+			startup.ok("视频录制", fmt.Sprintf("实时编码 dir=%s fps=%d size=%dx%d", rec.SessionDir(), *videoFPS, *videoWidth, *videoHeight))
+		}
+	} else {
+		startup.info("视频录制", "未启用")
+	}
+	var (
+		apiSrv      *api.Server
+		apiListener net.Listener
+	)
 	if cfg.API.Enabled {
+		ln, err := net.Listen("tcp", cfg.API.Bind)
+		if err != nil {
+			startup.fail("API", err.Error())
+			if cfg.Personalization.StartupReportEnabled {
+				startup.print()
+			}
+			fmt.Fprintf(os.Stderr, "API 启动前预检失败: %v\n", err)
+			os.Exit(1)
+		}
+		apiListener = ln
 		var statsFn func() *sim.TickStats
 		if engine != nil {
 			statsFn = func() *sim.TickStats {
@@ -2197,7 +2927,7 @@ func main() {
 		}
 		apiSrv = api.New(cfg.API, srv, statsFn)
 		go func() {
-			if err := apiSrv.Serve(); err != nil {
+			if err := apiSrv.ServeListener(apiListener); err != nil {
 				log.Error("api serve failed", logging.Field{Key: "error", Value: err.Error()})
 			}
 		}()
@@ -2208,16 +2938,65 @@ func main() {
 	var stopOnce sync.Once
 	stopServer := func(reason string) {
 		stopOnce.Do(func() {
+			const shutdownForceTimeout = 6 * time.Second
+			forceExit := time.AfterFunc(shutdownForceTimeout, func() {
+				fmt.Println("关闭超时，强制退出服务器")
+				os.Exit(0)
+			})
+			defer forceExit.Stop()
+
 			if reason != "" {
 				fmt.Println(reason)
 			}
+			if serverCore != nil && serverCore.Core1 != nil {
+				serverCore.Core1.Stop()
+			}
+			const shutdownKickReason = "服务器正在关闭"
+			const shutdownKickDelay = 400 * time.Millisecond
+			notifyDone := make(chan int, 1)
+			go func() {
+				notifyDone <- srv.NotifyShutdown(shutdownKickReason, shutdownKickDelay)
+			}()
+			select {
+			case notified := <-notifyDone:
+				if notified > 0 {
+					time.Sleep(shutdownKickDelay + 100*time.Millisecond)
+				}
+			case <-time.After(1200 * time.Millisecond):
+				fmt.Println("玩家关闭通知超时，继续强制关闭监听")
+			}
+			srv.Shutdown()
+			if videoRecorder != nil {
+				if err := videoRecorder.Close(); err != nil {
+					fmt.Printf("[video] finalize failed: %v\n", err)
+				}
+				videoPath := videoRecorder.VideoPath()
+				if _, err := os.Stat(videoPath); err == nil {
+					fmt.Printf("[video] saved match video: %s (frames=%d dropped=%d)\n", videoPath, videoRecorder.FrameCount(), videoRecorder.DroppedCount())
+				} else {
+					fmt.Printf("[video] recording session kept at: %s (frames=%d dropped=%d)\n", videoRecorder.SessionDir(), videoRecorder.FrameCount(), videoRecorder.DroppedCount())
+				}
+			}
 			saveState()
 			saveOps()
+			if serverCore != nil {
+				serverCore.StopAll()
+			}
 			_ = detailLog.Close()
 			_ = recorder.Close()
 			os.Exit(0)
 		})
 	}
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signalCh)
+	go func() {
+		sig, ok := <-signalCh
+		if !ok {
+			return
+		}
+		stopServer(fmt.Sprintf("收到信号 %s，正在保存并关闭服务器", sig))
+	}()
 	if apiSrv != nil {
 		apiSrv.SetSummonFunc(func(typeID int16, x, y float32, team byte) error {
 			ent, err := wld.AddEntity(typeID, x, y, world.TeamID(team))
@@ -2327,6 +3106,7 @@ func main() {
 			srv.SetTranslatedConnLog(loaded.Control.TranslatedConnLogEnabled)
 			srv.SetJoinLeaveChatEnabled(loaded.Personalization.JoinLeaveChatEnabled)
 			runtimeJoinLeaveChatEnabled.Store(loaded.Personalization.JoinLeaveChatEnabled)
+			runtimeTraceCfg.Store(loaded.Tracepoints)
 			runtimePlayerNamePrefix.Store(loaded.Personalization.PlayerNamePrefix)
 			runtimePlayerNameSuffix.Store(loaded.Personalization.PlayerNameSuffix)
 			runtimePlayerBindPrefixEnabled.Store(loaded.Personalization.PlayerBindPrefixEnabled)
@@ -2363,6 +3143,9 @@ func main() {
 			if loaded.Personalization.PlayerIdentityFile != cfg.Personalization.PlayerIdentityFile && cfg.Control.ReloadLogEnabled {
 				fmt.Printf("[config] player_identity_file changed to %s, restart required to reopen identity file\n", loaded.Personalization.PlayerIdentityFile)
 			}
+			if loaded.Tracepoints.File != cfg.Tracepoints.File && cfg.Control.ReloadLogEnabled {
+				fmt.Printf("[config] tracepoints file changed to %s, restart required to reopen trace log file\n", loaded.Tracepoints.File)
+			}
 
 			if apiSrv != nil {
 				applyAPIKeySet(apiSrv, loaded.API.Keys)
@@ -2371,6 +3154,12 @@ func main() {
 				if cfg.Control.ReloadLogEnabled {
 					fmt.Printf("[config] api enabled/bind changed (enabled=%v bind=%s), restart required to apply\n", loaded.API.Enabled, loaded.API.Bind)
 				}
+			}
+			if err := applyAdmissionPolicy(loaded); err != nil {
+				if cfg.Control.ReloadLogEnabled {
+					fmt.Printf("[config] reload failed: %v\n", err)
+				}
+				continue
 			}
 
 			cfg = loaded
@@ -2443,7 +3232,7 @@ func main() {
 				os.Exit(1)
 			}
 		}()
-		serverCore.Core1.Run(time.Second / time.Duration(sim.DefaultTPS))
+		serverCore.Core1.Run(time.Second / time.Duration(gameTPS))
 	} else {
 		if err := srv.Serve(); err != nil {
 			fmt.Fprintf(os.Stderr, "服务器启动失败: %v\n", err)
@@ -2518,10 +3307,21 @@ func (s *worldState) get() string {
 	return s.current
 }
 
+func connRemoteIP(c *netserver.Conn) string {
+	if c == nil || c.RemoteAddr() == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(c.RemoteAddr().String())
+	if err != nil {
+		return c.RemoteAddr().String()
+	}
+	return host
+}
+
 func runConsole(
 	srv *netserver.Server,
 	state *worldState,
-	modMgr *java.Manager,
+	modMgr interface{},
 	apiSrv *api.Server,
 	scriptCtl *scriptController,
 	listenAddr string,
@@ -2551,6 +3351,7 @@ func runConsole(
 	if cfg.Personalization.StartupHelpEnabled {
 		printHelp(*cfg)
 	}
+	printBrandFooter()
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -2591,14 +3392,9 @@ func runConsole(
 				fmt.Println("mod 管理器未初始化")
 				continue
 			}
-			mods := modMgr.Mods()
-			if len(mods) == 0 {
-				fmt.Println("当前无 Java 模组（jar）")
-				continue
-			}
-			for _, m := range mods {
-				fmt.Printf("mod name=%s size=%d path=%s\n", m.Name, m.Size, m.Path)
-			}
+			fmt.Println("模组系统暂未实现")
+			continue
+
 		case "mod":
 			plugins, err := listScriptPlugins(cfg.Mods)
 			if err != nil {
@@ -2652,7 +3448,7 @@ func runConsole(
 				invalidateWorldCache()
 			}
 			fmt.Printf("地图已热加载: %s\n", next)
-			reloaded, failed := srv.ReloadWorldLiveForAllLegacy()
+			reloaded, failed := srv.ReloadWorldLiveForAll()
 			if reloaded == 0 && failed == 0 {
 				fmt.Println("已应用新地图（当前无在线玩家）")
 			} else {
@@ -2777,10 +3573,23 @@ func runConsole(
 		case "sync":
 			if len(parts) == 1 || strings.EqualFold(parts[1], "status") {
 				entityMs, stateMs := srv.SnapshotIntervalsMs()
-				fmt.Printf("sync: entity=%dms state=%dms (config entity=%dms state=%dms)\n", entityMs, stateMs, cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
+				fmt.Printf("sync: strategy=%s entity=%dms state=%dms (config entity=%dms state=%dms)\n", cfg.Sync.Strategy, entityMs, stateMs, cfg.Net.SyncEntityMs, cfg.Net.SyncStateMs)
 				continue
 			}
 			switch strings.ToLower(parts[1]) {
+			case "strategy":
+				if len(parts) < 3 {
+					fmt.Println("用法: sync strategy official|static|dynamic")
+					continue
+				}
+				strategy, ok := config.ParseAuthoritySyncStrategy(parts[2])
+				if !ok {
+					fmt.Println("参数错误: strategy 只能是 official|static|dynamic")
+					continue
+				}
+				cfg.Sync.Strategy = strategy
+				_ = saveConfig()
+				fmt.Printf("已设置 sync.strategy=%s（已写入 sidecar 配置）\n", cfg.Sync.Strategy)
 			case "entity":
 				if len(parts) < 3 {
 					fmt.Println("用法: sync entity <ms>")
@@ -2836,7 +3645,7 @@ func runConsole(
 				_ = saveConfig()
 				fmt.Printf("已恢复默认 sync: entity=%dms state=%dms（已写入配置）\n", e, s)
 			default:
-				fmt.Println("用法: sync status | sync entity <ms> | sync state <ms> | sync set <entityMs> <stateMs> | sync default")
+				fmt.Println("用法: sync status | sync strategy official|static|dynamic | sync entity <ms> | sync state <ms> | sync set <entityMs> <stateMs> | sync default")
 			}
 		case "vanilla":
 			if len(parts) == 1 || strings.EqualFold(parts[1], "status") {
@@ -3399,6 +4208,46 @@ func printHelp(cfg config.Config) {
 	fmt.Println("控制台命令（输入 `help <分类>` 或 `help all`）:")
 	fmt.Println("分类: basic vanilla runtime admin plugin script data scheduler persist net sync api chat close")
 	fmt.Println("提示: 输入 `help basic` 查看常用命令")
+}
+
+func printBrandFooter() {
+	displayName := strings.TrimSpace(buildinfo.DisplayName)
+	gameVersion := strings.TrimSpace(buildinfo.GameVersion)
+	externalVersion := strings.TrimSpace(buildinfo.Version)
+	qqGroup := strings.TrimSpace(buildinfo.QQGroup)
+	footer := strings.TrimSpace(buildinfo.FooterText)
+
+	if displayName == "" && gameVersion == "" && externalVersion == "" && qqGroup == "" && footer == "" {
+		return
+	}
+
+	const (
+		deepBlue  = "\x1b[34m"
+		lightBlue = "\x1b[94m"
+		purple    = "\x1b[35m"
+		pink      = "\x1b[95m"
+		reset     = "\x1b[0m"
+	)
+
+	fmt.Printf("%s========================================%s\n", purple, reset)
+	fmt.Println()
+	if displayName != "" {
+		fmt.Printf("%s名称：%s%s%s\n", deepBlue, lightBlue, displayName, reset)
+	}
+	if gameVersion != "" {
+		fmt.Printf("%s游戏版本: %s%s%s\n", deepBlue, lightBlue, gameVersion, reset)
+	}
+	if externalVersion != "" {
+		fmt.Printf("%s外部版本: %s%s%s\n", deepBlue, lightBlue, externalVersion, reset)
+	}
+	if qqGroup != "" {
+		fmt.Printf("%s加入qq群：%s%s%s\n", deepBlue, lightBlue, qqGroup, reset)
+	}
+	if footer != "" {
+		fmt.Printf("%s%s%s\n", pink, footer, reset)
+	}
+	fmt.Println()
+	fmt.Printf("%s========================================%s\n", purple, reset)
 }
 
 func printHelpCategory(cfg config.Config, category string) {
@@ -4165,18 +5014,22 @@ func logGroupedReactorExplosions(wld *world.World, evs []world.EntityEvent, grou
 }
 
 type unitTypeRef struct {
-	id int16
+	id   int16
+	name string
 }
 
 func (u unitTypeRef) ContentType() protocol.ContentType { return protocol.ContentUnit }
 func (u unitTypeRef) ID() int16                         { return u.id }
+func (u unitTypeRef) Name() string                      { return u.name }
 
 type bulletTypeRef struct {
-	id int16
+	id   int16
+	name string
 }
 
 func (b bulletTypeRef) ContentType() protocol.ContentType { return protocol.ContentBullet }
 func (b bulletTypeRef) ID() int16                         { return b.id }
+func (b bulletTypeRef) Name() string                      { return b.name }
 
 type itemRef struct {
 	id int16
@@ -4186,11 +5039,13 @@ func (i itemRef) ContentType() protocol.ContentType { return protocol.ContentIte
 func (i itemRef) ID() int16                         { return i.id }
 
 type blockRef struct {
-	id int16
+	id   int16
+	name string
 }
 
 func (b blockRef) ContentType() protocol.ContentType { return protocol.ContentBlock }
 func (b blockRef) ID() int16                         { return b.id }
+func (b blockRef) Name() string                      { return b.name }
 
 func broadcastSummonVisible(srv *netserver.Server, typeID int16, x, y float32, team byte) {
 	if srv == nil {
@@ -4208,7 +5063,7 @@ func broadcastUnitDestroy(srv *netserver.Server, entityID int32) {
 	if srv == nil || entityID == 0 {
 		return
 	}
-	srv.Broadcast(&protocol.Remote_Units_unitDestroy_52{Uid: entityID})
+	srv.Broadcast(&protocol.Remote_Units_unitDestroy_55{Uid: entityID})
 }
 
 func unpackTilePos(pos int32) (int32, int32) {
@@ -4219,7 +5074,7 @@ func broadcastSetTile(srv *netserver.Server, buildPos int32, blockID int16, rot 
 	if srv == nil || buildPos < 0 || blockID < 0 {
 		return
 	}
-	srv.Broadcast(&protocol.Remote_Tile_setTile_131{
+	srv.Broadcast(&protocol.Remote_Tile_setTile_140{
 		Tile:     protocol.TileBox{PosValue: buildPos},
 		Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},
 		Team:     protocol.Team{ID: team},
@@ -4227,12 +5082,50 @@ func broadcastSetTile(srv *netserver.Server, buildPos int32, blockID int16, rot 
 	})
 }
 
+func builderUnitForOwner(srv *netserver.Server, owner int32) protocol.Unit {
+	if srv == nil || owner == 0 {
+		return nil
+	}
+	for _, conn := range srv.ListConnectedConns() {
+		if conn == nil || conn.PlayerID() != owner || conn.UnitID() == 0 {
+			continue
+		}
+		return protocol.UnitBox{IDValue: conn.UnitID()}
+	}
+	return nil
+}
+
+func buildConstructConfigValue(wld *world.World, ev world.EntityEvent) any {
+	if wld == nil {
+		return ev.BuildConfig
+	}
+	if cfgValue, ok := wld.BuildingConfigPacked(ev.BuildPos); ok {
+		return cfgValue
+	}
+	return ev.BuildConfig
+}
+
+func broadcastBuildConstructedState(srv *netserver.Server, wld *world.World, ev world.EntityEvent) {
+	if srv == nil || ev.BuildPos < 0 || ev.BuildBlock <= 0 {
+		return
+	}
+	cfgValue := buildConstructConfigValue(wld, ev)
+	// Finish the client's ConstructBuild first. Sending setTile before this can
+	// leave the client stuck on build2 and cause later blockSnapshot mismatches.
+	broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam), builderUnitForOwner(srv, ev.BuildOwner), cfgValue)
+	broadcastSetTile(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam))
+	if cfgValue != nil {
+		srv.BroadcastTileConfig(ev.BuildPos, cfgValue, nil)
+	}
+	broadcastRelatedBlockSnapshots(srv, wld, ev.BuildPos)
+}
+
 func broadcastBuildBeginPlace(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte, config any) {
 	if srv == nil || buildPos < 0 || blockID <= 0 {
 		return
 	}
 	x, y := unpackTilePos(buildPos)
-	srv.Broadcast(&protocol.Remote_Build_beginPlace_124{
+	srv.Broadcast(&protocol.Remote_Build_beginPlace_133{
 		Unit:        nil,
 		Result:      protocol.BlockRef{BlkID: blockID, BlkName: ""},
 		Team:        protocol.Team{ID: team},
@@ -4248,7 +5141,7 @@ func broadcastBuildDeconstructBegin(srv *netserver.Server, buildPos int32, team 
 		return
 	}
 	x, y := unpackTilePos(buildPos)
-	srv.Broadcast(&protocol.Remote_Build_beginBreak_123{
+	srv.Broadcast(&protocol.Remote_Build_beginBreak_132{
 		Unit: nil,
 		Team: protocol.Team{ID: team},
 		X:    x,
@@ -4263,10 +5156,19 @@ func broadcastBuildDestroyed(srv *netserver.Server, buildPos int32, blockID int1
 	if blockID < 0 {
 		blockID = 0
 	}
-	srv.Broadcast(&protocol.Remote_ConstructBlock_deconstructFinish_136{
+	srv.Broadcast(&protocol.Remote_ConstructBlock_deconstructFinish_145{
 		Tile:    protocol.TileBox{PosValue: buildPos},
 		Block:   protocol.BlockRef{BlkID: blockID, BlkName: ""},
 		Builder: nil,
+	})
+}
+
+func broadcastTileBuildDestroyed(srv *netserver.Server, buildPos int32) {
+	if srv == nil || buildPos < 0 {
+		return
+	}
+	srv.Broadcast(&protocol.Remote_Tile_buildDestroyed_143{
+		Build: protocol.BuildingBox{PosValue: buildPos},
 	})
 }
 
@@ -4274,7 +5176,7 @@ func broadcastBuildHealthUpdate(srv *netserver.Server, items []int32) {
 	if srv == nil || len(items) == 0 {
 		return
 	}
-	srv.Broadcast(&protocol.Remote_Tile_buildHealthUpdate_135{
+	srv.Broadcast(&protocol.Remote_Tile_buildHealthUpdate_144{
 		Buildings: protocol.IntSeq{Items: items},
 	})
 }
@@ -4292,49 +5194,75 @@ func broadcastEffectReliable(srv *netserver.Server, effectID int16, x, y, rotati
 	})
 }
 
-func broadcastSetTileItems(srv *netserver.Server, itemID int16, amount int32, positions []int32) {
-	if srv == nil || itemID < 0 || len(positions) == 0 {
+func broadcastTakeItems(srv *netserver.Server, buildPos int32, itemID int16, amount int32, unitID int32) {
+	if srv == nil || buildPos < 0 || itemID < 0 || amount <= 0 || unitID == 0 {
 		return
 	}
-	srv.Broadcast(&protocol.Remote_InputHandler_setTileItems_62{
-		Item:      protocol.ItemRef{ItmID: itemID},
-		Amount:    amount,
-		Positions: append([]int32(nil), positions...),
+	srv.BroadcastUnreliable(&protocol.Remote_InputHandler_takeItems_61{
+		Build:  protocol.BuildingBox{PosValue: buildPos},
+		Item:   protocol.ItemRef{ItmID: itemID},
+		Amount: amount,
+		To:     protocol.UnitBox{IDValue: unitID},
 	})
 }
 
-func buildBlockSnapshotPackets(snaps []world.BlockSyncSnapshot) []*protocol.Remote_NetClient_blockSnapshot_7 {
+func broadcastTransferItemToUnit(srv *netserver.Server, itemID int16, x, y float32, unitID int32) {
+	if srv == nil || itemID < 0 || unitID == 0 {
+		return
+	}
+	srv.BroadcastUnreliable(&protocol.Remote_InputHandler_transferItemToUnit_62{
+		Item: protocol.ItemRef{ItmID: itemID},
+		X:    x,
+		Y:    y,
+		To:   &protocol.EntityBox{IDValue: unitID},
+	})
+}
+
+func broadcastTransferItemTo(srv *netserver.Server, unitID int32, itemID int16, amount int32, x, y float32, buildPos int32) {
+	if srv == nil || unitID == 0 || buildPos < 0 || itemID < 0 || amount <= 0 {
+		return
+	}
+	srv.BroadcastUnreliable(&protocol.Remote_InputHandler_transferItemTo_71{
+		Unit:   protocol.UnitBox{IDValue: unitID},
+		Item:   protocol.ItemRef{ItmID: itemID},
+		Amount: amount,
+		X:      x,
+		Y:      y,
+		Build:  protocol.BuildingBox{PosValue: buildPos},
+	})
+}
+
+func broadcastDropItem(srv *netserver.Server, playerID int32, angle float32) {
+	if srv == nil || playerID == 0 {
+		return
+	}
+	srv.BroadcastUnreliable(&protocol.Remote_InputHandler_dropItem_88{
+		Player: &protocol.EntityBox{IDValue: playerID},
+		Angle:  angle,
+	})
+}
+
+func buildBlockSnapshotPackets(snaps []world.BlockSyncSnapshot) []*protocol.Remote_NetClient_blockSnapshot_34 {
 	if len(snaps) == 0 {
 		return nil
 	}
-	const maxSnapshotSize = 800
-	packets := make([]*protocol.Remote_NetClient_blockSnapshot_7, 0, 4)
-	writer := protocol.NewWriter()
-	var sent int16
-	flush := func() {
-		if sent <= 0 {
-			return
-		}
-		packets = append(packets, &protocol.Remote_NetClient_blockSnapshot_7{
-			Amount: sent,
-			Data:   append([]byte(nil), writer.Bytes()...),
-		})
-		writer = protocol.NewWriter()
-		sent = 0
-	}
+	// The official client aborts the rest of a blockSnapshot packet as soon as it
+	// hits one mismatched or missing building. Keep each snapshot isolated so one
+	// bad tile cannot poison unrelated turret/container updates in the same batch.
+	packets := make([]*protocol.Remote_NetClient_blockSnapshot_34, 0, len(snaps))
 	for _, snap := range snaps {
 		if snap.BlockID <= 0 || len(snap.Data) == 0 {
 			continue
 		}
+		writer := protocol.NewWriter()
 		_ = writer.WriteInt32(snap.Pos)
 		_ = writer.WriteInt16(snap.BlockID)
 		_ = writer.WriteBytes(snap.Data)
-		sent++
-		if len(writer.Bytes()) > maxSnapshotSize {
-			flush()
-		}
+		packets = append(packets, &protocol.Remote_NetClient_blockSnapshot_34{
+			Amount: 1,
+			Data:   append([]byte(nil), writer.Bytes()...),
+		})
 	}
-	flush()
 	return packets
 }
 
@@ -4342,7 +5270,247 @@ func sendBlockSnapshotsToConn(conn *netserver.Conn, wld *world.World) {
 	if conn == nil || wld == nil {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshots()) {
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsLiveOnly()) {
+		_ = conn.SendAsync(packet)
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsLiveOnly()) {
+		_ = conn.SendAsync(packet)
+	}
+}
+
+func newTileConfigPacket(pos int32, value any) (*protocol.Remote_InputHandler_tileConfig_90, bool) {
+	clonedValue, err := protocol.CloneObjectValue(value)
+	if err != nil {
+		stdlog.Printf("[tileconfig] skip pos=%d err=%v type=%T", pos, err, value)
+		return nil, false
+	}
+	return &protocol.Remote_InputHandler_tileConfig_90{
+		Build: protocol.BuildingBox{PosValue: pos},
+		Value: clonedValue,
+	}, true
+}
+
+func shouldSendTileConfigForPacked(wld *world.World, pos int32, value any) bool {
+	if wld == nil || value == nil {
+		return false
+	}
+	if !isSupportedTileConfigValue(value) {
+		return false
+	}
+	info, ok := wld.BuildingInfoPacked(pos)
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(info.Name)) {
+	case "item-source",
+		"liquid-source",
+		"sorter",
+		"inverted-sorter",
+		"duct-router",
+		"surge-router",
+		"unloader",
+		"duct-unloader",
+		"payload-router",
+		"reinforced-payload-router",
+		"power-node",
+		"power-node-large",
+		"surge-tower",
+		"beam-link",
+		"power-source",
+		"bridge-conveyor",
+		"phase-conveyor",
+		"bridge-conduit",
+		"phase-conduit",
+		"mass-driver",
+		"payload-mass-driver",
+		"large-payload-mass-driver":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedTileConfigValue(value any) bool {
+	switch value.(type) {
+	case protocol.ItemRef,
+		protocol.Point2,
+		[]protocol.Point2,
+		protocol.Content:
+		return true
+	default:
+		return false
+	}
+}
+
+func sendBlockSnapshotsForPackedToConn(conn *netserver.Conn, wld *world.World, packedPositions []int32) {
+	if conn == nil || wld == nil || len(packedPositions) == 0 {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
+		_ = conn.SendAsync(packet)
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
+		_ = conn.SendAsync(packet)
+	}
+}
+
+func expandRelatedBlockSyncPackedPositions(wld *world.World, packedPositions []int32) []int32 {
+	if wld == nil || len(packedPositions) == 0 {
+		return nil
+	}
+	seen := make(map[int32]struct{}, len(packedPositions)*2)
+	out := make([]int32, 0, len(packedPositions)*2)
+	add := func(pos int32) {
+		if pos < 0 {
+			return
+		}
+		if _, ok := seen[pos]; ok {
+			return
+		}
+		seen[pos] = struct{}{}
+		out = append(out, pos)
+	}
+	for _, packed := range packedPositions {
+		add(packed)
+		for _, related := range wld.RelatedBlockSyncPackedPositions(packed) {
+			add(related)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func sendRequestedBlockSnapshotToConn(conn *netserver.Conn, wld *world.World, pos int32) {
+	if conn == nil || wld == nil || pos < 0 {
+		return
+	}
+	// Match vanilla NetServer.requestBlockSnapshot(): only send writeSync bytes for
+	// the requested building. Re-sending construct/setTile here races blockSnapshot
+	// against fresh build creation and can wipe client-side inventory/ammo views.
+	sendBlockSnapshotsForPackedToConn(conn, wld, []int32{pos})
+}
+
+func authoritativeTileStatePacketsForPacked(wld *world.World, pos int32) []any {
+	if wld == nil || pos < 0 {
+		return nil
+	}
+	if wld.BlockSyncSuppressedPacked(pos) {
+		return []any{
+			&protocol.Remote_Tile_buildDestroyed_143{
+				Build: protocol.BuildingBox{PosValue: pos},
+			},
+			&protocol.Remote_Tile_setTile_140{
+				Tile:     protocol.TileBox{PosValue: pos},
+				Block:    protocol.BlockRef{BlkID: 0, BlkName: ""},
+				Team:     protocol.Team{ID: 0},
+				Rotation: 0,
+			},
+			&protocol.Remote_ConstructBlock_deconstructFinish_145{
+				Tile:    protocol.TileBox{PosValue: pos},
+				Block:   protocol.BlockRef{BlkID: 0, BlkName: ""},
+				Builder: nil,
+			},
+		}
+	}
+	liveModel := wld.CloneModel()
+	if liveModel == nil {
+		return nil
+	}
+	tile, ok := tileAtPacked(liveModel, pos)
+	if !ok {
+		return nil
+	}
+	if tile == nil || tile.Block <= 0 || tile.Build == nil {
+		return []any{
+			&protocol.Remote_Tile_buildDestroyed_143{
+				Build: protocol.BuildingBox{PosValue: pos},
+			},
+			&protocol.Remote_Tile_setTile_140{
+				Tile:     protocol.TileBox{PosValue: pos},
+				Block:    protocol.BlockRef{BlkID: 0, BlkName: ""},
+				Team:     protocol.Team{ID: 0},
+				Rotation: 0,
+			},
+			&protocol.Remote_ConstructBlock_deconstructFinish_145{
+				Tile:    protocol.TileBox{PosValue: pos},
+				Block:   protocol.BlockRef{BlkID: 0, BlkName: ""},
+				Builder: nil,
+			},
+		}
+	}
+
+	team := tile.Team
+	if tile.Build.Team != 0 {
+		team = tile.Build.Team
+	}
+	hp := tile.Build.Health
+	if hp <= 0 {
+		hp = tile.Build.MaxHealth
+	}
+	if hp <= 0 {
+		hp = 1000
+	}
+
+	cfgValue, cfgOK := wld.BuildingConfigPacked(pos)
+	packets := []any{
+		&protocol.Remote_ConstructBlock_constructFinish_146{
+			Tile:     protocol.TileBox{PosValue: pos},
+			Block:    protocol.BlockRef{BlkID: int16(tile.Block), BlkName: ""},
+			Builder:  nil,
+			Rotation: tile.Rotation & 0x3,
+			Team:     protocol.Team{ID: byte(team)},
+			Config:   cfgValue,
+		},
+		&protocol.Remote_Tile_setTile_140{
+			Tile:     protocol.TileBox{PosValue: pos},
+			Block:    protocol.BlockRef{BlkID: int16(tile.Block), BlkName: ""},
+			Team:     protocol.Team{ID: byte(team)},
+			Rotation: int32(tile.Rotation) & 0x3,
+		},
+		&protocol.Remote_Tile_buildHealthUpdate_144{
+			Buildings: protocol.IntSeq{
+				Items: []int32{pos, int32(math.Float32bits(hp))},
+			},
+		},
+	}
+	if cfgOK {
+		if packet, ok := newTileConfigPacket(pos, cfgValue); ok {
+			packets = append(packets, packet)
+		}
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly([]int32{pos})) {
+		packets = append(packets, packet)
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly([]int32{pos})) {
+		packets = append(packets, packet)
+	}
+	return packets
+}
+
+func sendAuthoritativeTileStateToConn(conn *netserver.Conn, wld *world.World, pos int32) {
+	if conn == nil || wld == nil {
+		return
+	}
+	for _, packet := range authoritativeTileStatePacketsForPacked(wld, pos) {
+		_ = conn.SendAsync(packet)
+	}
+	sendSharedTeamItemStateForPackedToConn(conn, wld, pos)
+}
+
+func sharedTeamItemStatePacketsForPacked(wld *world.World, pos int32) []any {
+	// Official NetServer does not emit InputHandler.setTileItems packets for
+	// corrective sync. Keeping this path disabled avoids overwriting client item
+	// modules with stale team totals.
+	_ = wld
+	_ = pos
+	return nil
+}
+
+func sendSharedTeamItemStateForPackedToConn(conn *netserver.Conn, wld *world.World, pos int32) {
+	if conn == nil || wld == nil {
+		return
+	}
+	for _, packet := range sharedTeamItemStatePacketsForPacked(wld, pos) {
 		_ = conn.SendAsync(packet)
 	}
 }
@@ -4351,7 +5519,69 @@ func broadcastBlockSnapshots(srv *netserver.Server, wld *world.World) {
 	if srv == nil || wld == nil {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshots()) {
+	// The world stream already delivered msav inline sync bytes on load/connect.
+	// Periodic overlays must be generated from current runtime state only, or they
+	// can replay stale map bytes back onto active clients.
+	for _, packet := range buildBlockSnapshotPackets(wld.PeriodicBlockSyncSnapshotsLiveOnly()) {
+		srv.BroadcastUnreliable(packet)
+	}
+}
+
+func broadcastBlockSnapshotsForPacked(srv *netserver.Server, wld *world.World, packedPositions []int32) {
+	if srv == nil || wld == nil || len(packedPositions) == 0 {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
+		srv.Broadcast(packet)
+	}
+}
+
+func broadcastItemBlockSnapshotsForPacked(srv *netserver.Server, wld *world.World, packedPositions []int32) {
+	if srv == nil || wld == nil || len(packedPositions) == 0 {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
+		srv.Broadcast(packet)
+	}
+}
+
+func broadcastItemTurretAmmoSnapshotsForPacked(srv *netserver.Server, wld *world.World, packedPositions []int32) {
+	if srv == nil || wld == nil || len(packedPositions) == 0 {
+		return
+	}
+	if wld.BlockSyncLogsEnabled() {
+		for _, packed := range packedPositions {
+			stdlog.Printf("[turret-ammo] broadcast %s", wld.DebugItemTurretAmmoPacked(packed))
+		}
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
+		srv.Broadcast(packet)
+	}
+}
+
+func broadcastRelatedBlockSnapshots(srv *netserver.Server, wld *world.World, packedPos int32) {
+	if srv == nil || wld == nil || packedPos < 0 {
+		return
+	}
+	positions := wld.RelatedBlockSyncPackedPositions(packedPos)
+	broadcastBlockSnapshotsForPacked(srv, wld, positions)
+	broadcastItemTurretAmmoSnapshotsForPacked(srv, wld, positions)
+}
+
+func broadcastUnitFactorySnapshots(srv *netserver.Server, wld *world.World) {
+	if srv == nil || wld == nil {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.UnitFactoryBlockSyncSnapshotsLiveOnly()) {
+		srv.BroadcastUnreliable(packet)
+	}
+}
+
+func broadcastPayloadProcessorSnapshots(srv *netserver.Server, wld *world.World) {
+	if srv == nil || wld == nil {
+		return
+	}
+	for _, packet := range buildBlockSnapshotPackets(wld.PayloadProcessorBlockSyncSnapshotsLiveOnly()) {
 		srv.BroadcastUnreliable(packet)
 	}
 }
@@ -4372,7 +5602,7 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 		if b.BlockID <= 0 {
 			continue
 		}
-		_ = conn.SendAsync(&protocol.Remote_Tile_setTile_131{
+		_ = conn.SendAsync(&protocol.Remote_Tile_setTile_140{
 			Tile:     protocol.TileBox{PosValue: b.Pos},
 			Block:    protocol.BlockRef{BlkID: b.BlockID, BlkName: ""},
 			Team:     protocol.Team{ID: byte(b.Team)},
@@ -4384,12 +5614,12 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 		}
 		health = append(health, b.Pos, int32(math.Float32bits(hp)))
 		if len(health) >= 256 {
-			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
 				Buildings: protocol.IntSeq{Items: append([]int32(nil), health...)},
 			})
 			health = health[:0]
 		}
-		if cfgValue, ok := wld.BuildingConfigPacked(b.Pos); ok {
+		if cfgValue, ok := wld.BuildingConfigPacked(b.Pos); ok && shouldSendTileConfigForPacked(wld, b.Pos, cfgValue) {
 			configs = append(configs, buildConfigState{
 				pos:   b.Pos,
 				value: cfgValue,
@@ -4400,52 +5630,125 @@ func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
 		}
 	}
 	if len(health) > 0 {
-		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
 			Buildings: protocol.IntSeq{Items: health},
 		})
 	}
+	sendBlockSnapshotsToConn(conn, wld)
 	for i, cfg := range configs {
-		_ = conn.SendAsync(&protocol.Remote_InputHandler_tileConfig_127{
-			Player: nil,
-			Build:  protocol.BuildingBox{PosValue: cfg.pos},
-			Value:  cfg.value,
-		})
+		if packet, ok := newTileConfigPacket(cfg.pos, cfg.value); ok {
+			_ = conn.SendAsync(packet)
+		}
 		if i > 0 && i%128 == 0 {
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	sendBlockSnapshotsToConn(conn, wld)
-	for _, snapshot := range wld.TeamCoreItemSnapshots() {
-		positions := wld.TeamItemSyncPositions(snapshot.Team)
-		if len(positions) == 0 {
+}
+
+func syncLiveWorldRuntimeToConn(conn *netserver.Conn, wld *world.World) {
+	if conn == nil || wld == nil {
+		return
+	}
+	builds := wld.BuildSyncSnapshot()
+	health := make([]int32, 0, 256)
+	unsupportedPositions := make([]int32, 0, 64)
+	type buildConfigState struct {
+		pos   int32
+		value any
+	}
+	configs := make([]buildConfigState, 0, 64)
+	for i := range builds {
+		b := builds[i]
+		if b.BlockID <= 0 {
 			continue
 		}
-		for _, stack := range snapshot.Items {
-			_ = conn.SendAsync(&protocol.Remote_InputHandler_setTileItems_62{
-				Item:      protocol.ItemRef{ItmID: int16(stack.Item)},
-				Amount:    stack.Amount,
-				Positions: append([]int32(nil), positions...),
+		if wld.HasLiveMapStreamPayloadPacked(b.Pos) {
+			continue
+		}
+		unsupportedPositions = append(unsupportedPositions, b.Pos)
+		hp := b.Health
+		if hp <= 0 {
+			hp = 1000
+		}
+		health = append(health, b.Pos, int32(math.Float32bits(hp)))
+		if len(health) >= 256 {
+			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
+				Buildings: protocol.IntSeq{Items: append([]int32(nil), health...)},
 			})
+			health = health[:0]
+		}
+		if cfgValue, ok := wld.BuildingConfigPacked(b.Pos); ok && shouldSendTileConfigForPacked(wld, b.Pos, cfgValue) {
+			configs = append(configs, buildConfigState{
+				pos:   b.Pos,
+				value: cfgValue,
+			})
+		}
+		if i > 0 && i%128 == 0 {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if len(health) > 0 {
+		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
+			Buildings: protocol.IntSeq{Items: health},
+		})
+	}
+	sendBlockSnapshotsForPackedToConn(conn, wld, unsupportedPositions)
+	for i, cfg := range configs {
+		if packet, ok := newTileConfigPacket(cfg.pos, cfg.value); ok {
+			_ = conn.SendAsync(packet)
+		}
+		if i > 0 && i%128 == 0 {
+			time.Sleep(5 * time.Millisecond)
 		}
 	}
 }
 
 func syncCoreItemsToConn(conn *netserver.Conn, wld *world.World) {
+	// Mindustry-157 does not use InputHandler.setTileItems for authoritative
+	// correction. Core inventory travels in stateSnapshot(coreData), and building
+	// inventory/ammo travels in blockSnapshot(writeSync).
+	_ = conn
+	_ = wld
+}
+
+func syncAuthoritativeWorldToConn(srv *netserver.Server, conn *netserver.Conn, wld *world.World, baseModel *world.WorldModel, strategy config.AuthoritySyncStrategy) {
 	if conn == nil || wld == nil {
 		return
 	}
-	for _, snapshot := range wld.TeamCoreItemSnapshots() {
-		positions := wld.TeamItemSyncPositions(snapshot.Team)
-		if len(positions) == 0 {
-			continue
+	if conn.UsesLiveWorldStream() {
+		if srv != nil {
+			_ = srv.SyncEntitySnapshotsToConn(conn)
 		}
-		for _, stack := range snapshot.Items {
-			_ = conn.SendAsync(&protocol.Remote_InputHandler_setTileItems_62{
-				Item:      protocol.ItemRef{ItmID: int16(stack.Item)},
-				Amount:    stack.Amount,
-				Positions: append([]int32(nil), positions...),
-			})
+		return
+	}
+	liveModel := wld.CloneModel()
+	if liveModel == nil {
+		return
+	}
+	if baseModel == nil || baseModel.Width != liveModel.Width || baseModel.Height != liveModel.Height {
+		syncCurrentWorldToConn(conn, wld)
+		if srv != nil {
+			_ = srv.SyncEntitySnapshotsToConn(conn)
 		}
+		return
+	}
+	switch strategy {
+	case config.AuthoritySyncOfficial:
+		// Vanilla writeWorld already contains current live map state.
+		// Our template stream does not, so the closest emulation is:
+		// template world stream + diff correction + live block snapshots.
+		syncWorldDiffToConn(conn, wld, baseModel)
+	case config.AuthoritySyncStatic:
+		// Static mode only reconciles differences against the template map stream.
+		syncWorldDiffToConn(conn, wld, baseModel)
+	default:
+		// Dynamic mode previously replayed every live build through setTile/tileConfig,
+		// which could reset factory/progress runtime on clients. Keep it on the
+		// safer diff + blockSnapshot path until we have a byte-perfect live map writer.
+		syncWorldDiffToConn(conn, wld, baseModel)
+	}
+	if srv != nil {
+		_ = srv.SyncEntitySnapshotsToConn(conn)
 	}
 }
 
@@ -4487,6 +5790,7 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 	sort.Slice(positions, func(i, j int) bool { return positions[i] < positions[j] })
 
 	health := make([]int32, 0, 256)
+	changedPacked := make([]int32, 0, 256)
 	for i, pos := range positions {
 		baseState, baseOK := baseByPos[pos]
 		liveState, liveOK := liveByPos[pos]
@@ -4500,7 +5804,12 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 		}
 
 		if !liveOK || liveState.BlockID <= 0 {
-			_ = conn.SendAsync(&protocol.Remote_Tile_setTile_131{
+			if baseOK && baseState.BlockID > 0 {
+				_ = conn.SendAsync(&protocol.Remote_Tile_buildDestroyed_143{
+					Build: protocol.BuildingBox{PosValue: pos},
+				})
+			}
+			_ = conn.SendAsync(&protocol.Remote_Tile_setTile_140{
 				Tile:     protocol.TileBox{PosValue: pos},
 				Block:    protocol.BlockRef{BlkID: 0, BlkName: ""},
 				Team:     protocol.Team{ID: 0},
@@ -4510,15 +5819,31 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 			if baseOK {
 				blockID = baseState.BlockID
 			}
-			_ = conn.SendAsync(&protocol.Remote_ConstructBlock_deconstructFinish_136{
+			_ = conn.SendAsync(&protocol.Remote_ConstructBlock_deconstructFinish_145{
 				Tile:    protocol.TileBox{PosValue: pos},
 				Block:   protocol.BlockRef{BlkID: blockID, BlkName: ""},
 				Builder: nil,
 			})
+			changedPacked = append(changedPacked, pos)
 			continue
 		}
 
-		_ = conn.SendAsync(&protocol.Remote_Tile_setTile_131{
+		var cfgValue any
+		cfgOK := false
+		if tile, ok := tileAtPacked(liveModel, pos); ok && tile != nil {
+			cfgValue, cfgOK = decodeTileConfigValue(tile)
+		}
+		if modelTileIsConstructLike(baseModel, pos) {
+			_ = conn.SendAsync(&protocol.Remote_ConstructBlock_constructFinish_146{
+				Tile:     protocol.TileBox{PosValue: pos},
+				Block:    protocol.BlockRef{BlkID: liveState.BlockID, BlkName: ""},
+				Builder:  nil,
+				Rotation: liveState.Rotation & 0x3,
+				Team:     protocol.Team{ID: byte(liveState.Team)},
+				Config:   cfgValue,
+			})
+		}
+		_ = conn.SendAsync(&protocol.Remote_Tile_setTile_140{
 			Tile:     protocol.TileBox{PosValue: pos},
 			Block:    protocol.BlockRef{BlkID: liveState.BlockID, BlkName: ""},
 			Team:     protocol.Team{ID: byte(liveState.Team)},
@@ -4534,16 +5859,15 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 				hp = 1000
 			}
 			health = append(health, pos, int32(math.Float32bits(hp)))
-			if cfgValue, ok := decodeTileConfigValue(tile); ok || !sameTileConfigAtPos(baseModel, liveModel, pos) {
-				_ = conn.SendAsync(&protocol.Remote_InputHandler_tileConfig_127{
-					Player: nil,
-					Build:  protocol.BuildingBox{PosValue: pos},
-					Value:  cfgValue,
-				})
+			if (cfgOK || !sameTileConfigAtPos(baseModel, liveModel, pos)) && shouldSendTileConfigForPacked(wld, pos, cfgValue) {
+				if packet, ok := newTileConfigPacket(pos, cfgValue); ok {
+					_ = conn.SendAsync(packet)
+				}
 			}
+			changedPacked = append(changedPacked, pos)
 		}
 		if len(health) >= 256 {
-			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
 				Buildings: protocol.IntSeq{Items: append([]int32(nil), health...)},
 			})
 			health = health[:0]
@@ -4553,10 +5877,15 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 		}
 	}
 	if len(health) > 0 {
-		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_135{
+		_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
 			Buildings: protocol.IntSeq{Items: health},
 		})
 	}
+	sendBlockSnapshotsForPackedToConn(conn, wld, expandRelatedBlockSyncPackedPositions(wld, changedPacked))
+	// The template world stream replays the .msav baseline. Structural diff only
+	// updates changed tiles; unchanged conveyors, unloaders, containers, turrets,
+	// crafters and factories still need live writeSync bytes so /sync and initial
+	// connect do not roll item/progress/ammo state back to map-load values.
 	sendBlockSnapshotsToConn(conn, wld)
 	syncCoreItemsToConn(conn, wld)
 }
@@ -4568,22 +5897,26 @@ func buildSyncSnapshotFromModel(model *world.WorldModel) []world.BuildSyncState 
 	out := make([]world.BuildSyncState, 0, len(model.Tiles)/4)
 	for i := range model.Tiles {
 		tile := model.Tiles[i]
-		if tile.Block <= 0 {
+		if tile.Block <= 0 || tile.Build == nil {
 			continue
 		}
-		if tile.Team == 0 && tile.Build == nil {
+		if tile.Build.X != tile.X || tile.Build.Y != tile.Y {
 			continue
 		}
 		hp := float32(1000)
 		if tile.Build != nil && tile.Build.Health > 0 {
 			hp = tile.Build.Health
 		}
+		team := tile.Team
+		if tile.Build != nil && tile.Build.Team != 0 {
+			team = tile.Build.Team
+		}
 		out = append(out, world.BuildSyncState{
 			Pos:      protocol.PackPoint2(int32(tile.X), int32(tile.Y)),
 			X:        int32(tile.X),
 			Y:        int32(tile.Y),
 			BlockID:  int16(tile.Block),
-			Team:     tile.Team,
+			Team:     team,
 			Rotation: tile.Rotation,
 			Health:   hp,
 		})
@@ -4617,6 +5950,27 @@ func decodeTileConfigValue(tile *world.Tile) (any, bool) {
 	return value, true
 }
 
+func isConstructLikeBlockName(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !strings.HasPrefix(name, "build") || len(name) <= len("build") {
+		return false
+	}
+	for _, r := range name[len("build"):] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func modelTileIsConstructLike(model *world.WorldModel, pos int32) bool {
+	tile, ok := tileAtPacked(model, pos)
+	if !ok || tile == nil || tile.Block <= 0 || model == nil {
+		return false
+	}
+	return isConstructLikeBlockName(model.BlockNames[int16(tile.Block)])
+}
+
 func sameTileConfigAtPos(baseModel, liveModel *world.WorldModel, pos int32) bool {
 	baseTile, baseOK := tileAtPacked(baseModel, pos)
 	liveTile, liveOK := tileAtPacked(liveModel, pos)
@@ -4637,38 +5991,13 @@ func sameBuildHealth(a, b float32) bool {
 	return math.Abs(float64(a-b)) < 0.01
 }
 
-func runtimeRulesTeamID(value string) (int, bool) {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return 0, false
-	}
-	if n, err := strconv.Atoi(value); err == nil && n >= 0 && n <= 255 {
-		return n, true
-	}
-	switch value {
-	case "derelict":
-		return 0, true
-	case "sharded":
-		return 1, true
-	case "crux":
-		return 2, true
-	case "malis":
-		return 3, true
-	case "green":
-		return 4, true
-	case "blue":
-		return 5, true
-	default:
-		return 0, false
-	}
-}
-
-func buildRuntimeRulesRaw(wld *world.World) string {
+func buildRuntimeRulesRaw(wld *world.World, mapPath string) string {
 	merged := map[string]any{}
 	if wld == nil {
 		return "{}"
 	}
-	if model := wld.Model(); model != nil && model.Tags != nil {
+	model := wld.Model()
+	if model != nil && model.Tags != nil {
 		if raw := strings.TrimSpace(model.Tags["rules"]); raw != "" {
 			_ = json.Unmarshal([]byte(raw), &merged)
 		}
@@ -4692,6 +6021,8 @@ func buildRuntimeRulesRaw(wld *world.World) string {
 	merged["infiniteResources"] = rules.InfiniteResources
 	merged["waves"] = rules.Waves
 	merged["waveTimer"] = rules.WaveTimer
+	merged["airUseSpawns"] = rules.AirUseSpawns
+	merged["wavesSpawnAtCores"] = rules.WavesSpawnAtCores
 	merged["waveSpacing"] = rules.WaveSpacing
 	merged["pvp"] = rules.Pvp
 	merged["attackMode"] = rules.AttackMode
@@ -4702,31 +6033,11 @@ func buildRuntimeRulesRaw(wld *world.World) string {
 	merged["unitBuildSpeedMultiplier"] = rules.UnitBuildSpeedMultiplier
 	merged["deconstructRefundMultiplier"] = rules.DeconstructRefundMultiplier
 	merged["enemyCoreBuildRadius"] = rules.EnemyCoreBuildRadius
-	merged["defaultTeam"] = int(resolveConfiguredTeamID(rules.DefaultTeam, world.TeamID(1)))
-	merged["waveTeam"] = int(resolveConfiguredTeamID(rules.WaveTeam, world.TeamID(2)))
-
-	teamsAny, _ := merged["teams"].(map[string]any)
-	if teamsAny == nil {
-		teamsAny = map[string]any{}
+	if rules.Env != 0 {
+		merged["env"] = rules.Env
 	}
-	for key, tr := range rules.Teams {
-		teamID, ok := runtimeRulesTeamID(key)
-		if !ok {
-			continue
-		}
-		entryKey := strconv.Itoa(teamID)
-		entry, _ := teamsAny[entryKey].(map[string]any)
-		if entry == nil {
-			entry = map[string]any{}
-		}
-		entry["fillItems"] = tr.FillItems
-		entry["infiniteResources"] = tr.InfiniteResources
-		entry["buildSpeedMultiplier"] = tr.BuildSpeedMultiplier
-		entry["unitBuildSpeedMultiplier"] = tr.UnitBuildSpeedMultiplier
-		teamsAny[entryKey] = entry
-	}
-	if len(teamsAny) > 0 {
-		merged["teams"] = teamsAny
+	if modeName := strings.TrimSpace(rules.ModeName); modeName != "" {
+		merged["modeName"] = modeName
 	}
 
 	raw, err := json.Marshal(merged)
@@ -4736,34 +6047,65 @@ func buildRuntimeRulesRaw(wld *world.World) string {
 	return string(raw)
 }
 
-func syncRulesToConn(conn *netserver.Conn, wld *world.World) {
+func syncRulesToConn(conn *netserver.Conn, wld *world.World, mapPath string) {
 	if conn == nil || wld == nil {
 		return
 	}
-	raw := buildRuntimeRulesRaw(wld)
-	_ = conn.SendAsync(&protocol.Remote_NetClient_setRules_107{
+	raw := buildRuntimeRulesRaw(wld, mapPath)
+	_ = conn.SendAsync(&protocol.Remote_NetClient_setRules_23{
 		Rules: protocol.Rules{Raw: raw},
 	})
 }
 
-func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte) {
+func broadcastConstructFinish(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte, builder protocol.Unit, config any) {
 	if srv == nil || buildPos < 0 || blockID <= 0 {
 		return
 	}
-	srv.Broadcast(&protocol.Remote_ConstructBlock_constructFinish_137{
+	srv.Broadcast(&protocol.Remote_ConstructBlock_constructFinish_146{
 		Tile:     protocol.TileBox{PosValue: buildPos},
 		Block:    protocol.BlockRef{BlkID: blockID, BlkName: ""},
-		Builder:  nil,
+		Builder:  builder,
 		Rotation: rot & 0x3,
 		Team:     protocol.Team{ID: team},
-		Config:   nil,
+		Config:   config,
 	})
 }
 
+func broadcastBuildDestroyedState(srv *netserver.Server, ev world.EntityEvent) {
+	if srv == nil || ev.BuildPos < 0 {
+		return
+	}
+	broadcastTileBuildDestroyed(srv, ev.BuildPos)
+	broadcastBuildDestroyed(srv, ev.BuildPos, ev.BuildBlock)
+	broadcastSetTile(srv, ev.BuildPos, 0, 0, 0)
+}
+
+func bulletCreatePacketFromEvent(srv *netserver.Server, b world.BulletEvent) *protocol.Remote_BulletType_createBullet_58 {
+	if srv == nil || b.BulletTyp < 0 {
+		return nil
+	}
+	bulletType := srv.Content.BulletType(b.BulletTyp)
+	if bulletType == nil {
+		return nil
+	}
+	return &protocol.Remote_BulletType_createBullet_58{
+		Type:        bulletType,
+		Team:        protocol.Team{ID: byte(b.Team)},
+		X:           b.X,
+		Y:           b.Y,
+		Angle:       b.Angle,
+		Damage:      b.Damage,
+		VelocityScl: 1,
+		LifetimeScl: 1,
+	}
+}
+
 func broadcastBulletCreate(srv *netserver.Server, b world.BulletEvent) {
-	_ = srv
-	_ = b
-	// Disabled in compatibility mode for now; wrong packet ID causes crashes.
+	packet := bulletCreatePacketFromEvent(srv, b)
+	if packet == nil {
+		return
+	}
+	srv.BroadcastUnreliable(packet)
 }
 
 type scriptController struct {
@@ -5378,24 +6720,34 @@ func fallbackSpawnPosFromModel(model *world.WorldModel) (protocol.Point2, bool) 
 	if model == nil || model.Width <= 0 || model.Height <= 0 || len(model.Tiles) == 0 {
 		return protocol.Point2{}, false
 	}
-	var firstTeamBuild protocol.Point2
-	firstTeamBuildOK := false
+	var firstOwnedBuild protocol.Point2
+	firstOwnedBuildOK := false
 	for i := range model.Tiles {
 		tile := &model.Tiles[i]
-		if tile == nil || tile.Build == nil || tile.Build.Health <= 0 || tile.Build.Team != 1 {
+		if tile == nil || tile.Build == nil || tile.Block == 0 || tile.Build.Health <= 0 {
 			continue
 		}
-		if !firstTeamBuildOK {
-			firstTeamBuild = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
-			firstTeamBuildOK = true
+		if tile.Build.X != tile.X || tile.Build.Y != tile.Y {
+			continue
+		}
+		owner := tile.Team
+		if tile.Build.Team != 0 {
+			owner = tile.Build.Team
+		}
+		if owner == 0 {
+			continue
+		}
+		if !firstOwnedBuildOK {
+			firstOwnedBuild = protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}
+			firstOwnedBuildOK = true
 		}
 		name := strings.ToLower(strings.TrimSpace(model.BlockNames[int16(tile.Build.Block)]))
 		if strings.Contains(name, "core") || strings.Contains(name, "foundation") || strings.Contains(name, "nucleus") {
 			return protocol.Point2{X: int32(tile.X), Y: int32(tile.Y)}, true
 		}
 	}
-	if firstTeamBuildOK {
-		return firstTeamBuild, true
+	if firstOwnedBuildOK {
+		return firstOwnedBuild, true
 	}
 	return protocol.Point2{X: int32(model.Width / 2), Y: int32(model.Height / 2)}, true
 }
@@ -5468,31 +6820,51 @@ func resolveTeamCoreTileWithName(wld *world.World, team world.TeamID, ref protoc
 	bestDist2 := int(^uint(0) >> 1)
 	bestPos := protocol.Point2{}
 	bestName := ""
-	for i := range model.Tiles {
-		t := &model.Tiles[i]
-		if t == nil || t.Block <= 0 {
-			continue
+	consider := func(t *world.Tile) {
+		if t == nil || t.Block <= 0 || t.Build == nil {
+			return
 		}
 		blockName := model.BlockNames[int16(t.Block)]
 		_, rank, ok := coreUnitNameAndRankByBlockName(blockName)
 		if !ok {
-			continue
+			return
 		}
 		dx := t.X - refX
 		dy := t.Y - refY
 		dist2 := dx*dx + dy*dy
-		owner := t.Team
-		if owner == 0 && t.Build != nil && t.Build.Team != 0 {
-			owner = t.Build.Team
-		}
-		if owner != team {
-			continue
-		}
 		if rank > bestRank || (rank == bestRank && dist2 < bestDist2) {
 			bestRank = rank
 			bestDist2 = dist2
 			bestPos = protocol.Point2{X: int32(t.X), Y: int32(t.Y)}
 			bestName = blockName
+		}
+	}
+	for _, packed := range wld.TeamCorePositions(team) {
+		x := int(protocol.UnpackPoint2X(packed))
+		y := int(protocol.UnpackPoint2Y(packed))
+		t, err := model.TileAt(x, y)
+		if err != nil {
+			continue
+		}
+		consider(t)
+	}
+	if bestRank < 0 {
+		for i := range model.Tiles {
+			t := &model.Tiles[i]
+			if t == nil || t.Build == nil || t.Block <= 0 {
+				continue
+			}
+			if t.Build.X != t.X || t.Build.Y != t.Y {
+				continue
+			}
+			owner := t.Team
+			if t.Build.Team != 0 {
+				owner = t.Build.Team
+			}
+			if owner != team {
+				continue
+			}
+			consider(t)
 		}
 	}
 	if bestRank < 0 {
@@ -5618,6 +6990,38 @@ func resolveBuildOwner(c *netserver.Conn) int32 {
 	return c.ConnID()
 }
 
+func hasQueuedBuildPlans(plans []*protocol.BuildPlan) bool {
+	for _, plan := range plans {
+		if plan != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func builderSnapshotActive(dead bool, unitID int32, building bool, plans []*protocol.BuildPlan, forceActive bool) bool {
+	if dead || unitID == 0 {
+		return false
+	}
+	if forceActive {
+		return true
+	}
+	return building || hasQueuedBuildPlans(plans)
+}
+
+func syncBuilderStateFromConnSnapshot(wld *world.World, c *netserver.Conn, owner int32, team world.TeamID, plans []*protocol.BuildPlan, forceActive bool) {
+	if wld == nil || c == nil || owner == 0 {
+		return
+	}
+	snapX, snapY := c.SnapshotPos()
+	active := builderSnapshotActive(c.IsDead(), c.UnitID(), c.IsBuilding(), plans, forceActive)
+	if !active && wld.HasPendingPlansForOwner(owner) {
+		active = true
+	}
+	// UnitType.buildRange defaults to Vars.buildingRange in 157.
+	wld.UpdateBuilderState(owner, team, c.UnitID(), snapX, snapY, active, 220)
+}
+
 // getSpawnPos 获取重生点位置（支持多核心轮转）
 func getSpawnPos(model *world.WorldModel, cache *worldCache, path string) (protocol.Point2, bool) {
 	// 1. 优先使用核心位置缓存
@@ -5644,9 +7048,14 @@ type worldCache struct {
 	baseModel *world.WorldModel
 	corePos   protocol.Point2
 	corePosOK bool
+	backend   *coreio.Core3
+	content   *protocol.ContentRegistry
 }
 
 func (c *worldCache) invalidate() {
+	if c != nil && c.backend != nil {
+		_ = c.backend.InvalidateWorldCache("")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.path = ""
@@ -5657,7 +7066,29 @@ func (c *worldCache) invalidate() {
 	c.corePosOK = false
 }
 
+func isMSAVPath(path string) bool {
+	lower := strings.ToLower(strings.TrimSpace(path))
+	return strings.HasSuffix(lower, ".msav") || strings.HasSuffix(lower, ".msav.msav")
+}
+
 func (c *worldCache) get(path string) ([]byte, error) {
+	if c != nil && c.backend != nil && !isMSAVPath(path) {
+		if res, err := c.backend.GetWorldCache(path); err == nil {
+			if _, inspectErr := worldstream.InspectWorldStreamPayload(res.Data); inspectErr == nil {
+				c.mu.Lock()
+				c.path = path
+				if info, statErr := os.Stat(path); statErr == nil {
+					c.modTime = info.ModTime()
+				}
+				c.data = append([]byte(nil), res.Data...)
+				c.baseModel = res.BaseModel
+				c.corePos = res.CorePos
+				c.corePosOK = res.CorePosOK
+				c.mu.Unlock()
+				return res.Data, nil
+			}
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -5669,17 +7100,20 @@ func (c *worldCache) get(path string) ([]byte, error) {
 		return c.data, nil
 	}
 
-	data, err := loadWorldStream(path)
+	data, err := loadWorldStream(path, c.content)
 	if err != nil {
 		return nil, err
+	}
+	if _, inspectErr := worldstream.InspectWorldStreamPayload(data); inspectErr != nil {
+		return nil, fmt.Errorf("inspect local worldstream payload: %w", inspectErr)
 	}
 	c.path = path
 	c.modTime = info.ModTime()
 	c.data = data
 	c.baseModel = nil
 	c.corePosOK = false
-	if strings.HasSuffix(strings.ToLower(path), ".msav") || strings.HasSuffix(strings.ToLower(path), ".msav.msav") {
-		if model, merr := worldstream.LoadWorldModelFromMSAV(path, nil); merr == nil {
+	if isMSAVPath(path) {
+		if model, merr := worldstream.LoadWorldModelFromMSAV(path, c.content); merr == nil {
 			c.baseModel = model
 		}
 		if pos, ok, err := worldstream.FindCoreTileFromMSAV(path); err == nil {
@@ -5709,22 +7143,68 @@ func (c *worldCache) model(path string) *world.WorldModel {
 	return c.baseModel
 }
 
-func loadWorldStream(path string) ([]byte, error) {
+func buildInitialWorldDataPayload(conn *netserver.Conn, wld *world.World, cache *worldCache, path string) ([]byte, error) {
+	if cache == nil {
+		return nil, fmt.Errorf("world cache unavailable")
+	}
+	if conn != nil {
+		conn.SetLiveWorldStream(false)
+	}
+	playerID := int32(1)
+	if conn != nil && conn.PlayerID() != 0 {
+		playerID = conn.PlayerID()
+	}
+	base, err := cache.get(path)
+	if err == nil && len(base) > 0 {
+		payload := base
+		if wld == nil {
+			return payload, nil
+		}
+
+		snap := wld.Snapshot()
+		if patched, perr := worldstream.RewriteRuntimeStateInWorldStream(payload, snap.Wave, snap.WaveTime*60, float64(snap.Tick), playerID); perr == nil {
+			payload = patched
+		} else if conn != nil && conn.PlayerID() != 0 {
+			if patched, perr := worldstream.RewritePlayerIDInWorldStream(payload, conn.PlayerID()); perr == nil {
+				payload = patched
+			}
+		}
+		return payload, nil
+	}
+
+	if wld != nil {
+		snap := wld.Snapshot()
+		if baseModel := wld.Model(); baseModel != nil {
+			if payload, lerr := worldstream.BuildWorldStreamFromModelSnapshot(baseModel.Clone(), playerID, snap); lerr == nil && len(payload) > 0 {
+				if _, inspectErr := worldstream.InspectWorldStreamPayload(payload); inspectErr == nil {
+					return payload, nil
+				}
+			}
+		}
+		if liveModel := wld.CloneModelForWorldStream(); liveModel != nil {
+			if payload, lerr := worldstream.BuildWorldStreamFromModelSnapshot(liveModel, playerID, snap); lerr == nil && len(payload) > 0 {
+				if _, inspectErr := worldstream.InspectWorldStreamPayload(payload); inspectErr == nil {
+					if conn != nil {
+						conn.SetLiveWorldStream(true)
+					}
+					return payload, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("build initial world payload: cache=%v", err)
+}
+
+func loadWorldStream(path string, content *protocol.ContentRegistry) ([]byte, error) {
 	lower := strings.ToLower(path)
 	if strings.HasSuffix(lower, ".msav") || strings.HasSuffix(lower, ".msav.msav") {
-		if ver, err := worldstream.ReadMSAVVersion(path); err == nil && ver < 11 {
-			fmt.Printf("地图保存版本较旧: %d（继续尝试加载并在失败时回退） path=%s\n", ver, path)
+		if model, err := worldstream.LoadWorldModelFromMSAV(path, content); err == nil && model != nil {
+			if payload, berr := worldstream.BuildWorldStreamFromModel(model, 1); berr == nil && len(payload) > 0 {
+				return payload, nil
+			}
 		}
-		data, err := worldstream.BuildWorldStreamFromMSAV(path)
-		if err == nil {
-			return data, nil
-		}
-		fmt.Printf("地图转换失败，回退到 bootstrap-world.bin: path=%s err=%v\n", path, err)
-		fallback, ferr := loadBootstrapWorldFallback()
-		if ferr != nil {
-			return nil, fmt.Errorf("msav convert failed: %w; bootstrap fallback failed: %v", err, ferr)
-		}
-		return fallback, nil
+		return worldstream.BuildWorldStreamFromMSAV(path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

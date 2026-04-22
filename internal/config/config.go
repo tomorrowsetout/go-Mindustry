@@ -25,6 +25,7 @@ type RuntimeConfig struct {
 
 type CoreConfig struct {
 	DualCoreEnabled        bool
+	TPS                    int
 	MemoryLimitMB          int
 	MemoryStartupMaxMB     int
 	MemoryGCTriggerMB      int
@@ -55,6 +56,40 @@ type NetConfig struct {
 	SyncStateMs     int
 }
 
+type AuthoritySyncStrategy string
+
+const (
+	AuthoritySyncOfficial AuthoritySyncStrategy = "official"
+	AuthoritySyncStatic   AuthoritySyncStrategy = "static"
+	AuthoritySyncDynamic  AuthoritySyncStrategy = "dynamic"
+)
+
+func normalizeAuthoritySyncStrategy(v string) AuthoritySyncStrategy {
+	if parsed, ok := ParseAuthoritySyncStrategy(v); ok {
+		return parsed
+	}
+	return AuthoritySyncDynamic
+}
+
+func ParseAuthoritySyncStrategy(v string) (AuthoritySyncStrategy, bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case string(AuthoritySyncOfficial):
+		return AuthoritySyncOfficial, true
+	case string(AuthoritySyncStatic):
+		return AuthoritySyncStatic, true
+	case string(AuthoritySyncDynamic):
+		return AuthoritySyncDynamic, true
+	default:
+		return "", false
+	}
+}
+
+type SyncConfig struct {
+	Strategy               AuthoritySyncStrategy
+	UseMapSyncDataFallback bool
+	BlockSyncLogsEnabled   bool
+}
+
 type PersistConfig struct {
 	Enabled     bool
 	Directory   string
@@ -66,12 +101,13 @@ type PersistConfig struct {
 }
 
 type ModsConfig struct {
-	Enabled   bool
-	Directory string
-	JavaHome  string
-	JSDir     string
-	GoDir     string
-	NodeDir   string
+	Enabled            bool
+	Directory          string
+	JavaHome           string
+	JSDir              string
+	GoDir              string
+	NodeDir            string
+	ExpectedClientMods []string
 }
 
 type ScriptTask struct {
@@ -88,7 +124,15 @@ type ScriptConfig struct {
 }
 
 type AdminConfig struct {
-	OpsFile string
+	OpsFile            string
+	PlayerLimit        int
+	StrictIdentity     bool
+	AllowCustomClients bool
+	WhitelistEnabled   bool
+	WhitelistFile      string
+	BannedNames        []string
+	BannedSubnets      []string
+	RecentKickSeconds  int
 }
 
 type SundriesConfig struct {
@@ -158,6 +202,13 @@ type PersonalizationConfig struct {
 	PlayerBindAPICacheSec         int
 	PlayerConnIDSuffixEnabled     bool
 	PlayerConnIDSuffixFormat      string
+	MainConsoleTitle              string
+	Core2ConsoleTitle             string
+	Core3ConsoleTitle             string
+	Core4ConsoleTitle             string
+	Core2ProcessName              string
+	Core3ProcessName              string
+	Core4ProcessName              string
 }
 
 type JoinPopupConfig struct {
@@ -219,6 +270,16 @@ type BuildingLogConfig struct {
 	Translated bool
 }
 
+type TracepointsConfig struct {
+	Enabled               bool
+	File                  string
+	ClientRequestsEnabled bool
+	ServerSendsEnabled    bool
+	WorldRuntimeEnabled   bool
+	StateBuildEnabled     bool
+	WorldStreamEnabled    bool
+}
+
 type Config struct {
 	Source          string
 	Control         ControlConfig
@@ -228,12 +289,14 @@ type Config struct {
 	StatusBar       StatusBarConfig
 	MapVote         MapVoteConfig
 	Building        BuildingLogConfig
+	Tracepoints     TracepointsConfig
 	Sundries        SundriesConfig
 	Runtime         RuntimeConfig
 	Core            CoreConfig
 	API             APIConfig
 	Storage         StorageConfig
 	Net             NetConfig
+	Sync            SyncConfig
 	Persist         PersistConfig
 	Mods            ModsConfig
 	Script          ScriptConfig
@@ -356,12 +419,6 @@ func decodeINIInlineText(v string) string {
 	return v
 }
 
-func encodeINIInlineText(v string) string {
-	v = strings.ReplaceAll(v, "\r\n", "\n")
-	v = strings.ReplaceAll(v, "\n", `\n`)
-	return v
-}
-
 func boolToIni(v bool) string {
 	if v {
 		return "1"
@@ -403,6 +460,213 @@ func asCSV(v string) []string {
 	return out
 }
 
+func parseConfigData(path string) (iniData, error) {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".toml":
+		return parseTOML(path)
+	default:
+		return nil, fmt.Errorf("仅支持 TOML 配置文件: %s", path)
+	}
+}
+
+func parseTOML(path string) (iniData, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n"), "\n")
+	out := newIniData()
+	section := ""
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") && !strings.HasPrefix(line, "[[") {
+			section = strings.ToLower(strings.TrimSpace(line[1 : len(line)-1]))
+			continue
+		}
+		eq := strings.Index(line, "=")
+		if eq <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		valueText := strings.TrimSpace(line[eq+1:])
+		if strings.HasPrefix(valueText, `"""`) {
+			value, next, err := readTOMLMultilineValue(lines, i, valueText)
+			if err != nil {
+				return nil, fmt.Errorf("parse toml %s line %d: %w", path, i+1, err)
+			}
+			out.set(section, key, value)
+			i = next
+			continue
+		}
+		valueText = stripTOMLComment(valueText)
+		if valueText == "" {
+			continue
+		}
+		value, err := decodeTOMLValue(valueText)
+		if err != nil {
+			return nil, fmt.Errorf("parse toml %s line %d: %w", path, i+1, err)
+		}
+		out.set(section, key, value)
+	}
+	return out, nil
+}
+
+func readTOMLMultilineValue(lines []string, start int, first string) (string, int, error) {
+	if !strings.HasPrefix(first, `"""`) {
+		return "", start, fmt.Errorf("missing multiline delimiter")
+	}
+	first = first[3:]
+	if end := strings.Index(first, `"""`); end >= 0 {
+		return first[:end], start, nil
+	}
+	parts := make([]string, 0, 8)
+	if first != "" {
+		parts = append(parts, first)
+	}
+	for i := start + 1; i < len(lines); i++ {
+		line := lines[i]
+		if end := strings.Index(line, `"""`); end >= 0 {
+			if prefix := line[:end]; prefix != "" || len(parts) == 0 {
+				parts = append(parts, prefix)
+			}
+			return strings.Join(parts, "\n"), i, nil
+		}
+		parts = append(parts, line)
+	}
+	return "", start, fmt.Errorf("unterminated multiline string")
+}
+
+func stripTOMLComment(s string) string {
+	inDouble := false
+	inSingle := false
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		switch ch {
+		case '\\':
+			if inDouble {
+				escaped = true
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '#':
+			if !inDouble && !inSingle {
+				return strings.TrimSpace(s[:i])
+			}
+		}
+	}
+	return strings.TrimSpace(s)
+}
+
+func decodeTOMLValue(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	switch {
+	case v == "":
+		return "", nil
+	case strings.HasPrefix(v, `"""`) && strings.HasSuffix(v, `"""`) && len(v) >= 6:
+		return v[3 : len(v)-3], nil
+	case strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) && len(v) >= 2:
+		return decodeTOMLBasicString(v[1 : len(v)-1]), nil
+	case strings.HasPrefix(v, `'`) && strings.HasSuffix(v, `'`) && len(v) >= 2:
+		return v[1 : len(v)-1], nil
+	case strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]"):
+		items, err := parseTOMLArray(v[1 : len(v)-1])
+		if err != nil {
+			return "", err
+		}
+		return strings.Join(items, ","), nil
+	default:
+		return v, nil
+	}
+}
+
+func decodeTOMLBasicString(v string) string {
+	replacer := strings.NewReplacer(
+		`\\`, `\`,
+		`\n`, "\n",
+		`\r`, "\r",
+		`\t`, "\t",
+		`\"`, `"`,
+	)
+	return replacer.Replace(v)
+}
+
+func parseTOMLArray(v string) ([]string, error) {
+	out := make([]string, 0, 4)
+	parts := splitTOMLArray(v)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		value, err := decodeTOMLValue(part)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, value)
+	}
+	return out, nil
+}
+
+func splitTOMLArray(v string) []string {
+	out := make([]string, 0, 4)
+	var buf strings.Builder
+	inDouble := false
+	inSingle := false
+	escaped := false
+	for i := 0; i < len(v); i++ {
+		ch := v[i]
+		if escaped {
+			buf.WriteByte(ch)
+			escaped = false
+			continue
+		}
+		switch ch {
+		case '\\':
+			if inDouble {
+				escaped = true
+			}
+			buf.WriteByte(ch)
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+			buf.WriteByte(ch)
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+			buf.WriteByte(ch)
+		case ',':
+			if !inDouble && !inSingle {
+				out = append(out, buf.String())
+				buf.Reset()
+				continue
+			}
+			buf.WriteByte(ch)
+		default:
+			buf.WriteByte(ch)
+		}
+	}
+	if strings.TrimSpace(buf.String()) != "" {
+		out = append(out, buf.String())
+	}
+	return out
+}
+
 func applyINI(cfg *Config, d iniData) {
 	if cfg == nil || d == nil {
 		return
@@ -427,6 +691,12 @@ func applyINI(cfg *Config, d iniData) {
 	}
 	if v, ok := d.get("config", "player_identity_auto_create"); ok {
 		cfg.Control.PlayerIdentityAutoCreateEnabled = asBool(v, cfg.Control.PlayerIdentityAutoCreateEnabled)
+	}
+	if v, ok := d.get("authority_sync", "strategy"); ok {
+		cfg.Sync.Strategy = normalizeAuthoritySyncStrategy(v)
+	}
+	if v, ok := d.get("sync", "strategy"); ok {
+		cfg.Sync.Strategy = normalizeAuthoritySyncStrategy(v)
 	}
 	if v, ok := d.get("development", "packet_events_enabled"); ok {
 		enabled := asBool(v, cfg.Development.PacketEventsEnabled)
@@ -469,6 +739,27 @@ func applyINI(cfg *Config, d iniData) {
 	}
 	if v, ok := d.get("development", "build_break_done_logs_enabled"); ok {
 		cfg.Development.BuildBreakDoneLogsEnabled = asBool(v, cfg.Development.BuildBreakDoneLogsEnabled)
+	}
+	if v, ok := d.get("tracepoints", "enabled"); ok {
+		cfg.Tracepoints.Enabled = asBool(v, cfg.Tracepoints.Enabled)
+	}
+	if v, ok := d.get("tracepoints", "file"); ok && strings.TrimSpace(v) != "" {
+		cfg.Tracepoints.File = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("tracepoints", "client_requests_enabled"); ok {
+		cfg.Tracepoints.ClientRequestsEnabled = asBool(v, cfg.Tracepoints.ClientRequestsEnabled)
+	}
+	if v, ok := d.get("tracepoints", "server_sends_enabled"); ok {
+		cfg.Tracepoints.ServerSendsEnabled = asBool(v, cfg.Tracepoints.ServerSendsEnabled)
+	}
+	if v, ok := d.get("tracepoints", "world_runtime_enabled"); ok {
+		cfg.Tracepoints.WorldRuntimeEnabled = asBool(v, cfg.Tracepoints.WorldRuntimeEnabled)
+	}
+	if v, ok := d.get("tracepoints", "state_build_enabled"); ok {
+		cfg.Tracepoints.StateBuildEnabled = asBool(v, cfg.Tracepoints.StateBuildEnabled)
+	}
+	if v, ok := d.get("tracepoints", "world_stream_enabled"); ok {
+		cfg.Tracepoints.WorldStreamEnabled = asBool(v, cfg.Tracepoints.WorldStreamEnabled)
 	}
 	if v, ok := d.get("personalization", "startup_report_enabled"); ok {
 		cfg.Personalization.StartupReportEnabled = asBool(v, cfg.Personalization.StartupReportEnabled)
@@ -551,6 +842,18 @@ func applyINI(cfg *Config, d iniData) {
 	if v, ok := d.get("personalization", "player_conn_id_suffix_format"); ok {
 		cfg.Personalization.PlayerConnIDSuffixFormat = v
 	}
+	if v, ok := d.get("personalization", "main_console_title"); ok {
+		cfg.Personalization.MainConsoleTitle = v
+	}
+	if v, ok := d.get("personalization", "core2_console_title"); ok {
+		cfg.Personalization.Core2ConsoleTitle = v
+	}
+	if v, ok := d.get("personalization", "core3_console_title"); ok {
+		cfg.Personalization.Core3ConsoleTitle = v
+	}
+	if v, ok := d.get("personalization", "core4_console_title"); ok {
+		cfg.Personalization.Core4ConsoleTitle = v
+	}
 	if v, ok := d.get("personalization", "join_popup_enabled"); ok {
 		cfg.JoinPopup.Enabled = asBool(v, cfg.JoinPopup.Enabled)
 	}
@@ -570,6 +873,27 @@ func applyINI(cfg *Config, d iniData) {
 		cfg.JoinPopup.LinkURL = decodeINIInlineText(v)
 	}
 	if v, ok := d.get("personalization", "join_popup_help_text"); ok {
+		cfg.JoinPopup.HelpText = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("join_popup", "enabled"); ok {
+		cfg.JoinPopup.Enabled = asBool(v, cfg.JoinPopup.Enabled)
+	}
+	if v, ok := d.get("join_popup", "delay_ms"); ok {
+		cfg.JoinPopup.DelayMs = asInt(v, cfg.JoinPopup.DelayMs)
+	}
+	if v, ok := d.get("join_popup", "title"); ok {
+		cfg.JoinPopup.Title = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("join_popup", "message"); ok {
+		cfg.JoinPopup.Message = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("join_popup", "announcement_text"); ok {
+		cfg.JoinPopup.AnnouncementText = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("join_popup", "link_url"); ok {
+		cfg.JoinPopup.LinkURL = decodeINIInlineText(v)
+	}
+	if v, ok := d.get("join_popup", "help_text"); ok {
 		cfg.JoinPopup.HelpText = decodeINIInlineText(v)
 	}
 	if v, ok := d.get("status_bar", "enabled"); ok {
@@ -740,6 +1064,9 @@ func applyINI(cfg *Config, d iniData) {
 	if v, ok := d.get("core", "dual_core_enabled"); ok {
 		cfg.Core.DualCoreEnabled = asBool(v, cfg.Core.DualCoreEnabled)
 	}
+	if v, ok := d.get("core", "tps"); ok {
+		cfg.Core.TPS = asInt(v, cfg.Core.TPS)
+	}
 	if v, ok := d.get("memory", "limit_mb"); ok {
 		cfg.Core.MemoryLimitMB = asInt(v, cfg.Core.MemoryLimitMB)
 	}
@@ -781,6 +1108,12 @@ func applyINI(cfg *Config, d iniData) {
 	if v, ok := d.get("sync", "udp_fallback_tcp"); ok {
 		cfg.Net.UdpFallbackTCP = asBool(v, cfg.Net.UdpFallbackTCP)
 	}
+	if v, ok := d.get("sync", "use_map_sync_data_fallback"); ok {
+		cfg.Sync.UseMapSyncDataFallback = asBool(v, cfg.Sync.UseMapSyncDataFallback)
+	}
+	if v, ok := d.get("sync", "block_sync_logs_enabled"); ok {
+		cfg.Sync.BlockSyncLogsEnabled = asBool(v, cfg.Sync.BlockSyncLogsEnabled)
+	}
 
 	if v, ok := d.get("data", "mode"); ok && strings.TrimSpace(v) != "" {
 		cfg.Storage.Mode = strings.TrimSpace(v)
@@ -812,6 +1145,9 @@ func applyINI(cfg *Config, d iniData) {
 	}
 	if v, ok := d.get("mods", "node_dir"); ok && strings.TrimSpace(v) != "" {
 		cfg.Mods.NodeDir = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("mods", "expected_client_mods"); ok {
+		cfg.Mods.ExpectedClientMods = asCSV(v)
 	}
 
 	if v, ok := d.get("persist", "enabled"); ok {
@@ -845,6 +1181,30 @@ func applyINI(cfg *Config, d iniData) {
 
 	if v, ok := d.get("admin", "ops_file"); ok && strings.TrimSpace(v) != "" {
 		cfg.Admin.OpsFile = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("admin", "player_limit"); ok {
+		cfg.Admin.PlayerLimit = asInt(v, cfg.Admin.PlayerLimit)
+	}
+	if v, ok := d.get("admin", "strict_identity"); ok {
+		cfg.Admin.StrictIdentity = asBool(v, cfg.Admin.StrictIdentity)
+	}
+	if v, ok := d.get("admin", "allow_custom_clients"); ok {
+		cfg.Admin.AllowCustomClients = asBool(v, cfg.Admin.AllowCustomClients)
+	}
+	if v, ok := d.get("admin", "whitelist_enabled"); ok {
+		cfg.Admin.WhitelistEnabled = asBool(v, cfg.Admin.WhitelistEnabled)
+	}
+	if v, ok := d.get("admin", "whitelist_file"); ok && strings.TrimSpace(v) != "" {
+		cfg.Admin.WhitelistFile = strings.TrimSpace(v)
+	}
+	if v, ok := d.get("admin", "banned_names"); ok {
+		cfg.Admin.BannedNames = asCSV(v)
+	}
+	if v, ok := d.get("admin", "banned_subnets"); ok {
+		cfg.Admin.BannedSubnets = asCSV(v)
+	}
+	if v, ok := d.get("admin", "recent_kick_seconds"); ok {
+		cfg.Admin.RecentKickSeconds = asInt(v, cfg.Admin.RecentKickSeconds)
 	}
 
 	if v, ok := d.get("api", "enabled"); ok {
@@ -885,6 +1245,7 @@ func makeINI(cfg Config) iniData {
 	d.set("config", "conn_uuid_auto_create", boolToIni(cfg.Control.ConnUUIDAutoCreateEnabled))
 	d.set("config", "player_identity_auto_create", boolToIni(cfg.Control.PlayerIdentityAutoCreateEnabled))
 	d.set("config", "api_file", cfg.API.ConfigFile)
+	d.set("authority_sync", "strategy", string(cfg.Sync.Strategy))
 	d.set("development", "packet_events_enabled", boolToIni(cfg.Development.PacketEventsEnabled))
 	d.set("development", "packet_recv_events_enabled", boolToIni(cfg.Development.PacketRecvEventsEnabled))
 	d.set("development", "packet_send_events_enabled", boolToIni(cfg.Development.PacketSendEventsEnabled))
@@ -898,6 +1259,13 @@ func makeINI(cfg Config) iniData {
 	d.set("development", "build_finish_logs_enabled", boolToIni(cfg.Development.BuildFinishLogsEnabled))
 	d.set("development", "build_break_start_logs_enabled", boolToIni(cfg.Development.BuildBreakStartLogsEnabled))
 	d.set("development", "build_break_done_logs_enabled", boolToIni(cfg.Development.BuildBreakDoneLogsEnabled))
+	d.set("tracepoints", "enabled", boolToIni(cfg.Tracepoints.Enabled))
+	d.set("tracepoints", "file", cfg.Tracepoints.File)
+	d.set("tracepoints", "client_requests_enabled", boolToIni(cfg.Tracepoints.ClientRequestsEnabled))
+	d.set("tracepoints", "server_sends_enabled", boolToIni(cfg.Tracepoints.ServerSendsEnabled))
+	d.set("tracepoints", "world_runtime_enabled", boolToIni(cfg.Tracepoints.WorldRuntimeEnabled))
+	d.set("tracepoints", "state_build_enabled", boolToIni(cfg.Tracepoints.StateBuildEnabled))
+	d.set("tracepoints", "world_stream_enabled", boolToIni(cfg.Tracepoints.WorldStreamEnabled))
 	d.set("personalization", "startup_report_enabled", boolToIni(cfg.Personalization.StartupReportEnabled))
 	d.set("personalization", "map_load_details_enabled", boolToIni(cfg.Personalization.MapLoadDetailsEnabled))
 	d.set("personalization", "unit_id_list_enabled", boolToIni(cfg.Personalization.UnitIDListEnabled))
@@ -925,6 +1293,17 @@ func makeINI(cfg Config) iniData {
 	d.set("personalization", "player_bind_api_cache_sec", strconv.Itoa(cfg.Personalization.PlayerBindAPICacheSec))
 	d.set("personalization", "player_conn_id_suffix_enabled", boolToIni(cfg.Personalization.PlayerConnIDSuffixEnabled))
 	d.set("personalization", "player_conn_id_suffix_format", cfg.Personalization.PlayerConnIDSuffixFormat)
+	d.set("personalization", "main_console_title", cfg.Personalization.MainConsoleTitle)
+	d.set("personalization", "core2_console_title", cfg.Personalization.Core2ConsoleTitle)
+	d.set("personalization", "core3_console_title", cfg.Personalization.Core3ConsoleTitle)
+	d.set("personalization", "core4_console_title", cfg.Personalization.Core4ConsoleTitle)
+	d.set("join_popup", "enabled", boolToIni(cfg.JoinPopup.Enabled))
+	d.set("join_popup", "delay_ms", strconv.Itoa(cfg.JoinPopup.DelayMs))
+	d.set("join_popup", "title", cfg.JoinPopup.Title)
+	d.set("join_popup", "message", cfg.JoinPopup.Message)
+	d.set("join_popup", "announcement_text", cfg.JoinPopup.AnnouncementText)
+	d.set("join_popup", "link_url", cfg.JoinPopup.LinkURL)
+	d.set("join_popup", "help_text", cfg.JoinPopup.HelpText)
 	d.set("status_bar", "enabled", boolToIni(cfg.StatusBar.Enabled))
 	d.set("status_bar", "refresh_interval_sec", strconv.Itoa(cfg.StatusBar.RefreshIntervalSec))
 	d.set("status_bar", "popup_duration_ms", strconv.Itoa(cfg.StatusBar.PopupDurationMs))
@@ -982,6 +1361,7 @@ func makeINI(cfg Config) iniData {
 	d.set("runtime", "vanilla_profiles", cfg.Runtime.VanillaProfiles)
 
 	d.set("core", "dual_core_enabled", boolToIni(cfg.Core.DualCoreEnabled))
+	d.set("core", "tps", strconv.Itoa(cfg.Core.TPS))
 
 	d.set("memory", "limit_mb", strconv.Itoa(cfg.Core.MemoryLimitMB))
 	d.set("memory", "startup_max_mb", strconv.Itoa(cfg.Core.MemoryStartupMaxMB))
@@ -998,6 +1378,8 @@ func makeINI(cfg Config) iniData {
 	d.set("sync", "udp_retry_count", strconv.Itoa(cfg.Net.UdpRetryCount))
 	d.set("sync", "udp_retry_delay_ms", strconv.Itoa(cfg.Net.UdpRetryDelayMs))
 	d.set("sync", "udp_fallback_tcp", boolToIni(cfg.Net.UdpFallbackTCP))
+	d.set("sync", "use_map_sync_data_fallback", boolToIni(cfg.Sync.UseMapSyncDataFallback))
+	d.set("sync", "block_sync_logs_enabled", boolToIni(cfg.Sync.BlockSyncLogsEnabled))
 
 	d.set("data", "mode", cfg.Storage.Mode)
 	d.set("data", "directory", cfg.Storage.Directory)
@@ -1010,6 +1392,7 @@ func makeINI(cfg Config) iniData {
 	d.set("mods", "js_dir", cfg.Mods.JSDir)
 	d.set("mods", "go_dir", cfg.Mods.GoDir)
 	d.set("mods", "node_dir", cfg.Mods.NodeDir)
+	d.set("mods", "expected_client_mods", strings.Join(cfg.Mods.ExpectedClientMods, ","))
 
 	d.set("persist", "enabled", boolToIni(cfg.Persist.Enabled))
 	d.set("persist", "directory", cfg.Persist.Directory)
@@ -1023,6 +1406,14 @@ func makeINI(cfg Config) iniData {
 	d.set("script", "daily_gc_time", cfg.Script.DailyGCTime)
 
 	d.set("admin", "ops_file", cfg.Admin.OpsFile)
+	d.set("admin", "player_limit", strconv.Itoa(cfg.Admin.PlayerLimit))
+	d.set("admin", "strict_identity", boolToIni(cfg.Admin.StrictIdentity))
+	d.set("admin", "allow_custom_clients", boolToIni(cfg.Admin.AllowCustomClients))
+	d.set("admin", "whitelist_enabled", boolToIni(cfg.Admin.WhitelistEnabled))
+	d.set("admin", "whitelist_file", cfg.Admin.WhitelistFile)
+	d.set("admin", "banned_names", strings.Join(cfg.Admin.BannedNames, ","))
+	d.set("admin", "banned_subnets", strings.Join(cfg.Admin.BannedSubnets, ","))
+	d.set("admin", "recent_kick_seconds", strconv.Itoa(cfg.Admin.RecentKickSeconds))
 
 	d.set("api", "enabled", boolToIni(cfg.API.Enabled))
 	d.set("api", "bind", cfg.API.Bind)
@@ -1087,278 +1478,231 @@ func writeINI(path string, sections []string, d iniData, header string) error {
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-func writeDevelopmentINI(path string, cfg Config) error {
-	var buf bytes.Buffer
-	buf.WriteString("; 开发模式配置\n")
-	buf.WriteString("; 这里只控制终端输出\n")
-	buf.WriteString("; 1 = 开启，0 = 关闭\n\n")
-	buf.WriteString("[development]\n")
-	fmt.Fprintf(&buf, "packet_events_enabled = %s ; 数据包事件兼容总开关，实际以 recv/send 两项为准\n", boolToIni(cfg.Development.PacketEventsEnabled))
-	fmt.Fprintf(&buf, "packet_recv_events_enabled = %s ; 记录 packet_recv 事件\n", boolToIni(cfg.Development.PacketRecvEventsEnabled))
-	fmt.Fprintf(&buf, "packet_send_events_enabled = %s ; 记录 packet_send 事件\n", boolToIni(cfg.Development.PacketSendEventsEnabled))
-	fmt.Fprintf(&buf, "terminal_player_logs_enabled = %s ; 控制终端中的 [终端] 玩家进入/退出游戏日志\n", boolToIni(cfg.Development.TerminalPlayerLogsEnabled))
-	fmt.Fprintf(&buf, "terminal_player_uuid_enabled = %s ; 控制终端中的 [终端] 玩家进入/退出游戏日志是否显示真实 UUID\n", boolToIni(cfg.Development.TerminalPlayerUUIDEnabled))
-	fmt.Fprintf(&buf, "respawn_core_logs_enabled = %s ; 控制终端中的 [重生] 核心、出生点、未找到核心日志\n", boolToIni(cfg.Development.RespawnCoreLogsEnabled))
-	fmt.Fprintf(&buf, "respawn_unit_logs_enabled = %s ; 控制终端中的 [重生] 出生单位、建造速度日志\n", boolToIni(cfg.Development.RespawnUnitLogsEnabled))
-	fmt.Fprintf(&buf, "respawn_packet_logs_enabled = %s ; 控制终端中的 [重生] 玩家出生包发送日志\n", boolToIni(cfg.Development.RespawnPacketLogsEnabled))
-	fmt.Fprintf(&buf, "build_snapshot_logs_enabled = %s ; 控制终端中的 [建筑] 快照队列日志\n", boolToIni(cfg.Development.BuildSnapshotLogsEnabled))
-	fmt.Fprintf(&buf, "build_place_logs_enabled = %s ; 控制终端中的 [建筑] 建造了 日志\n", boolToIni(cfg.Development.BuildPlaceLogsEnabled))
-	fmt.Fprintf(&buf, "build_finish_logs_enabled = %s ; 控制终端中的 [建筑] 完成建造 日志\n", boolToIni(cfg.Development.BuildFinishLogsEnabled))
-	fmt.Fprintf(&buf, "build_break_start_logs_enabled = %s ; 控制终端中的 [建筑] 正在拆除 日志\n", boolToIni(cfg.Development.BuildBreakStartLogsEnabled))
-	fmt.Fprintf(&buf, "build_break_done_logs_enabled = %s ; 控制终端中的 [建筑] 拆除了 日志\n", boolToIni(cfg.Development.BuildBreakDoneLogsEnabled))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
-}
+var tomlValueKinds = makeTOMLValueKinds()
 
-func writeSundriesINI(path string, cfg Config) error {
-	var buf bytes.Buffer
-	buf.WriteString("; 杂项与日志文件配置\n")
-	buf.WriteString("; 这里只控制 logs 目录下日志文件写入内容，不控制终端输出\n")
-	buf.WriteString("; 1 = 开启，0 = 关闭\n\n")
-	buf.WriteString("[sundries]\n")
-	fmt.Fprintf(&buf, "detailed_log_max_mb = %d ; 英文详细日志单文件最大大小（MB）\n", cfg.Sundries.DetailedLogMaxMB)
-	fmt.Fprintf(&buf, "detailed_log_max_files = %d ; 英文详细日志最多保留文件数\n", cfg.Sundries.DetailedLogMaxFiles)
-	fmt.Fprintf(&buf, "net_event_logs_enabled = %s ; 控制 logs 中的 [NET] 网络事件日志\n", boolToIni(cfg.Sundries.NetEventLogsEnabled))
-	fmt.Fprintf(&buf, "chat_logs_enabled = %s ; 控制 logs 中的 [CHAT] 聊天日志\n", boolToIni(cfg.Sundries.ChatLogsEnabled))
-	fmt.Fprintf(&buf, "respawn_core_logs_enabled = %s ; 控制 logs 中的 [RESPAWN] 核心、出生点、未找到核心日志\n", boolToIni(cfg.Sundries.RespawnCoreLogsEnabled))
-	fmt.Fprintf(&buf, "respawn_unit_logs_enabled = %s ; 控制 logs 中的 [RESPAWN] 出生单位、建造速度日志\n", boolToIni(cfg.Sundries.RespawnUnitLogsEnabled))
-	fmt.Fprintf(&buf, "build_place_logs_enabled = %s ; 控制 logs 中的 [BUILD] 建造了 日志\n", boolToIni(cfg.Sundries.BuildPlaceLogsEnabled))
-	fmt.Fprintf(&buf, "build_finish_logs_enabled = %s ; 控制 logs 中的 [BUILD] 完成建造 日志\n", boolToIni(cfg.Sundries.BuildFinishLogsEnabled))
-	fmt.Fprintf(&buf, "build_break_start_logs_enabled = %s ; 控制 logs 中的 [BUILD] 正在拆除 日志\n", boolToIni(cfg.Sundries.BuildBreakStartLogsEnabled))
-	fmt.Fprintf(&buf, "build_break_done_logs_enabled = %s ; 控制 logs 中的 [BUILD] 拆除了 日志\n", boolToIni(cfg.Sundries.BuildBreakDoneLogsEnabled))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
-}
-
-func writePersonalizationINI(path string, cfg Config) error {
-	var buf bytes.Buffer
-	buf.WriteString("; 个性化显示配置\n")
-	buf.WriteString("; 1 = 开启，0 = 关闭\n\n")
-	buf.WriteString("[personalization]\n")
-	fmt.Fprintf(&buf, "startup_report_enabled = %s ; 控制启动报告输出\n", boolToIni(cfg.Personalization.StartupReportEnabled))
-	fmt.Fprintf(&buf, "map_load_details_enabled = %s ; 控制地图加载详情输出\n", boolToIni(cfg.Personalization.MapLoadDetailsEnabled))
-	fmt.Fprintf(&buf, "unit_id_list_enabled = %s ; 控制单位 ID 列表输出\n", boolToIni(cfg.Personalization.UnitIDListEnabled))
-	fmt.Fprintf(&buf, "startup_current_map_line_enabled = %s ; 控制启动时单独输出 当前地图: ...\n", boolToIni(cfg.Personalization.StartupCurrentMapLineEnabled))
-	fmt.Fprintf(&buf, "console_intro_enabled = %s ; 控制启动后的信息面板总开关\n", boolToIni(cfg.Personalization.ConsoleIntroEnabled))
-	fmt.Fprintf(&buf, "console_intro_server_name_enabled = %s ; 控制信息面板中的 服务器名称\n", boolToIni(cfg.Personalization.ConsoleIntroServerNameEnabled))
-	fmt.Fprintf(&buf, "console_intro_current_map_enabled = %s ; 控制信息面板中的 当前地图\n", boolToIni(cfg.Personalization.ConsoleIntroCurrentMapEnabled))
-	fmt.Fprintf(&buf, "console_intro_listen_addr_enabled = %s ; 控制信息面板中的 监听地址\n", boolToIni(cfg.Personalization.ConsoleIntroListenAddrEnabled))
-	fmt.Fprintf(&buf, "console_intro_local_ip_enabled = %s ; 控制信息面板中的 本机IP\n", boolToIni(cfg.Personalization.ConsoleIntroLocalIPEnabled))
-	fmt.Fprintf(&buf, "console_intro_api_enabled = %s ; 控制信息面板中的 API地址\n", boolToIni(cfg.Personalization.ConsoleIntroAPIEnabled))
-	fmt.Fprintf(&buf, "console_intro_help_hint_enabled = %s ; 控制信息面板中的 help all 提示\n", boolToIni(cfg.Personalization.ConsoleIntroHelpHintEnabled))
-	fmt.Fprintf(&buf, "startup_help_enabled = %s ; 控制启动时完整帮助列表输出\n", boolToIni(cfg.Personalization.StartupHelpEnabled))
-	fmt.Fprintf(&buf, "join_leave_chat_enabled = %s ; 控制玩家加入/退出时是否向全服发送聊天提示\n", boolToIni(cfg.Personalization.JoinLeaveChatEnabled))
-	fmt.Fprintf(&buf, "player_name_color_enabled = %s ; 控制终端中玩家名称是否保留颜色显示\n", boolToIni(cfg.Personalization.PlayerNameColorEnabled))
-	fmt.Fprintf(&buf, "player_name_prefix = %s ; 玩家显示名前缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerNamePrefix)
-	fmt.Fprintf(&buf, "player_name_suffix = %s ; 玩家显示名后缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerNameSuffix)
-	fmt.Fprintf(&buf, "player_bind_prefix_enabled = %s ; 控制是否在玩家名前显示 已绑定/未绑定 前缀\n", boolToIni(cfg.Personalization.PlayerBindPrefixEnabled))
-	fmt.Fprintf(&buf, "player_bound_prefix = %s ; 已绑定玩家名前缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerBoundPrefix)
-	fmt.Fprintf(&buf, "player_unbound_prefix = %s ; 未绑定玩家名前缀，可写 Mindustry 颜色标签\n", cfg.Personalization.PlayerUnboundPrefix)
-	fmt.Fprintf(&buf, "player_title_enabled = %s ; 控制是否读取 json/player_identity.json 中的自定义头衔\n", boolToIni(cfg.Personalization.PlayerTitleEnabled))
-	fmt.Fprintf(&buf, "player_identity_file = %s ; 玩家身份配置文件，只读，按 conn_uuid 识别，位于 configs 目录内\n", cfg.Personalization.PlayerIdentityFile)
-	fmt.Fprintf(&buf, "player_bind_source = %s ; 玩家绑定识别来源：internal=读取身份文件，api=通过接口查询 yes/no\n", cfg.Personalization.PlayerBindSource)
-	fmt.Fprintf(&buf, "player_bind_api_url = %s ; 绑定查询接口地址，使用 {id} 代替 conn_uuid\n", cfg.Personalization.PlayerBindAPIURL)
-	fmt.Fprintf(&buf, "player_bind_api_timeout_ms = %d ; 绑定查询接口超时（毫秒）\n", cfg.Personalization.PlayerBindAPITimeoutMs)
-	fmt.Fprintf(&buf, "player_bind_api_cache_sec = %d ; 绑定查询接口缓存秒数，避免频繁请求\n", cfg.Personalization.PlayerBindAPICacheSec)
-	fmt.Fprintf(&buf, "player_conn_id_suffix_enabled = %s ; 控制是否在玩家名后显示 connID/conn_uuid 后缀\n", boolToIni(cfg.Personalization.PlayerConnIDSuffixEnabled))
-	fmt.Fprintf(&buf, "player_conn_id_suffix_format = %s ; 玩家名后缀格式，使用 {id} 代表 connID 或 conn_uuid\n", cfg.Personalization.PlayerConnIDSuffixFormat)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
-}
-
-func parseJoinPopupSectionHeader(line string) (string, bool) {
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "[join_popup]", "[popup]":
-		return "popup", true
-	case "[title]":
-		return "title", true
-	case "[message]":
-		return "message", true
-	case "[announcement]":
-		return "announcement", true
-	case "[link_url]", "[link]":
-		return "link_url", true
-	case "[help]":
-		return "help", true
-	default:
-		return "", false
-	}
-}
-
-func trimJoinPopupBlock(v string) string {
-	v = strings.ReplaceAll(v, "\r\n", "\n")
-	v = strings.ReplaceAll(v, "\r", "\n")
-	return strings.Trim(v, "\n")
-}
-
-func parseJoinPopupINI(path string, cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n"), "\n")
-	blocks := map[string][]string{}
-	section := ""
-	for _, line := range lines {
-		if next, ok := parseJoinPopupSectionHeader(strings.TrimSpace(line)); ok {
-			section = next
-			continue
-		}
-		switch section {
-		case "":
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, ";") || strings.HasPrefix(trimmed, "#") {
-				continue
-			}
-		case "popup":
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, ";") || strings.HasPrefix(trimmed, "#") {
-				continue
-			}
-			entry := stripINIComment(trimmed)
-			if entry == "" {
-				continue
-			}
-			eq := strings.Index(entry, "=")
-			if eq <= 0 {
-				continue
-			}
-			key := strings.ToLower(strings.TrimSpace(entry[:eq]))
-			value := strings.TrimSpace(entry[eq+1:])
-			switch key {
-			case "enabled":
-				cfg.JoinPopup.Enabled = asBool(value, cfg.JoinPopup.Enabled)
-			case "delay_ms":
-				cfg.JoinPopup.DelayMs = asInt(value, cfg.JoinPopup.DelayMs)
-			}
-		default:
-			blocks[section] = append(blocks[section], line)
+func makeTOMLValueKinds() map[string]string {
+	out := map[string]string{}
+	add := func(kind, section string, keys ...string) {
+		for _, key := range keys {
+			out[section+"."+key] = kind
 		}
 	}
-	if lines, ok := blocks["title"]; ok {
-		cfg.JoinPopup.Title = trimJoinPopupBlock(strings.Join(lines, "\n"))
-	}
-	if lines, ok := blocks["message"]; ok {
-		cfg.JoinPopup.Message = trimJoinPopupBlock(strings.Join(lines, "\n"))
-	}
-	if lines, ok := blocks["announcement"]; ok {
-		cfg.JoinPopup.AnnouncementText = trimJoinPopupBlock(strings.Join(lines, "\n"))
-	}
-	if lines, ok := blocks["link_url"]; ok {
-		cfg.JoinPopup.LinkURL = trimJoinPopupBlock(strings.Join(lines, "\n"))
-	}
-	if lines, ok := blocks["help"]; ok {
-		cfg.JoinPopup.HelpText = trimJoinPopupBlock(strings.Join(lines, "\n"))
-	}
-	return nil
+
+	add("int", "config", "reload_interval_sec")
+	add("bool", "config",
+		"reload_log_enabled",
+		"translated_conn_log_enabled",
+		"public_conn_uuid_enabled",
+		"conn_uuid_auto_create",
+		"player_identity_auto_create",
+	)
+
+	add("bool", "building", "log_enabled", "translated_enabled")
+	add("bool", "authority_sync", "enabled")
+
+	add("bool", "core", "dual_core_enabled")
+	add("int", "core", "tps")
+	add("int", "memory", "limit_mb", "startup_max_mb", "gc_trigger_mb", "check_interval_sec")
+	add("bool", "memory", "free_os_memory")
+
+	add("int", "server", "virtual_players")
+
+	add("int", "sync", "entity_ms", "state_ms", "udp_retry_count", "udp_retry_delay_ms")
+	add("bool", "sync", "udp_fallback_tcp", "use_map_sync_data_fallback", "block_sync_logs_enabled")
+
+	add("bool", "data", "database_enabled")
+	add("bool", "mods", "enabled")
+	add("array", "mods", "expected_client_mods")
+	add("bool", "persist", "enabled", "save_msav")
+	add("int", "persist", "interval_sec")
+	add("int", "admin", "player_limit", "recent_kick_seconds")
+	add("bool", "admin", "strict_identity", "allow_custom_clients", "whitelist_enabled")
+	add("array", "admin", "banned_names", "banned_subnets")
+
+	add("bool", "api", "enabled")
+	add("array", "api", "keys")
+
+	add("int", "runtime", "cores")
+	add("bool", "runtime", "scheduler_enabled", "devlog_enabled")
+
+	add("bool", "development",
+		"packet_events_enabled",
+		"packet_recv_events_enabled",
+		"packet_send_events_enabled",
+		"terminal_player_logs_enabled",
+		"terminal_player_uuid_enabled",
+		"respawn_core_logs_enabled",
+		"respawn_unit_logs_enabled",
+		"respawn_packet_logs_enabled",
+		"build_snapshot_logs_enabled",
+		"build_place_logs_enabled",
+		"build_finish_logs_enabled",
+		"build_break_start_logs_enabled",
+		"build_break_done_logs_enabled",
+	)
+
+	add("int", "sundries", "detailed_log_max_mb", "detailed_log_max_files")
+	add("bool", "sundries",
+		"net_event_logs_enabled",
+		"chat_logs_enabled",
+		"respawn_core_logs_enabled",
+		"respawn_unit_logs_enabled",
+		"build_place_logs_enabled",
+		"build_finish_logs_enabled",
+		"build_break_start_logs_enabled",
+		"build_break_done_logs_enabled",
+	)
+	add("bool", "tracepoints",
+		"enabled",
+		"client_requests_enabled",
+		"server_sends_enabled",
+		"world_runtime_enabled",
+		"state_build_enabled",
+		"world_stream_enabled",
+	)
+
+	add("bool", "personalization",
+		"startup_report_enabled",
+		"map_load_details_enabled",
+		"unit_id_list_enabled",
+		"startup_current_map_line_enabled",
+		"console_intro_enabled",
+		"console_intro_server_name_enabled",
+		"console_intro_current_map_enabled",
+		"console_intro_listen_addr_enabled",
+		"console_intro_local_ip_enabled",
+		"console_intro_api_enabled",
+		"console_intro_help_hint_enabled",
+		"startup_help_enabled",
+		"join_leave_chat_enabled",
+		"player_name_color_enabled",
+		"player_bind_prefix_enabled",
+		"player_title_enabled",
+		"player_conn_id_suffix_enabled",
+	)
+	add("int", "personalization", "player_bind_api_timeout_ms", "player_bind_api_cache_sec")
+
+	add("bool", "join_popup", "enabled")
+	add("int", "join_popup", "delay_ms")
+
+	add("bool", "status_bar",
+		"enabled",
+		"header_enabled",
+		"server_name_enabled",
+		"performance_enabled",
+		"current_map_enabled",
+		"game_time_enabled",
+		"player_count_enabled",
+		"welcome_enabled",
+		"qq_group_enabled",
+		"custom_message_enabled",
+	)
+	add("int", "status_bar", "refresh_interval_sec", "popup_duration_ms", "top", "left", "bottom", "right")
+
+	add("int", "map_vote", "duration_sec", "status_refresh_ms", "popup_duration_ms", "top", "left", "bottom", "right")
+
+	return out
 }
 
-func writeJoinPopupBlock(buf *bytes.Buffer, name, value string) {
-	buf.WriteString("[")
-	buf.WriteString(name)
-	buf.WriteString("]\n")
-	value = trimJoinPopupBlock(value)
-	if value != "" {
-		buf.WriteString(value)
+func writeTOML(path string, sections []string, d iniData, header string) error {
+	var buf bytes.Buffer
+	if strings.TrimSpace(header) != "" {
+		for _, ln := range strings.Split(header, "\n") {
+			ln = strings.TrimSpace(ln)
+			if ln == "" {
+				continue
+			}
+			buf.WriteString("# ")
+			buf.WriteString(ln)
+			buf.WriteString("\n")
+		}
 		buf.WriteString("\n")
 	}
-	buf.WriteString("\n")
-}
-
-func writeJoinPopupINI(path string, cfg Config) error {
-	var buf bytes.Buffer
-	buf.WriteString("; 入服公告菜单配置\n")
-	buf.WriteString("; [join_popup] 段使用键值对，其余段落按原样保留多行文本\n")
-	buf.WriteString("; 文本支持 Mindustry 颜色标签和占位符: {server_name} {player_name} {current_map} {players} {link_url}\n")
-	buf.WriteString("; 如果文本里直接换行，游戏内也会按换行显示\n\n")
-	buf.WriteString("[join_popup]\n")
-	fmt.Fprintf(&buf, "enabled = %s ; 1 = 开启，0 = 关闭\n", boolToIni(cfg.JoinPopup.Enabled))
-	fmt.Fprintf(&buf, "delay_ms = %d ; 玩家完成入服同步后延迟多少毫秒再弹出\n\n", cfg.JoinPopup.DelayMs)
-	writeJoinPopupBlock(&buf, "title", cfg.JoinPopup.Title)
-	writeJoinPopupBlock(&buf, "message", cfg.JoinPopup.Message)
-	writeJoinPopupBlock(&buf, "announcement", cfg.JoinPopup.AnnouncementText)
-	writeJoinPopupBlock(&buf, "link_url", cfg.JoinPopup.LinkURL)
-	writeJoinPopupBlock(&buf, "help", cfg.JoinPopup.HelpText)
+	for i, sec := range sections {
+		sec = strings.ToLower(strings.TrimSpace(sec))
+		if sec == "" {
+			continue
+		}
+		buf.WriteString("[")
+		buf.WriteString(sec)
+		buf.WriteString("]\n")
+		m := d[sec]
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		for x := 0; x < len(keys); x++ {
+			for y := x + 1; y < len(keys); y++ {
+				if keys[y] < keys[x] {
+					keys[x], keys[y] = keys[y], keys[x]
+				}
+			}
+		}
+		for _, k := range keys {
+			buf.WriteString(k)
+			buf.WriteString(" = ")
+			buf.WriteString(encodeTOMLValue(sec, k, m[k]))
+			buf.WriteString("\n")
+		}
+		if i < len(sections)-1 {
+			buf.WriteString("\n")
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-func writeStatusBarINI(path string, cfg Config) error {
-	var buf bytes.Buffer
-	buf.WriteString("; 服务器状态栏配置\n")
-	buf.WriteString("; 使用 infoPopup 在左上区域持续刷新显示，可贴近下一波下方\n")
-	buf.WriteString("; 1 = 开启，0 = 关闭\n")
-	buf.WriteString("; 可用占位符: {server_name} {cpu_percent} {memory_mb} {players} {qq_group} {message} {uptime} {current_map} {game_time} {player_name}\n\n")
-	buf.WriteString("[status_bar]\n")
-	fmt.Fprintf(&buf, "enabled = %s ; 状态栏总开关\n", boolToIni(cfg.StatusBar.Enabled))
-	fmt.Fprintf(&buf, "refresh_interval_sec = %d ; 刷新周期（秒）\n", cfg.StatusBar.RefreshIntervalSec)
-	fmt.Fprintf(&buf, "popup_duration_ms = %d ; 单次显示持续时间（毫秒），建议略大于刷新周期\n", cfg.StatusBar.PopupDurationMs)
-	fmt.Fprintf(&buf, "align = %s ; 对齐方式：top_left / top / center / bottom_right 等\n", cfg.StatusBar.Align)
-	fmt.Fprintf(&buf, "top = %d ; 顶部偏移，156 常见状态栏位置\n", cfg.StatusBar.Top)
-	fmt.Fprintf(&buf, "left = %d ; 左侧偏移\n", cfg.StatusBar.Left)
-	fmt.Fprintf(&buf, "bottom = %d ; 底部偏移\n", cfg.StatusBar.Bottom)
-	fmt.Fprintf(&buf, "right = %d ; 右侧偏移\n", cfg.StatusBar.Right)
-	fmt.Fprintf(&buf, "popup_id = %s ; 保留字段，当前使用无 ID popup 包\n", cfg.StatusBar.PopupID)
-	fmt.Fprintf(&buf, "header_enabled = %s ; 标题行开关\n", boolToIni(cfg.StatusBar.HeaderEnabled))
-	fmt.Fprintf(&buf, "header_text = %s ; 标题行内容\n", cfg.StatusBar.HeaderText)
-	fmt.Fprintf(&buf, "server_name_enabled = %s ; 服务器名称行开关\n", boolToIni(cfg.StatusBar.ServerNameEnabled))
-	fmt.Fprintf(&buf, "server_name_format = %s ; 服务器名称行模板\n", cfg.StatusBar.ServerNameFormat)
-	fmt.Fprintf(&buf, "performance_enabled = %s ; CPU/内存行开关\n", boolToIni(cfg.StatusBar.PerformanceEnabled))
-	fmt.Fprintf(&buf, "performance_format = %s ; CPU/进程内存行模板\n", cfg.StatusBar.PerformanceFormat)
-	fmt.Fprintf(&buf, "current_map_enabled = %s ; 当前地图行开关\n", boolToIni(cfg.StatusBar.CurrentMapEnabled))
-	fmt.Fprintf(&buf, "current_map_format = %s ; 当前地图行模板\n", cfg.StatusBar.CurrentMapFormat)
-	fmt.Fprintf(&buf, "game_time_enabled = %s ; 本局游戏时间行开关\n", boolToIni(cfg.StatusBar.GameTimeEnabled))
-	fmt.Fprintf(&buf, "game_time_format = %s ; 本局游戏时间行模板\n", cfg.StatusBar.GameTimeFormat)
-	fmt.Fprintf(&buf, "player_count_enabled = %s ; 在线人数行开关\n", boolToIni(cfg.StatusBar.PlayerCountEnabled))
-	fmt.Fprintf(&buf, "player_count_format = %s ; 在线人数行模板\n", cfg.StatusBar.PlayerCountFormat)
-	fmt.Fprintf(&buf, "welcome_enabled = %s ; 欢迎语行开关\n", boolToIni(cfg.StatusBar.WelcomeEnabled))
-	fmt.Fprintf(&buf, "welcome_format = %s ; 欢迎语行模板\n", cfg.StatusBar.WelcomeFormat)
-	fmt.Fprintf(&buf, "qq_group_enabled = %s ; QQ群行开关\n", boolToIni(cfg.StatusBar.QQGroupEnabled))
-	fmt.Fprintf(&buf, "qq_group_text = %s ; QQ群号码或说明\n", cfg.StatusBar.QQGroupText)
-	fmt.Fprintf(&buf, "qq_group_format = %s ; QQ群行模板\n", cfg.StatusBar.QQGroupFormat)
-	fmt.Fprintf(&buf, "custom_message_enabled = %s ; 自定义文案行开关\n", boolToIni(cfg.StatusBar.CustomMessageEnabled))
-	fmt.Fprintf(&buf, "custom_message_text = %s ; 自定义文案内容\n", cfg.StatusBar.CustomMessageText)
-	fmt.Fprintf(&buf, "custom_message_format = %s ; 自定义文案行模板\n", cfg.StatusBar.CustomMessageFormat)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+func encodeTOMLValue(section, key, value string) string {
+	switch tomlValueKinds[section+"."+key] {
+	case "bool":
+		return strconv.FormatBool(asBool(value, false))
+	case "int":
+		return strconv.Itoa(asInt(value, 0))
+	case "array":
+		return encodeTOMLStringArray(asCSV(value))
+	default:
+		return encodeTOMLString(value)
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-func writeMapVoteINI(path string, cfg Config) error {
-	var buf bytes.Buffer
-	buf.WriteString("; 投票换图配置\n")
-	buf.WriteString("; 控制换图投票持续时间，以及左侧投票状态弹窗刷新频率与位置\n")
-	buf.WriteString("; 颜色标签可直接写到聊天文案里，状态弹窗内容由服务端按当前投票实时生成\n\n")
-	buf.WriteString("[map_vote]\n")
-	fmt.Fprintf(&buf, "duration_sec = %d ; 单次投票持续时间（秒）\n", cfg.MapVote.DurationSec)
-	fmt.Fprintf(&buf, "status_refresh_ms = %d ; 左侧投票状态刷新间隔（毫秒）\n", cfg.MapVote.StatusRefreshMs)
-	fmt.Fprintf(&buf, "popup_duration_ms = %d ; 单次投票状态弹窗持续时间（毫秒），建议略大于刷新间隔\n", cfg.MapVote.PopupDurationMs)
-	fmt.Fprintf(&buf, "home_link_url = %s ; 换图首页“打开链接”按钮跳转地址，留空则隐藏按钮\n", cfg.MapVote.HomeLinkURL)
-	fmt.Fprintf(&buf, "align = %s ; 对齐方式：top_left / top / left / center / bottom_right 等\n", cfg.MapVote.Align)
-	fmt.Fprintf(&buf, "top = %d ; 顶部偏移\n", cfg.MapVote.Top)
-	fmt.Fprintf(&buf, "left = %d ; 左侧偏移\n", cfg.MapVote.Left)
-	fmt.Fprintf(&buf, "bottom = %d ; 底部偏移\n", cfg.MapVote.Bottom)
-	fmt.Fprintf(&buf, "right = %d ; 右侧偏移\n", cfg.MapVote.Right)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+func encodeTOMLStringArray(values []string) string {
+	if len(values) == 0 {
+		return "[]"
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, encodeTOMLString(value))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+func encodeTOMLString(value string) string {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	if strings.Contains(value, "\n") && !strings.Contains(value, `"""`) {
+		return "\"\"\"\n" + value + "\n\"\"\""
+	}
+	replacer := strings.NewReplacer(
+		`\\`, `\\\\`,
+		`"`, `\"`,
+		"\n", `\n`,
+		"\r", `\r`,
+		"\t", `\t`,
+	)
+	return `"` + replacer.Replace(value) + `"`
 }
 
 func normalize(cfg *Config) {
+	if cfg.Core.TPS <= 0 {
+		cfg.Core.TPS = 60
+	}
+	if cfg.Core.TPS > 120 {
+		cfg.Core.TPS = 120
+	}
 	cfg.Development.PacketEventsEnabled = cfg.Development.PacketRecvEventsEnabled || cfg.Development.PacketSendEventsEnabled
+	cfg.Sync.Strategy = normalizeAuthoritySyncStrategy(string(cfg.Sync.Strategy))
 	if strings.TrimSpace(cfg.Runtime.ServerName) == "" {
 		cfg.Runtime.ServerName = "mdt-server"
 	}
@@ -1366,10 +1710,10 @@ func normalize(cfg *Config) {
 		cfg.Runtime.VirtualPlayers = 0
 	}
 	if cfg.Net.SyncEntityMs <= 0 {
-		cfg.Net.SyncEntityMs = 100
+		cfg.Net.SyncEntityMs = 200
 	}
 	if cfg.Net.SyncStateMs <= 0 {
-		cfg.Net.SyncStateMs = 250
+		cfg.Net.SyncStateMs = 200
 	}
 	if strings.TrimSpace(cfg.Runtime.AssetsDir) == "" {
 		cfg.Runtime.AssetsDir = "assets"
@@ -1381,13 +1725,25 @@ func normalize(cfg *Config) {
 		cfg.Runtime.LogsDir = "logs"
 	}
 	if strings.TrimSpace(cfg.API.ConfigFile) == "" {
-		cfg.API.ConfigFile = "api.ini"
+		cfg.API.ConfigFile = "api.toml"
 	}
 	if cfg.Core.MemoryCheckIntervalSec <= 0 {
 		cfg.Core.MemoryCheckIntervalSec = 5
 	}
 	if cfg.Control.ReloadIntervalSec <= 0 {
 		cfg.Control.ReloadIntervalSec = 5
+	}
+	if strings.TrimSpace(cfg.Tracepoints.File) == "" {
+		cfg.Tracepoints.File = filepath.Join("logs", "tracepoints.jsonl")
+	}
+	if cfg.Admin.PlayerLimit < 0 {
+		cfg.Admin.PlayerLimit = 0
+	}
+	if cfg.Admin.RecentKickSeconds < 0 {
+		cfg.Admin.RecentKickSeconds = 0
+	}
+	if strings.TrimSpace(cfg.Admin.WhitelistFile) == "" {
+		cfg.Admin.WhitelistFile = filepath.Join("data", "state", "whitelist.json")
 	}
 	if strings.TrimSpace(cfg.Control.PublicConnUUIDFile) == "" {
 		cfg.Control.PublicConnUUIDFile = filepath.Join("json", "conn_uuid.json")
@@ -1411,6 +1767,7 @@ func normalize(cfg *Config) {
 	if strings.TrimSpace(cfg.Personalization.PlayerConnIDSuffixFormat) == "" {
 		cfg.Personalization.PlayerConnIDSuffixFormat = " [gray]{id}[]"
 	}
+	cfg.Mods.ExpectedClientMods = asCSV(strings.Join(cfg.Mods.ExpectedClientMods, ","))
 	cfg.Personalization.PlayerBoundPrefix = normalizeWrappedMindustryLiteral(cfg.Personalization.PlayerBoundPrefix)
 	cfg.Personalization.PlayerUnboundPrefix = normalizeWrappedMindustryLiteral(cfg.Personalization.PlayerUnboundPrefix)
 	if cfg.JoinPopup.DelayMs < 0 {
@@ -1507,24 +1864,25 @@ func sidecarPaths(cfgPath string, cfg Config) map[string]string {
 	dir := filepath.Dir(cfgPath)
 	apiPath := cfg.API.ConfigFile
 	if strings.TrimSpace(apiPath) == "" {
-		apiPath = "api.ini"
+		apiPath = "api.toml"
 	}
 	if !filepath.IsAbs(apiPath) {
 		apiPath = filepath.Join(dir, apiPath)
 	}
 	return map[string]string{
-		"core":            filepath.Join(dir, "core.ini"),
-		"server":          filepath.Join(dir, "server.ini"),
-		"sync":            filepath.Join(dir, "sync.ini"),
-		"misc":            filepath.Join(dir, "misc.ini"),
-		"sundries":        filepath.Join(dir, "Sundries.ini"),
-		"development":     filepath.Join(dir, "Development mode.ini"),
-		"personalization": filepath.Join(dir, "Personalization.ini"),
-		"join_popup":      filepath.Join(dir, "Join popup.ini"),
-		"status_bar":      filepath.Join(dir, "Status bar.ini"),
-		"map_vote":        filepath.Join(dir, "Vote map.ini"),
-		"data":            filepath.Join(dir, "data.ini"),  // backward compatibility
-		"paths":           filepath.Join(dir, "paths.ini"), // backward compatibility
+		"core":            filepath.Join(dir, "core.toml"),
+		"server":          filepath.Join(dir, "server.toml"),
+		"sync":            filepath.Join(dir, "sync.toml"),
+		"misc":            filepath.Join(dir, "misc.toml"),
+		"sundries":        filepath.Join(dir, "sundries.toml"),
+		"development":     filepath.Join(dir, "development.toml"),
+		"tracepoints":     filepath.Join(dir, "tracepoints.toml"),
+		"personalization": filepath.Join(dir, "personalization.toml"),
+		"join_popup":      filepath.Join(dir, "join_popup.toml"),
+		"status_bar":      filepath.Join(dir, "status_bar.toml"),
+		"map_vote":        filepath.Join(dir, "map_vote.toml"),
+		"data":            filepath.Join(dir, "data.toml"),
+		"paths":           filepath.Join(dir, "paths.toml"),
 		"api":             apiPath,
 	}
 }
@@ -1532,6 +1890,9 @@ func sidecarPaths(cfgPath string, cfg Config) map[string]string {
 func loadSidecars(cfgPath string, cfg *Config) error {
 	paths := sidecarPaths(cfgPath, *cfg)
 	loadOne := func(path string) error {
+		if strings.TrimSpace(path) == "" {
+			return nil
+		}
 		st, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -1542,72 +1903,57 @@ func loadSidecars(cfgPath string, cfg *Config) error {
 		if st.IsDir() {
 			return nil
 		}
-		d, err := parseINI(path)
+		d, err := parseConfigData(path)
 		if err != nil {
-			return fmt.Errorf("parse ini %s: %w", path, err)
+			return fmt.Errorf("parse config %s: %w", path, err)
 		}
 		applyINI(cfg, d)
 		return nil
 	}
-	for _, key := range []string{"core", "server", "sync", "misc", "sundries", "development", "personalization", "status_bar", "map_vote", "data", "paths", "api"} {
+	for _, key := range []string{"core", "server", "sync", "misc", "sundries", "development", "tracepoints", "personalization", "join_popup", "status_bar", "map_vote", "data", "paths", "api"} {
 		if err := loadOne(paths[key]); err != nil {
 			return err
 		}
-	}
-	if err := func(path string) error {
-		st, err := os.Stat(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-		if st.IsDir() {
-			return nil
-		}
-		if err := parseJoinPopupINI(path, cfg); err != nil {
-			return fmt.Errorf("parse join popup ini %s: %w", path, err)
-		}
-		return nil
-	}(paths["join_popup"]); err != nil {
-		return err
 	}
 	return nil
 }
 
 func saveSidecars(cfgPath string, cfg Config, d iniData) error {
 	paths := sidecarPaths(cfgPath, cfg)
-	if err := writeINI(paths["core"], []string{"core", "memory"}, d, "core settings"); err != nil {
+	if err := writeTOML(paths["core"], []string{"core", "memory"}, d, "核心配置"); err != nil {
 		return err
 	}
-	if err := writeINI(paths["server"], []string{"server"}, d, "server settings"); err != nil {
+	if err := writeTOML(paths["server"], []string{"server"}, d, "服务器基础配置"); err != nil {
 		return err
 	}
-	if err := writeINI(paths["sync"], []string{"sync"}, d, "snapshot sync settings"); err != nil {
+	if err := writeTOML(paths["sync"], []string{"sync"}, d, "同步配置"); err != nil {
 		return err
 	}
-	if err := writeINI(paths["misc"], []string{"data", "paths", "mods", "persist", "script", "admin"}, d, "misc settings"); err != nil {
+	if err := writeTOML(paths["misc"], []string{"data", "paths", "mods", "persist", "script", "admin"}, d, "杂项配置"); err != nil {
 		return err
 	}
-	if err := writeSundriesINI(paths["sundries"], cfg); err != nil {
+	if err := writeTOML(paths["sundries"], []string{"sundries"}, d, "附加日志配置"); err != nil {
 		return err
 	}
-	if err := writeDevelopmentINI(paths["development"], cfg); err != nil {
+	if err := writeTOML(paths["development"], []string{"development"}, d, "开发调试配置"); err != nil {
 		return err
 	}
-	if err := writePersonalizationINI(paths["personalization"], cfg); err != nil {
+	if err := writeTOML(paths["tracepoints"], []string{"tracepoints"}, d, "断点追踪配置"); err != nil {
 		return err
 	}
-	if err := writeJoinPopupINI(paths["join_popup"], cfg); err != nil {
+	if err := writeTOML(paths["personalization"], []string{"personalization"}, d, "个性化显示配置"); err != nil {
 		return err
 	}
-	if err := writeStatusBarINI(paths["status_bar"], cfg); err != nil {
+	if err := writeTOML(paths["join_popup"], []string{"join_popup"}, d, "入服公告配置"); err != nil {
 		return err
 	}
-	if err := writeMapVoteINI(paths["map_vote"], cfg); err != nil {
+	if err := writeTOML(paths["status_bar"], []string{"status_bar"}, d, "状态栏配置"); err != nil {
 		return err
 	}
-	if err := writeINI(paths["api"], []string{"api"}, d, "api settings"); err != nil {
+	if err := writeTOML(paths["map_vote"], []string{"map_vote"}, d, "地图投票配置"); err != nil {
+		return err
+	}
+	if err := writeTOML(paths["api"], []string{"api"}, d, "API 配置"); err != nil {
 		return err
 	}
 	return nil
@@ -1630,14 +1976,14 @@ func Default() Config {
 			PacketSendEventsEnabled:    false,
 			TerminalPlayerLogsEnabled:  true,
 			TerminalPlayerUUIDEnabled:  false,
-			RespawnCoreLogsEnabled:     true,
-			RespawnUnitLogsEnabled:     true,
-			RespawnPacketLogsEnabled:   true,
-			BuildSnapshotLogsEnabled:   true,
-			BuildPlaceLogsEnabled:      true,
-			BuildFinishLogsEnabled:     true,
-			BuildBreakStartLogsEnabled: true,
-			BuildBreakDoneLogsEnabled:  true,
+			RespawnCoreLogsEnabled:     false,
+			RespawnUnitLogsEnabled:     false,
+			RespawnPacketLogsEnabled:   false,
+			BuildSnapshotLogsEnabled:   false,
+			BuildPlaceLogsEnabled:      false,
+			BuildFinishLogsEnabled:     false,
+			BuildBreakStartLogsEnabled: false,
+			BuildBreakDoneLogsEnabled:  false,
 		},
 		Personalization: PersonalizationConfig{
 			StartupReportEnabled:          true,
@@ -1667,6 +2013,10 @@ func Default() Config {
 			PlayerBindAPICacheSec:         30,
 			PlayerConnIDSuffixEnabled:     true,
 			PlayerConnIDSuffixFormat:      " [gray]{id}[]",
+			MainConsoleTitle:              "mdt-server | 主进程 | {server_name}",
+			Core2ConsoleTitle:             "mdt-server | Core2 | IO",
+			Core3ConsoleTitle:             "mdt-server | Core3 | Snapshot",
+			Core4ConsoleTitle:             "mdt-server | Core4 | Policy",
 		},
 		JoinPopup: JoinPopupConfig{
 			Enabled:          true,
@@ -1723,17 +2073,26 @@ func Default() Config {
 			Enabled:    true,
 			Translated: true,
 		},
+		Tracepoints: TracepointsConfig{
+			Enabled:               false,
+			File:                  filepath.Join("logs", "tracepoints.jsonl"),
+			ClientRequestsEnabled: true,
+			ServerSendsEnabled:    true,
+			WorldRuntimeEnabled:   true,
+			StateBuildEnabled:     true,
+			WorldStreamEnabled:    true,
+		},
 		Sundries: SundriesConfig{
 			DetailedLogMaxMB:           2,
 			DetailedLogMaxFiles:        100,
 			NetEventLogsEnabled:        true,
 			ChatLogsEnabled:            true,
-			RespawnCoreLogsEnabled:     true,
-			RespawnUnitLogsEnabled:     true,
-			BuildPlaceLogsEnabled:      true,
-			BuildFinishLogsEnabled:     true,
-			BuildBreakStartLogsEnabled: true,
-			BuildBreakDoneLogsEnabled:  true,
+			RespawnCoreLogsEnabled:     false,
+			RespawnUnitLogsEnabled:     false,
+			BuildPlaceLogsEnabled:      false,
+			BuildFinishLogsEnabled:     false,
+			BuildBreakStartLogsEnabled: false,
+			BuildBreakDoneLogsEnabled:  false,
 		},
 		Runtime: RuntimeConfig{
 			Cores:            6,
@@ -1749,6 +2108,7 @@ func Default() Config {
 		},
 		Core: CoreConfig{
 			DualCoreEnabled:        true,
+			TPS:                    60,
 			MemoryLimitMB:          0,
 			MemoryStartupMaxMB:     0,
 			MemoryGCTriggerMB:      0,
@@ -1760,7 +2120,7 @@ func Default() Config {
 			Key:        "",
 			Keys:       nil,
 			Bind:       "0.0.0.0:8090",
-			ConfigFile: "api.ini",
+			ConfigFile: "api.toml",
 		},
 		Storage: StorageConfig{
 			Mode:            "file",
@@ -1772,8 +2132,12 @@ func Default() Config {
 			UdpRetryCount:   2,
 			UdpRetryDelayMs: 5,
 			UdpFallbackTCP:  true,
-			SyncEntityMs:    100,
-			SyncStateMs:     250,
+			SyncEntityMs:    200,
+			SyncStateMs:     200,
+		},
+		Sync: SyncConfig{
+			Strategy:               AuthoritySyncDynamic,
+			UseMapSyncDataFallback: false,
 		},
 		Persist: PersistConfig{
 			Enabled:     true,
@@ -1785,19 +2149,30 @@ func Default() Config {
 			MSAVFile:    "",
 		},
 		Mods: ModsConfig{
-			Enabled:   false,
-			Directory: "mods",
-			JavaHome:  "",
-			JSDir:     "mods/js",
-			GoDir:     "mods/go",
-			NodeDir:   "mods/node",
+			Enabled:            false,
+			Directory:          "mods",
+			JavaHome:           "",
+			JSDir:              "mods/js",
+			GoDir:              "mods/go",
+			NodeDir:            "mods/node",
+			ExpectedClientMods: nil,
 		},
 		Script: ScriptConfig{
 			File:         "data/state/scripts.json",
 			StartupTasks: nil,
 			DailyGCTime:  "",
 		},
-		Admin: AdminConfig{OpsFile: "data/state/ops.json"},
+		Admin: AdminConfig{
+			OpsFile:            filepath.Join("json", "ops.json"),
+			PlayerLimit:        0,
+			StrictIdentity:     true,
+			AllowCustomClients: false,
+			WhitelistEnabled:   false,
+			WhitelistFile:      "data/state/whitelist.json",
+			BannedNames:        nil,
+			BannedSubnets:      nil,
+			RecentKickSeconds:  30,
+		},
 	}
 }
 
@@ -1829,7 +2204,7 @@ func Load(path string) (Config, error) {
 		return cfg, os.ErrInvalid
 	}
 
-	d, err := parseINI(path)
+	d, err := parseConfigData(path)
 	if err != nil {
 		return cfg, err
 	}
@@ -1877,6 +2252,8 @@ func ApplyBaseDir(cfg *Config, baseDir string) {
 	cfg.Mods.NodeDir = resolve(cfg.Mods.NodeDir)
 	cfg.Script.File = resolve(cfg.Script.File)
 	cfg.Admin.OpsFile = resolve(cfg.Admin.OpsFile)
+	cfg.Admin.WhitelistFile = resolve(cfg.Admin.WhitelistFile)
+	cfg.Tracepoints.File = resolve(cfg.Tracepoints.File)
 }
 
 func Save(path string, cfg Config) error {
@@ -1886,12 +2263,24 @@ func Save(path string, cfg Config) error {
 	normalize(&cfg)
 	d := makeINI(cfg)
 
-	if err := writeINI(path,
-		[]string{"config", "building"},
-		d,
-		"mdt-server main config (INI)",
-	); err != nil {
+	if err := saveMainConfig(path, d); err != nil {
 		return err
 	}
 	return saveSidecars(path, cfg, d)
+}
+
+func SaveSidecars(path string, cfg Config) error {
+	if strings.TrimSpace(path) == "" {
+		return os.ErrInvalid
+	}
+	normalize(&cfg)
+	return saveSidecars(path, cfg, makeINI(cfg))
+}
+
+func saveMainConfig(path string, d iniData) error {
+	return writeTOML(path,
+		[]string{"config", "authority_sync", "building"},
+		d,
+		"mdt-server 主配置",
+	)
 }

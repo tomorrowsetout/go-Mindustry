@@ -11,6 +11,7 @@ import (
 
 	"mdt-server/internal/persist"
 	"mdt-server/internal/storage"
+	"mdt-server/internal/worldstream"
 )
 
 // Core1 - Game Loop 核心（主线程）
@@ -20,6 +21,8 @@ type Core1 struct {
 	config  Config
 	running atomic.Bool
 	tickFn  func(tick uint64, delta time.Duration)
+	stopCh  chan struct{}
+	stopMu  sync.Mutex
 }
 
 // Core2 - IO Core（第二核心）
@@ -36,6 +39,8 @@ type Core2 struct {
 	recorder      storage.Recorder
 	connMu        sync.RWMutex
 	conns         map[int32]ConnectionMessage
+	modMu         sync.RWMutex
+	mods          map[string]*managedMod
 	stateProvider func() persist.State
 	onPacketIn    func(*PacketMessage)
 	onPacketOut   func(*PacketMessage)
@@ -110,7 +115,8 @@ func NewCore1(name string) *Core1 {
 		name = "game-loop"
 	}
 	return &Core1{
-		name: name,
+		name:   name,
+		stopCh: make(chan struct{}),
 	}
 }
 
@@ -134,6 +140,7 @@ func NewCore2(cfg Config) *Core2 {
 			lastUpdate: time.Now().UnixNano(),
 		},
 		conns: make(map[int32]ConnectionMessage),
+		mods:  make(map[string]*managedMod),
 	}
 	c2.verboseNetLog.Store(cfg.VerboseNetLog)
 	return c2
@@ -159,21 +166,52 @@ func (c1 *Core1) Run(interval time.Duration) {
 	}
 }
 
+func (c1 *Core1) Stop() {
+	if c1 == nil {
+		return
+	}
+	if !c1.running.Swap(false) {
+		return
+	}
+	c1.stopMu.Lock()
+	select {
+	case <-c1.stopCh:
+	default:
+		close(c1.stopCh)
+	}
+	c1.stopMu.Unlock()
+}
+
 // runGameLoop 运行游戏循环（主线程）
 func (c1 *Core1) runGameLoop(interval time.Duration) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	tickCount := uint64(0)
 	next := time.Now().Add(interval)
 	const maxCatchUp = 4
 
 	for {
+		select {
+		case <-c1.stopCh:
+			return
+		default:
+		}
 		now := time.Now()
 		if now.Before(next) {
-			// 短暂休眠直到下一个 tick
-			time.Sleep(next.Sub(now))
+			timer := time.NewTimer(next.Sub(now))
+			select {
+			case <-timer.C:
+			case <-c1.stopCh:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			}
 			continue
 		}
 		steps := 0
-		for !now.Before(next) && steps < maxCatchUp {
+		for c1.running.Load() && !now.Before(next) && steps < maxCatchUp {
 			if c1.tickFn != nil {
 				c1.tickFn(tickCount, interval)
 			}
@@ -328,18 +366,7 @@ func (c2 *Core2) handleModMessage(m *ModMessage) {
 
 // handleModLoad 加载 Mod
 func (c2 *Core2) handleModLoad(m *ModMessage) {
-	result := ModResult{}
-
-	// TODO: 实现 Mod 加载逻辑
-	// 根据 ModType (java/js/go/node) 加载不同的 Mod
-	fmt.Printf("[Core2 %s] Loading mod: name=%s, type=%s, path=%s\n",
-		c2.name, m.Name, m.ModType, m.Path)
-
-	// 模拟加载成功
-	result.ID = m.ID
-	result.Success = true
-	result.Name = m.Name
-
+	result := c2.loadMod(m)
 	if m.ResultChan != nil {
 		m.ResultChan <- result
 	}
@@ -347,16 +374,7 @@ func (c2 *Core2) handleModLoad(m *ModMessage) {
 
 // handleModUnload 卸载 Mod
 func (c2 *Core2) handleModUnload(m *ModMessage) {
-	result := ModResult{}
-
-	// TODO: 实现 Mod 卸载逻辑
-	fmt.Printf("[Core2 %s] Unloading mod: name=%s, type=%s\n",
-		c2.name, m.Name, m.ModType)
-
-	// 模拟卸载成功
-	result.ID = m.ID
-	result.Success = true
-
+	result := c2.unloadMod(m)
 	if m.ResultChan != nil {
 		m.ResultChan <- result
 	}
@@ -364,16 +382,7 @@ func (c2 *Core2) handleModUnload(m *ModMessage) {
 
 // handleModStart 启动 Mod
 func (c2 *Core2) handleModStart(m *ModMessage) {
-	result := ModResult{}
-
-	// TODO: 实现 Mod 启动逻辑
-	fmt.Printf("[Core2 %s] Starting mod: name=%s, type=%s\n",
-		c2.name, m.Name, m.ModType)
-
-	// 模拟启动成功
-	result.ID = m.ID
-	result.Success = true
-
+	result := c2.startMod(m)
 	if m.ResultChan != nil {
 		m.ResultChan <- result
 	}
@@ -381,16 +390,7 @@ func (c2 *Core2) handleModStart(m *ModMessage) {
 
 // handleModStop 停止 Mod
 func (c2 *Core2) handleModStop(m *ModMessage) {
-	result := ModResult{}
-
-	// TODO: 实现 Mod 停止逻辑
-	fmt.Printf("[Core2 %s] Stopping mod: name=%s, type=%s\n",
-		c2.name, m.Name, m.ModType)
-
-	// 模拟停止成功
-	result.ID = m.ID
-	result.Success = true
-
+	result := c2.stopMod(m)
 	if m.ResultChan != nil {
 		m.ResultChan <- result
 	}
@@ -398,16 +398,7 @@ func (c2 *Core2) handleModStop(m *ModMessage) {
 
 // handleModReload 重新加载 Mod
 func (c2 *Core2) handleModReload(m *ModMessage) {
-	result := ModResult{}
-
-	// TODO: 实现 Mod 重新加载逻辑
-	fmt.Printf("[Core2 %s] Reloading mod: name=%s, type=%s\n",
-		c2.name, m.Name, m.ModType)
-
-	// 模拟重新加载成功
-	result.ID = m.ID
-	result.Success = true
-
+	result := c2.reloadMod(m)
 	if m.ResultChan != nil {
 		m.ResultChan <- result
 	}
@@ -415,15 +406,7 @@ func (c2 *Core2) handleModReload(m *ModMessage) {
 
 // handleModScan 扫描 Mod 目录
 func (c2 *Core2) handleModScan(m *ModMessage) {
-	result := ModResult{}
-
-	// TODO: 实现 Mod 扫描逻辑
-	fmt.Printf("[Core2 %s] Scanning mods directory\n", c2.name)
-
-	// 模拟扫描成功
-	result.ID = m.ID
-	result.Success = true
-
+	result := c2.scanModDirectory(m)
 	if m.ResultChan != nil {
 		m.ResultChan <- result
 	}
@@ -445,43 +428,66 @@ func (c2 *Core2) handleWorldStreamMessage(m *WorldStreamMessage) {
 
 // handleWorldStreamLoadModel 从 MSAV 加载世界模型
 func (c2 *Core2) handleWorldStreamLoadModel(m *WorldStreamMessage) {
-	// TODO: 实现从 MSAV 加载世界模型
-	// model, err := worldstream.LoadWorldModelFromMSAV(m.Path)
-	// if err != nil {
-	//     result.Error = err
-	// } else {
-	//     result.WorldData = worldstream.BuildWorldStreamFromModel(model)
-	// }
-
-	fmt.Printf("[Core2 %s] Loading world model from: %s\n", c2.name, m.Path)
-
-	// 模拟加载成功
-	// result.WorldData = []byte("mock_world_stream_data")
+	if m == nil || m.Path == "" {
+		fmt.Printf("[Core2 %s] load_model skipped: empty path\n", c2.name)
+		return
+	}
+	model, err := worldstream.LoadWorldModelFromMSAV(m.Path, nil)
+	if err != nil {
+		fmt.Printf("[Core2 %s] load_model failed path=%s err=%v\n", c2.name, m.Path, err)
+		return
+	}
+	playerID := m.PlayerID
+	if playerID == 0 {
+		playerID = 1
+	}
+	payload, err := worldstream.BuildWorldStreamFromModel(model, playerID)
+	if err != nil {
+		fmt.Printf("[Core2 %s] load_model worldstream build failed path=%s err=%v\n", c2.name, m.Path, err)
+		return
+	}
+	fmt.Printf("[Core2 %s] load_model ok path=%s bytes=%d\n", c2.name, m.Path, len(payload))
 }
 
 // handleWorldStreamSaveSnapshot 保存世界快照到 MSAV
 func (c2 *Core2) handleWorldStreamSaveSnapshot(m *WorldStreamMessage) {
-	// TODO: 实现保存世界快照到 MSAV
-	// err := worldstream.SaveWorldModelToMSAV(m.Path, m.ModelData)
-	// if err != nil {
-	//     result.Error = err
-	// }
-
-	fmt.Printf("[Core2 %s] Saving world snapshot to: %s\n", c2.name, m.Path)
-
-	// 模拟保存成功
+	if m == nil || m.Path == "" {
+		fmt.Printf("[Core2 %s] save_snapshot skipped: empty path\n", c2.name)
+		return
+	}
+	if len(m.ModelData) == 0 {
+		fmt.Printf("[Core2 %s] save_snapshot skipped: empty payload path=%s\n", c2.name, m.Path)
+		return
+	}
+	if err := os.WriteFile(m.Path, m.ModelData, 0o644); err != nil {
+		fmt.Printf("[Core2 %s] save_snapshot failed path=%s err=%v\n", c2.name, m.Path, err)
+		return
+	}
+	fmt.Printf("[Core2 %s] save_snapshot ok path=%s bytes=%d\n", c2.name, m.Path, len(m.ModelData))
 }
 
 // handleWorldStreamRewritePlayer 重写玩家数据
 func (c2 *Core2) handleWorldStreamRewritePlayer(m *WorldStreamMessage) {
-	// TODO: 实现重写玩家数据
-	// result.WorldData, result.Error = worldstream.RewritePlayerIDInWorldStream(m.ModelData, m.PlayerID)
-
-	fmt.Printf("[Core2 %s] Rewriting player ID %d in world stream: %s\n",
-		c2.name, m.PlayerID, m.Path)
-
-	// 模拟重写成功
-	// result.WorldData = []byte("mock_world_stream_data_with_new_player_id")
+	if m == nil || len(m.ModelData) == 0 {
+		fmt.Printf("[Core2 %s] rewrite_player skipped: empty payload\n", c2.name)
+		return
+	}
+	playerID := m.PlayerID
+	if playerID == 0 {
+		playerID = 1
+	}
+	patched, err := worldstream.RewritePlayerIDInWorldStream(m.ModelData, playerID)
+	if err != nil {
+		fmt.Printf("[Core2 %s] rewrite_player failed player=%d path=%s err=%v\n", c2.name, playerID, m.Path, err)
+		return
+	}
+	if m.Path != "" {
+		if err := os.WriteFile(m.Path, patched, 0o644); err != nil {
+			fmt.Printf("[Core2 %s] rewrite_player write failed player=%d path=%s err=%v\n", c2.name, playerID, m.Path, err)
+			return
+		}
+	}
+	fmt.Printf("[Core2 %s] rewrite_player ok player=%d path=%s bytes=%d\n", c2.name, playerID, m.Path, len(patched))
 }
 
 // handlePacketMessage 处理网络包（IO Core）

@@ -20,7 +20,7 @@ func BuildWorldStreamFromModel(model *world.WorldModel, playerID int32) ([]byte,
 	for k, v := range model.Tags {
 		tags[k] = v
 	}
-	return buildWorldStreamFromModelTags(model, tags, playerID)
+	return buildWorldStreamFromModelState(model, tags, playerID, 1, 0, 0, 0, 0)
 }
 
 func BuildWorldStreamFromModelSnapshot(model *world.WorldModel, playerID int32, snap world.Snapshot) ([]byte, error) {
@@ -34,10 +34,10 @@ func BuildWorldStreamFromModelSnapshot(model *world.WorldModel, playerID int32, 
 	tags["wave"] = strconv.Itoa(int(snap.Wave))
 	tags["wavetime"] = fmt.Sprintf("%.2f", snap.WaveTime*60)
 	tags["tick"] = fmt.Sprintf("%.0f", float64(snap.Tick))
-	return buildWorldStreamFromModelTags(model, tags, playerID)
+	return buildWorldStreamFromModelState(model, tags, playerID, snap.Wave, snap.WaveTime*60, float64(snap.Tick), snap.Rand0, snap.Rand1)
 }
 
-func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]string, playerID int32) ([]byte, error) {
+func buildWorldStreamFromModelState(model *world.WorldModel, tags map[string]string, playerID int32, wave int32, wavetimeTicks float32, tick float64, rand0, rand1 int64) ([]byte, error) {
 	var out bytes.Buffer
 	w := &javaWriter{buf: &out}
 	rules := tags["rules"]
@@ -57,42 +57,22 @@ func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]stri
 	if err := w.WriteStringMap(tags); err != nil {
 		return nil, err
 	}
-
-	wave := int32(1)
-	if v, ok := tags["wave"]; ok {
-		if parsed, err := strconv.Atoi(v); err == nil {
-			wave = int32(parsed)
-		}
-	}
 	if err := w.WriteInt32(wave); err != nil {
 		return nil, err
 	}
 
-	wavetime := float32(0)
-	if v, ok := tags["wavetime"]; ok {
-		if parsed, err := strconv.ParseFloat(v, 32); err == nil {
-			wavetime = float32(parsed)
-		}
-	}
-	if err := w.WriteFloat32(wavetime); err != nil {
+	if err := w.WriteFloat32(wavetimeTicks); err != nil {
 		return nil, err
-	}
-
-	tick := float64(0)
-	if v, ok := tags["tick"]; ok {
-		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			tick = parsed
-		}
 	}
 	if err := w.WriteFloat64(tick); err != nil {
 		return nil, err
 	}
 
 	// rand seeds
-	if err := w.WriteInt64(0); err != nil {
+	if err := w.WriteInt64(rand0); err != nil {
 		return nil, err
 	}
-	if err := w.WriteInt64(0); err != nil {
+	if err := w.WriteInt64(rand1); err != nil {
 		return nil, err
 	}
 
@@ -102,15 +82,18 @@ func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]stri
 	if err := w.WriteInt32(playerID); err != nil {
 		return nil, err
 	}
-	if err := writeTemplatePlayerForContent(w, model.Content); err != nil {
+	if err := writeDirectPlayerPayload(w); err != nil {
 		return nil, err
 	}
 
 	if err := w.WriteBytes(model.Content); err != nil {
 		return nil, err
 	}
-	// Keep compatibility with current decoder expectation.
-	if err := w.WriteByte(0); err != nil {
+	patches := model.Patches
+	if len(patches) == 0 {
+		patches = []byte{0}
+	}
+	if err := w.WriteBytes(patches); err != nil {
 		return nil, err
 	}
 
@@ -122,7 +105,11 @@ func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]stri
 	if err := w.WriteBytes(mapChunk); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalTeamBlocks(w); err != nil {
+	var teamBlocks bytes.Buffer
+	if err := writeMinimalTeamBlocks(&javaWriter{buf: &teamBlocks}); err != nil {
+		return nil, err
+	}
+	if err := w.WriteBytes(teamBlocks.Bytes()); err != nil {
 		return nil, err
 	}
 	markers := model.Markers
@@ -132,7 +119,11 @@ func buildWorldStreamFromModelTags(model *world.WorldModel, tags map[string]stri
 	if err := w.WriteBytes(markers); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalCustomChunks(w); err != nil {
+	custom := model.Custom
+	if len(custom) == 0 {
+		custom = []byte{0, 0, 0, 0}
+	}
+	if err := w.WriteBytes(custom); err != nil {
 		return nil, err
 	}
 

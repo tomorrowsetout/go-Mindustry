@@ -54,6 +54,18 @@ type Building struct {
 	Config    []byte
 	Payload   []byte
 	MaxHealth float32
+	// Transient runtime state for vanilla heal suppression.
+	healSuppressionUntilSec float32
+	// Inline MSAV sync data preserved from map chunk loading. This lets us
+	// recover original client-visible runtime state before server-side runtime
+	// systems have rebuilt their own state.
+	MapSyncRevision   byte
+	MapSyncData       []byte
+	MapSyncTail       []byte
+	MapSyncAmmoLoaded bool
+	MapPowerLinks     []int32
+	MapPowerStatus    float32
+	MapPowerStatusSet bool
 }
 
 // GetX 获取X坐标
@@ -184,6 +196,20 @@ type Unit struct {
 	MaxHealth float32
 }
 
+type entityBuildPlan struct {
+	Breaking bool
+	Pos      int32
+	Rotation byte
+	BlockID  int16
+	Config   any
+}
+
+type entityAbilityState struct {
+	Data  float32
+	Timer float32
+	Aux   float32
+}
+
 // GetX 获取X坐标
 func (u *Unit) GetX() float32 {
 	return u.Pos.X
@@ -221,71 +247,81 @@ type RawEntity struct {
 	Health      float32
 	MaxHealth   float32
 	Shield      float32
+	Ammo        float32
 	ShieldMax   float32
 	ShieldRegen float32
 	Armor       float32
+	Elevation   float32
+	Shooting    bool
 
-	AttackRange             float32
-	AttackFireMode          string
-	AttackDamage            float32
-	AttackSplashDamage      float32
-	AttackInterval          float32
-	AttackCooldown          float32
-	AttackBulletType        int16
-	AttackBulletSpeed       float32
-	AttackBulletLifetime    float32
-	AttackBulletHitSize     float32
-	AttackSplashRadius      float32
-	AttackBuildingDamage    float32
-	AttackBuildingDamageSet bool
-	AttackSlowSec           float32
-	AttackSlowMul           float32
-	AttackPierce            int32
-	AttackPierceBuilding    bool
-	AttackChainCount        int32
-	AttackChainRange        float32
-	AttackPreferBuildings   bool
-	AttackStatusID          int16
-	AttackStatusName        string
-	AttackStatusDuration    float32
-	AttackShootStatusID     int16
-	AttackShootStatusName   string
-	AttackShootStatusDur    float32
-	AttackFragmentCount     int32
-	AttackFragmentSpread    float32
-	AttackFragmentSpeed     float32
-	AttackFragmentLife      float32
-	AttackFragmentRand      float32
-	AttackFragmentAngle     float32
-	AttackFragmentVelMin    float32
-	AttackFragmentVelMax    float32
-	AttackFragmentLifeMin   float32
-	AttackFragmentLifeMax   float32
-	AttackFragmentBullet    *bulletRuntimeProfile
-	AttackShootEffect       string
-	AttackSmokeEffect       string
-	AttackHitEffect         string
-	AttackDespawnEffect     string
-	AttackTargetAir         bool
-	AttackTargetGround      bool
-	AttackTargetPriority    string
-	AttackBuildings         bool
-	RuntimeInit             bool
-	Statuses                []entityStatusState
-	StatusDamageMul         float32
-	StatusHealthMul         float32
-	StatusSpeedMul          float32
-	StatusReloadMul         float32
-	StatusBuildSpeedMul     float32
-	StatusDragMul           float32
-	StatusArmorOverride     float32
-	Disarmed                bool
-	SlowRemain              float32
-	SlowMul                 float32
-	HitRadius               float32
+	AttackRange              float32
+	AttackFireMode           string
+	AttackDamage             float32
+	AttackSplashDamage       float32
+	AttackInterval           float32
+	AttackCooldown           float32
+	AttackBulletType         int16
+	AttackBulletSpeed        float32
+	AttackBulletLifetime     float32
+	AttackBulletHitSize      float32
+	AttackSplashRadius       float32
+	AttackBuildingDamage     float32
+	AttackBuildingDamageSet  bool
+	AttackArmorMultiplier    float32
+	AttackMaxDamageFraction  float32
+	AttackShieldDamageMul    float32
+	AttackPierceDamageFactor float32
+	AttackPierceArmor        bool
+	AttackSlowSec            float32
+	AttackSlowMul            float32
+	AttackPierce             int32
+	AttackPierceBuilding     bool
+	AttackChainCount         int32
+	AttackChainRange         float32
+	AttackPreferBuildings    bool
+	AttackStatusID           int16
+	AttackStatusName         string
+	AttackStatusDuration     float32
+	AttackShootStatusID      int16
+	AttackShootStatusName    string
+	AttackShootStatusDur     float32
+	AttackFragmentCount      int32
+	AttackFragmentSpread     float32
+	AttackFragmentSpeed      float32
+	AttackFragmentLife       float32
+	AttackFragmentRand       float32
+	AttackFragmentAngle      float32
+	AttackFragmentVelMin     float32
+	AttackFragmentVelMax     float32
+	AttackFragmentLifeMin    float32
+	AttackFragmentLifeMax    float32
+	AttackFragmentBullet     *bulletRuntimeProfile
+	AttackShootEffect        string
+	AttackSmokeEffect        string
+	AttackHitEffect          string
+	AttackDespawnEffect      string
+	AttackTargetAir          bool
+	AttackTargetGround       bool
+	AttackTargetPriority     string
+	AttackBuildings          bool
+	RuntimeInit              bool
+	Statuses                 []entityStatusState
+	StatusDamageMul          float32
+	StatusHealthMul          float32
+	StatusSpeedMul           float32
+	StatusReloadMul          float32
+	StatusBuildSpeedMul      float32
+	StatusDragMul            float32
+	StatusArmorOverride      float32
+	Disarmed                 bool
+	SlowRemain               float32
+	SlowMul                  float32
+	HitRadius                float32
 
 	Behavior  string
+	CommandID int16
 	TargetID  int32
+	Flag      float64
 	PatrolAX  float32
 	PatrolAY  float32
 	PatrolBX  float32
@@ -294,6 +330,29 @@ type RawEntity struct {
 	MoveSpeed float32
 	Team      TeamID
 	Payload   []byte
+	Payloads  []payloadData
+
+	SpawnedByCore  bool
+	UpdateBuilding bool
+	MineTilePos    int32
+	Stack          ItemStack
+	Plans          []entityBuildPlan
+	Abilities      []entityAbilityState
+
+	Flying          bool
+	LowAltitude     bool
+	CanBoost        bool
+	CoreUnitDock    bool
+	MineWalls       bool
+	MineFloor       bool
+	MineSpeed       float32
+	MineTier        int16
+	BuildSpeed      float32
+	ItemCapacity    int32
+	AmmoCapacity    float32
+	AmmoPerShot     float32
+	AmmoRegen       float32
+	PayloadCapacity float32
 }
 
 type WorldModel struct {
@@ -305,16 +364,18 @@ type WorldModel struct {
 	Entities     []RawEntity
 	NextEntityID int32
 
-	MSAVVersion int32
-	Tags        map[string]string
-	Content     []byte
-	Patches     []byte
-	RawMap      []byte
-	RawEntities []byte
-	Markers     []byte
-	Custom      []byte
-	BlockNames  map[int16]string
-	UnitNames   map[int16]string
+	MSAVVersion   int32
+	Tags          map[string]string
+	Content       []byte
+	Patches       []byte
+	RawMap        []byte
+	EntityMapping []byte
+	TeamBlocks    []byte
+	RawEntities   []byte
+	Markers       []byte
+	Custom        []byte
+	BlockNames    map[int16]string
+	UnitNames     map[int16]string
 
 	EntitiesRev byte
 }
@@ -324,17 +385,19 @@ func (w *WorldModel) Clone() *WorldModel {
 		return nil
 	}
 	out := &WorldModel{
-		Width:        w.Width,
-		Height:       w.Height,
-		NextEntityID: w.NextEntityID,
-		MSAVVersion:  w.MSAVVersion,
-		EntitiesRev:  w.EntitiesRev,
-		Content:      append([]byte(nil), w.Content...),
-		Patches:      append([]byte(nil), w.Patches...),
-		RawMap:       append([]byte(nil), w.RawMap...),
-		RawEntities:  append([]byte(nil), w.RawEntities...),
-		Markers:      append([]byte(nil), w.Markers...),
-		Custom:       append([]byte(nil), w.Custom...),
+		Width:         w.Width,
+		Height:        w.Height,
+		NextEntityID:  w.NextEntityID,
+		MSAVVersion:   w.MSAVVersion,
+		EntitiesRev:   w.EntitiesRev,
+		Content:       append([]byte(nil), w.Content...),
+		Patches:       append([]byte(nil), w.Patches...),
+		RawMap:        append([]byte(nil), w.RawMap...),
+		EntityMapping: append([]byte(nil), w.EntityMapping...),
+		TeamBlocks:    append([]byte(nil), w.TeamBlocks...),
+		RawEntities:   append([]byte(nil), w.RawEntities...),
+		Markers:       append([]byte(nil), w.Markers...),
+		Custom:        append([]byte(nil), w.Custom...),
 	}
 	if len(w.Tags) > 0 {
 		out.Tags = make(map[string]string, len(w.Tags))
@@ -364,6 +427,9 @@ func (w *WorldModel) Clone() *WorldModel {
 				build.Liquids = append([]LiquidStack(nil), build.Liquids...)
 				build.Config = append([]byte(nil), build.Config...)
 				build.Payload = append([]byte(nil), build.Payload...)
+				build.MapSyncData = append([]byte(nil), build.MapSyncData...)
+				build.MapSyncTail = append([]byte(nil), build.MapSyncTail...)
+				build.MapPowerLinks = append([]int32(nil), build.MapPowerLinks...)
 				out.Tiles[i].Build = &build
 			}
 		}

@@ -1,3 +1,0 @@
-{"timestamp":"2026-03-30T15:17:52.9950505Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":1225094771,"uuid":"lObxOnOGljMAAAAAnz64Hg==","ip":"14.153.143.216"}
-{"timestamp":"2026-03-30T15:17:53.0191628Z","kind":"world_handshake_sent","conn_id":1225094771,"uuid":"lObxOnOGljMAAAAAnz64Hg==","ip":"14.153.143.216","name":"[scarlet]（未绑定）[]鸡你肽梅[gray]18677[]"}
-{"timestamp":"2026-03-30T15:17:53.3432043Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":1225094771,"uuid":"lObxOnOGljMAAAAAnz64Hg==","ip":"14.153.143.216","name":"[scarlet]（未绑定）[]鸡你肽梅[gray]18677[]"}

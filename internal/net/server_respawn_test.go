@@ -68,7 +68,7 @@ func decodeEntitySnapshotPacket(t *testing.T, srv *Server, packet *protocol.Remo
 }
 
 func TestMaybeRespawnKeepsAliveWorldUnitWhenMirrorMissing(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	conn := &Conn{
 		playerID:       7,
 		unitID:         12345,
@@ -120,7 +120,7 @@ func TestMaybeRespawnKeepsAliveWorldUnitWhenMirrorMissing(t *testing.T) {
 }
 
 func TestConnectedTeamCountsSkipsUnassignedConns(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	assigned := &Conn{playerID: 1, hasBegunConnecting: true, teamID: 2}
 	unassigned := &Conn{playerID: 2, hasBegunConnecting: true, teamID: 0}
 	srv.conns[assigned] = struct{}{}
@@ -139,7 +139,7 @@ func TestConnectedTeamCountsSkipsUnassignedConns(t *testing.T) {
 }
 
 func TestMaybeRespawnRevivesDeadFlagWhenWorldUnitStillAlive(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	conn := &Conn{
 		playerID: 9,
 		unitID:   54321,
@@ -168,36 +168,172 @@ func TestMaybeRespawnRevivesDeadFlagWhenWorldUnitStillAlive(t *testing.T) {
 	}
 }
 
-func TestRequestRespawnIgnoresUnitClearWhileWorldUnitAlive(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
-	conn := &Conn{
-		playerID: 11,
-		unitID:   777,
-		teamID:   1,
-	}
-	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
-		if unitID != conn.unitID {
-			return UnitInfo{}, false
-		}
-		return UnitInfo{
-			ID:     unitID,
-			Health: 150,
-			TeamID: 1,
-		}, true
+func TestHandleOfficialUnitClearRespawnsAliveCoreUnit(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	srv.SpawnTileFn = func() (protocol.Point2, bool) {
+		return protocol.Point2{X: 4, Y: 6}, true
 	}
 
-	srv.requestRespawn(conn, "unitClear-91")
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 12
+	conn.unitID = 777
+	conn.teamID = 1
+	conn.dead = false
+	conn.lastSpawnAt = time.Now()
+
+	var spawnedUnitID int32
+	srv.SpawnUnitFn = func(_ *Conn, unitID int32, pos protocol.Point2, unitType int16) (float32, float32, bool) {
+		if pos.X != 4 || pos.Y != 6 {
+			t.Fatalf("unexpected spawn tile %+v", pos)
+		}
+		if unitType != 35 {
+			t.Fatalf("expected respawn unit type 35, got %d", unitType)
+		}
+		spawnedUnitID = unitID
+		return 64, 96, true
+	}
+
+	var spawnPackets int
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		switch obj.(type) {
+		case *protocol.Remote_CoreBlock_playerSpawn_149:
+			spawnPackets++
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handleOfficialUnitClear(conn)
 
 	if conn.dead {
-		t.Fatalf("expected alive connection after unitClear while world unit alive")
+		t.Fatal("expected official unitClear to finish with an alive player")
 	}
-	if conn.unitID != 777 {
-		t.Fatalf("expected unit id unchanged, got %d", conn.unitID)
+	if spawnedUnitID == 0 {
+		t.Fatal("expected official unitClear to spawn a replacement unit")
+	}
+	if conn.unitID != spawnedUnitID {
+		t.Fatalf("expected conn unit id to update to %d, got %d", spawnedUnitID, conn.unitID)
+	}
+	if conn.unitID == 777 {
+		t.Fatalf("expected official unitClear to replace old unit 777, got %d", conn.unitID)
+	}
+	if spawnPackets != 1 {
+		t.Fatalf("expected exactly one playerSpawn packet, got %d", spawnPackets)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestSpawnRespawnUnitDoesNotCreateMirrorWhenWorldSpawnFails(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	srv.SpawnTileFn = func() (protocol.Point2, bool) {
+		return protocol.Point2{X: 4, Y: 6}, true
+	}
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 220
+	conn.teamID = 1
+
+	srv.SpawnUnitFn = func(_ *Conn, _ int32, _ protocol.Point2, _ int16) (float32, float32, bool) {
+		return 0, 0, false
+	}
+
+	var spawnPackets int
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		if _, ok := obj.(*protocol.Remote_CoreBlock_playerSpawn_149); ok {
+			spawnPackets++
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	if srv.spawnRespawnUnit(conn) {
+		t.Fatal("expected respawn to fail when world spawn fails")
+	}
+	if conn.unitID != 0 {
+		t.Fatalf("expected failed respawn not to leave a unit id, got %d", conn.unitID)
+	}
+	if spawnPackets != 0 {
+		t.Fatalf("expected failed respawn not to send playerSpawn, got %d", spawnPackets)
+	}
+	srv.entityMu.Lock()
+	defer srv.entityMu.Unlock()
+	if len(srv.entities) != 0 {
+		t.Fatalf("expected failed respawn not to create mirror entities, got %d", len(srv.entities))
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestSpawnRespawnUnitRollsBackWhenPlayerSpawnPacketFails(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	srv.SpawnTileFn = func() (protocol.Point2, bool) {
+		return protocol.Point2{X: 4, Y: 6}, true
+	}
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 221
+	conn.teamID = 1
+	_ = conn.Close()
+
+	var spawnedUnitID int32
+	var droppedUnitID int32
+	srv.SpawnUnitFn = func(_ *Conn, unitID int32, _ protocol.Point2, _ int16) (float32, float32, bool) {
+		spawnedUnitID = unitID
+		return 64, 96, true
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != spawnedUnitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{ID: unitID, X: 64, Y: 96, Health: 100, TeamID: 1, TypeID: 35}, true
+	}
+	srv.DropUnitFn = func(unitID int32) {
+		droppedUnitID = unitID
+	}
+
+	if srv.spawnRespawnUnit(conn) {
+		t.Fatal("expected respawn to fail when playerSpawn send fails on closed connection")
+	}
+	if spawnedUnitID == 0 {
+		t.Fatal("expected test respawn to create a world unit before send failure")
+	}
+	if conn.unitID != 0 {
+		t.Fatalf("expected failed send to clear conn unit id, got %d", conn.unitID)
+	}
+	if droppedUnitID != spawnedUnitID {
+		t.Fatalf("expected failed send to roll back spawned unit %d, dropped=%d", spawnedUnitID, droppedUnitID)
 	}
 }
 
 func TestMaybeRespawnDoesNotSelfKillWhenStateTemporarilyMissing(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	conn := &Conn{
 		playerID:    15,
 		unitID:      8888,
@@ -215,8 +351,253 @@ func TestMaybeRespawnDoesNotSelfKillWhenStateTemporarilyMissing(t *testing.T) {
 	}
 }
 
+func TestHandleOfficialUnitClearIgnoresStaleEchoRightAfterRespawn(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	conn := &Conn{
+		playerID:    18,
+		unitID:      1800,
+		teamID:      1,
+		lastSpawnAt: time.Now(),
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:        unitID,
+			X:         96,
+			Y:         120,
+			Health:    150,
+			MaxHealth: 150,
+			TeamID:    1,
+			TypeID:    35,
+		}, true
+	}
+
+	srv.handleOfficialUnitClear(conn)
+
+	if conn.dead {
+		t.Fatal("expected stale unitClear echo not to kill a freshly respawned player")
+	}
+	if conn.unitID != 1800 {
+		t.Fatalf("expected stale unitClear echo to keep current unit, got %d", conn.unitID)
+	}
+}
+
+func TestHandleOfficialUnitClearIgnoresFreshSpawnWhenWorldStillMissing(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	conn := &Conn{
+		playerID:       181,
+		unitID:         1810,
+		teamID:         1,
+		lastSpawnAt:    time.Now(),
+		lastRespawnReq: time.Now(),
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) { return UnitInfo{}, false }
+
+	srv.handleOfficialUnitClear(conn)
+
+	if conn.dead {
+		t.Fatal("expected fresh-spawn unitClear echo not to kill player while world binding is still settling")
+	}
+	if conn.unitID != 1810 {
+		t.Fatalf("expected unit id to stay unchanged, got %d", conn.unitID)
+	}
+	if conn.lastRespawnReq.IsZero() {
+		t.Fatal("expected recent respawn marker to remain present after ignored stale unitClear")
+	}
+}
+
+func TestHandleOfficialUnitClearIgnoredDuringInitialWorldReloadGrace(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	conn := &Conn{
+		playerID:     1811,
+		teamID:       1,
+		dead:         true,
+		unitID:       0,
+		snapX:        64,
+		snapY:        96,
+		hasConnected: true,
+	}
+	conn.SetWorldReloadGrace(2 * time.Second)
+
+	var spawnCalls int
+	srv.SpawnTileFn = func() (protocol.Point2, bool) {
+		spawnCalls++
+		return protocol.Point2{X: 5, Y: 7}, true
+	}
+	srv.SpawnUnitFn = func(_ *Conn, _ int32, _ protocol.Point2, _ int16) (float32, float32, bool) {
+		t.Fatal("expected initial-world-reload unitClear to be ignored before spawn")
+		return 0, 0, false
+	}
+
+	srv.handleOfficialUnitClear(conn)
+
+	if spawnCalls != 0 {
+		t.Fatalf("expected no spawn tile lookup during initial world reload grace, got %d", spawnCalls)
+	}
+	if !conn.dead {
+		t.Fatal("expected ignored initial unitClear to keep player in pre-spawn dead state")
+	}
+	if conn.unitID != 0 {
+		t.Fatalf("expected no unit to be spawned yet, got %d", conn.unitID)
+	}
+	if !conn.lastRespawnReq.IsZero() {
+		t.Fatalf("expected ignored initial unitClear not to queue a respawn, got %v", conn.lastRespawnReq)
+	}
+}
+
+func TestHandleOfficialUnitClearKeepsAuthoritativeAliveUnit(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 36, name: "beta"})
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 182
+	conn.unitID = 1820
+	conn.teamID = 1
+	conn.lastSpawnAt = time.Now().Add(-3 * time.Second)
+	conn.snapX = 64
+	conn.snapY = 96
+
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:        unitID,
+			X:         80,
+			Y:         120,
+			Health:    170,
+			MaxHealth: 170,
+			TeamID:    1,
+			TypeID:    36,
+		}, true
+	}
+
+	var setPositionPackets int
+	var spawnPackets int
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		switch obj.(type) {
+		case *protocol.Remote_NetClient_setPosition_29:
+			setPositionPackets++
+		case *protocol.Remote_CoreBlock_playerSpawn_149:
+			spawnPackets++
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handleOfficialUnitClear(conn)
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if setPositionPackets > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if conn.dead {
+		t.Fatal("expected authoritative alive unitClear to keep player alive")
+	}
+	if conn.unitID != 1820 {
+		t.Fatalf("expected authoritative alive unit to remain bound, got %d", conn.unitID)
+	}
+	if spawnPackets != 0 {
+		t.Fatalf("expected no respawn packets for authoritative alive unitClear, got %d", spawnPackets)
+	}
+	if setPositionPackets == 0 {
+		t.Fatal("expected alive unitClear ignore to resend authoritative position")
+	}
+	if conn.lastSpawnRepairAt.IsZero() {
+		t.Fatal("expected alive unitClear ignore to record a repair sync")
+	}
+	if !conn.lastRespawnReq.IsZero() {
+		t.Fatal("expected alive unitClear ignore not to queue a respawn")
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestHandleOfficialUnitClearAliveRepairCanRepeatAfterPreviousRepair(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 36, name: "beta"})
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	prevRepair := time.Now().Add(-1200 * time.Millisecond)
+	conn.playerID = 183
+	conn.unitID = 1830
+	conn.teamID = 1
+	conn.lastSpawnAt = time.Now().Add(-5 * time.Second)
+	conn.lastSpawnRepairAt = prevRepair
+	conn.snapX = 96
+	conn.snapY = 128
+
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:        unitID,
+			X:         112,
+			Y:         144,
+			Health:    170,
+			MaxHealth: 170,
+			TeamID:    1,
+			TypeID:    36,
+		}, true
+	}
+
+	var setPositionPackets int
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		switch obj.(type) {
+		case *protocol.Remote_NetClient_setPosition_29:
+			setPositionPackets++
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handleOfficialUnitClear(conn)
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if setPositionPackets > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if setPositionPackets == 0 {
+		t.Fatal("expected authoritative alive unitClear to resend a repair even after an earlier spawn repair")
+	}
+	if !conn.lastSpawnRepairAt.After(prevRepair) {
+		t.Fatalf("expected repeated alive repair to refresh repair timestamp, prev=%v got=%v", prevRepair, conn.lastSpawnRepairAt)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
 func TestEnsurePlayerUnitEntityPrefersWorldType(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
@@ -254,7 +635,7 @@ func TestEnsurePlayerUnitEntityPrefersWorldType(t *testing.T) {
 }
 
 func TestShouldForceRespawnAfterDeadIgnoredEscalatesRecentSpawn(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	now := time.Now()
 	conn := &Conn{
 		playerID:    31,
@@ -274,8 +655,161 @@ func TestShouldForceRespawnAfterDeadIgnoredEscalatesRecentSpawn(t *testing.T) {
 	}
 }
 
+func TestClientDeadWorldMissingRightAfterRespawnIsIgnored(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	conn := &Conn{
+		playerID:     321,
+		unitID:       3210,
+		teamID:       1,
+		hasConnected: true,
+		lastSpawnAt:  time.Now(),
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{}, false
+	}
+
+	srv.handlePacket(conn, &protocol.Remote_NetServer_clientSnapshot_48{
+		SnapshotID: 1,
+		UnitID:     conn.unitID,
+		Dead:       true,
+		X:          64,
+		Y:          96,
+	}, false)
+
+	if conn.dead {
+		t.Fatal("expected world-missing dead echo right after respawn to be ignored")
+	}
+	if conn.unitID != 3210 {
+		t.Fatalf("expected connection unit to stay bound, got %d", conn.unitID)
+	}
+	if !conn.lastRespawnReq.IsZero() {
+		t.Fatalf("expected ignored client-dead echo not to queue respawn, got %v", conn.lastRespawnReq)
+	}
+}
+
+func TestClientDeadWorldMissingDuringRespawnWindowIsIgnored(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	now := time.Now()
+	conn := &Conn{
+		playerID:       322,
+		unitID:         3220,
+		teamID:         1,
+		hasConnected:   true,
+		dead:           true,
+		lastRespawnReq: now.Add(-150 * time.Millisecond),
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{}, false
+	}
+
+	srv.handlePacket(conn, &protocol.Remote_NetServer_clientSnapshot_48{
+		SnapshotID: 2,
+		UnitID:     conn.unitID,
+		Dead:       true,
+		X:          72,
+		Y:          104,
+	}, false)
+
+	if !conn.dead {
+		t.Fatal("expected in-flight respawn dead echo to keep player in respawn state")
+	}
+	if conn.unitID != 3220 {
+		t.Fatalf("expected respawning unit id to stay unchanged, got %d", conn.unitID)
+	}
+	if age := time.Since(conn.lastRespawnReq); age < 0 || age > 2*time.Second {
+		t.Fatalf("expected ignored dead echo not to overwrite respawn timing, got age=%s", age)
+	}
+}
+
+func TestClientDeadAliveUnitDuringRespawnWindowSkipsRepair(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	now := time.Now()
+	conn := &Conn{
+		playerID:     3221,
+		unitID:       32210,
+		teamID:       1,
+		hasConnected: true,
+		lastSpawnAt:  now.Add(-150 * time.Millisecond),
+	}
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:        unitID,
+			X:         72,
+			Y:         104,
+			Health:    220,
+			MaxHealth: 220,
+			TeamID:    1,
+			TypeID:    37,
+		}, true
+	}
+
+	srv.handlePacket(conn, &protocol.Remote_NetServer_clientSnapshot_48{
+		SnapshotID: 3,
+		UnitID:     conn.unitID,
+		Dead:       true,
+		X:          72,
+		Y:          104,
+	}, false)
+
+	if conn.dead {
+		t.Fatal("expected recent-spawn dead echo with alive authoritative unit to be ignored")
+	}
+	if conn.unitID != 32210 {
+		t.Fatalf("expected authoritative unit binding to remain unchanged, got %d", conn.unitID)
+	}
+	if !conn.lastSpawnRepairAt.IsZero() {
+		t.Fatalf("expected recent-spawn dead echo to skip repair snapshot spam, got repairAt=%v", conn.lastSpawnRepairAt)
+	}
+	if conn.clientDeadIgnores != 0 {
+		t.Fatalf("expected recent-spawn dead echo not to increment ignore escalation, got %d", conn.clientDeadIgnores)
+	}
+	if !conn.lastDeadIgnoreAt.IsZero() {
+		t.Fatalf("expected recent-spawn dead echo to avoid dead-ignore timers, got %v", conn.lastDeadIgnoreAt)
+	}
+}
+
+func TestClientDeadUnitZeroRightAfterRespawnRequestIsIgnored(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	now := time.Now()
+	conn := &Conn{
+		playerID:       654,
+		unitID:         0,
+		teamID:         1,
+		hasConnected:   true,
+		dead:           true,
+		lastRespawnReq: now.Add(-400 * time.Millisecond),
+	}
+
+	srv.handlePacket(conn, &protocol.Remote_NetServer_clientSnapshot_48{
+		SnapshotID: 2,
+		UnitID:     0,
+		Dead:       true,
+		X:          80,
+		Y:          96,
+	}, false)
+
+	if !conn.dead {
+		t.Fatal("expected recent respawn dead echo to avoid reviving the player early")
+	}
+	if conn.unitID != 0 {
+		t.Fatalf("expected unit id to remain zero during respawn window, got %d", conn.unitID)
+	}
+	if age := time.Since(conn.lastRespawnReq); age < 0 || age > 2*time.Second {
+		t.Fatalf("expected ignored dead echo not to overwrite respawn timing, got age=%s", age)
+	}
+}
+
 func TestShouldForceRespawnAfterDeadIgnoredResetsAfterGap(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	now := time.Now()
 	conn := &Conn{
 		playerID:    32,
@@ -295,8 +829,215 @@ func TestShouldForceRespawnAfterDeadIgnoredResetsAfterGap(t *testing.T) {
 	}
 }
 
+func TestShouldForceRespawnAfterDeadIgnoredStopsAfterRepairForCurrentSpawn(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	now := time.Now()
+	conn := &Conn{
+		playerID:          320,
+		unitID:            9020,
+		teamID:            1,
+		lastSpawnAt:       now.Add(-800 * time.Millisecond),
+		lastSpawnRepairAt: now.Add(-100 * time.Millisecond),
+	}
+
+	if srv.shouldForceRespawnAfterDeadIgnored(conn, now) {
+		t.Fatalf("expected ignored dead escalation to stop after one repair for the current spawn")
+	}
+	if conn.clientDeadIgnores != 0 {
+		t.Fatalf("expected ignore counter to stay idle after repair, got %d", conn.clientDeadIgnores)
+	}
+}
+
+func TestRepairAliveSpawnBindingSendsAliveSnapshotsWithoutRespawn(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
+	srv.PlayerUnitTypeFn = func() int16 { return 37 }
+	srv.UdpFallbackTCP = true
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 33
+	conn.unitID = 3300
+	conn.teamID = 1
+	conn.dead = true
+	conn.snapX = 64
+	conn.snapY = 96
+	conn.lastSpawnAt = time.Now().Add(-10 * time.Second)
+
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:        unitID,
+			X:         128,
+			Y:         160,
+			Health:    220,
+			MaxHealth: 220,
+			TeamID:    1,
+			TypeID:    37,
+		}, true
+	}
+
+	var spawnPackets int
+	var entityPackets int
+	var positionPackets int
+	var snapshot *protocol.Remote_NetClient_entitySnapshot_32
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		switch typed := obj.(type) {
+		case *protocol.Remote_CoreBlock_playerSpawn_149:
+			spawnPackets++
+		case *protocol.Remote_NetClient_entitySnapshot_32:
+			entityPackets++
+			snapshot = typed
+		case *protocol.Remote_NetClient_setPosition_29:
+			positionPackets++
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.repairClientDeadAliveBinding(conn)
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if entityPackets > 0 && positionPackets > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if conn.dead {
+		t.Fatal("expected alive binding repair to clear dead flag")
+	}
+	if conn.snapX != 128 || conn.snapY != 160 {
+		t.Fatalf("expected repaired position (128,160), got (%.1f, %.1f)", conn.snapX, conn.snapY)
+	}
+	if spawnPackets != 0 {
+		t.Fatalf("expected no playerSpawn packet during alive repair, got %d", spawnPackets)
+	}
+	if entityPackets == 0 || snapshot == nil {
+		t.Fatal("expected alive repair to send entity snapshot")
+	}
+	if positionPackets == 0 {
+		t.Fatal("expected alive repair to send setPosition")
+	}
+
+	entries := decodeEntitySnapshotPacket(t, srv, snapshot)
+	var sawPlayer bool
+	var sawUnit bool
+	for _, entry := range entries {
+		if entry.Player != nil && entry.ID == conn.playerID {
+			sawPlayer = true
+			if entry.Player.Unit == nil || entry.Player.Unit.ID() != conn.unitID {
+				t.Fatalf("expected repaired player snapshot to reference unit %d, got %+v", conn.unitID, entry.Player.Unit)
+			}
+		}
+		if entry.Unit != nil && entry.ID == conn.unitID {
+			sawUnit = true
+			if entry.Unit.TypeID != 37 {
+				t.Fatalf("expected repaired unit snapshot type 37, got %d", entry.Unit.TypeID)
+			}
+		}
+	}
+	if !sawPlayer || !sawUnit {
+		t.Fatalf("expected repaired snapshot to include both player and unit, got %+v", entries)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestRepairAliveSpawnBindingOnlyRepairsOncePerSpawn(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
+	srv.PlayerUnitTypeFn = func() int16 { return 37 }
+	srv.UdpFallbackTCP = true
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 34
+	conn.unitID = 3400
+	conn.teamID = 1
+	conn.dead = true
+	conn.snapX = 64
+	conn.snapY = 96
+	conn.lastSpawnAt = time.Now().Add(-10 * time.Second)
+
+	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
+		if unitID != conn.unitID {
+			return UnitInfo{}, false
+		}
+		return UnitInfo{
+			ID:        unitID,
+			X:         96,
+			Y:         128,
+			Health:    220,
+			MaxHealth: 220,
+			TeamID:    1,
+			TypeID:    37,
+		}, true
+	}
+
+	var entityPackets int
+	var positionPackets int
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		switch obj.(type) {
+		case *protocol.Remote_NetClient_entitySnapshot_32:
+			entityPackets++
+		case *protocol.Remote_NetClient_setPosition_29:
+			positionPackets++
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.repairClientDeadAliveBinding(conn)
+	firstRepairAt := conn.lastSpawnRepairAt
+	if firstRepairAt.IsZero() {
+		t.Fatal("expected first alive repair to record repair timestamp")
+	}
+
+	srv.repairClientDeadStuckBinding(conn)
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if entityPackets > 0 && positionPackets > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if entityPackets != 1 {
+		t.Fatalf("expected exactly one entity snapshot repair for a spawn, got %d", entityPackets)
+	}
+	if positionPackets != 1 {
+		t.Fatalf("expected exactly one position repair for a spawn, got %d", positionPackets)
+	}
+	if !conn.lastSpawnRepairAt.Equal(firstRepairAt) {
+		t.Fatalf("expected second repair attempt to be ignored, first=%v second=%v", firstRepairAt, conn.lastSpawnRepairAt)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
 func TestEnsurePlayerUnitEntitySkipsCollidingPlayerIDs(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	nextReserved := int32(0)
 	srv.ReserveUnitIDFn = func() int32 {
 		nextReserved++
@@ -338,8 +1079,49 @@ func TestEnsurePlayerUnitEntitySkipsCollidingPlayerIDs(t *testing.T) {
 	}
 }
 
+func TestNextPlayerIDUsesSharedEntityAllocator(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	nextReserved := int32(0)
+	srv.ReserveUnitIDFn = func() int32 {
+		nextReserved++
+		return nextReserved
+	}
+
+	connA := &Conn{playerID: srv.nextPlayerID(), hasConnected: true, teamID: 1}
+	if connA.playerID != 1 {
+		t.Fatalf("expected first player id to use shared allocator and be 1, got %d", connA.playerID)
+	}
+
+	srv.mu.Lock()
+	srv.conns[connA] = struct{}{}
+	srv.mu.Unlock()
+
+	connA.unitID = srv.nextUnitID()
+	if connA.unitID != 2 {
+		t.Fatalf("expected first unit id to follow shared allocator and be 2, got %d", connA.unitID)
+	}
+
+	if got := srv.nextPlayerID(); got != 3 {
+		t.Fatalf("expected second player id to skip first unit id and be 3, got %d", got)
+	}
+}
+
+func TestNextPlayerIDSkipsLiveUnitIDsBeforeMirror(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.playerIDNext = 1
+
+	conn := &Conn{playerID: 1, unitID: 2, hasConnected: true, teamID: 1}
+	srv.mu.Lock()
+	srv.conns[conn] = struct{}{}
+	srv.mu.Unlock()
+
+	if got := srv.nextPlayerID(); got != 3 {
+		t.Fatalf("expected next player id to skip live unit id 2 and return 3, got %d", got)
+	}
+}
+
 func TestNextUnitIDSkipsExistingEntityIDs(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	nextReserved := int32(40)
 	srv.ReserveUnitIDFn = func() int32 {
 		nextReserved++
@@ -356,7 +1138,7 @@ func TestNextUnitIDSkipsExistingEntityIDs(t *testing.T) {
 }
 
 func TestPrepareUnitEntitySnapshotFallsBackToPlayerUnitType(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
 
@@ -386,7 +1168,7 @@ func TestPrepareUnitEntitySnapshotFallsBackToPlayerUnitType(t *testing.T) {
 }
 
 func TestBuildPlayerEntitySnapshotDropsInvalidUnitReferenceWhenNoFallback(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	conn := &Conn{
 		playerID:     12,
 		unitID:       1200,
@@ -453,7 +1235,7 @@ func TestBuildPlayerEntitySnapshotDropsInvalidUnitReferenceWhenNoFallback(t *tes
 }
 
 func TestBuildEntitySnapshotPacketsSplitPlayerAndUnitAcrossPackets(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
 
@@ -546,33 +1328,33 @@ func TestBuildEntitySnapshotPacketsSplitPlayerAndUnitAcrossPackets(t *testing.T)
 	}
 
 	first := decodeEntitySnapshotPacket(t, srv, packets[0])
-	if len(first) != 1 || first[0].Player == nil {
-		t.Fatalf("expected first packet to contain exactly one player entity, got %+v", first)
+	if len(first) != 1 || first[0].Unit == nil {
+		t.Fatalf("expected first packet to contain exactly one unit entity, got %+v", first)
 	}
-	if first[0].ID != conn.playerID {
-		t.Fatalf("expected player entity id %d, got %d", conn.playerID, first[0].ID)
+	if first[0].ID != conn.unitID {
+		t.Fatalf("expected unit entity id %d, got %d", conn.unitID, first[0].ID)
 	}
-	if first[0].Player.Unit == nil {
-		t.Fatalf("expected player snapshot to retain unit reference when unit spills into next packet")
-	}
-	if first[0].Player.Unit.ID() != conn.unitID {
-		t.Fatalf("expected player unit reference id %d, got %d", conn.unitID, first[0].Player.Unit.ID())
+	if first[0].Unit.TypeID != 35 {
+		t.Fatalf("expected unit type 35, got %d", first[0].Unit.TypeID)
 	}
 
 	second := decodeEntitySnapshotPacket(t, srv, packets[1])
-	if len(second) != 1 || second[0].Unit == nil {
-		t.Fatalf("expected second packet to contain exactly one unit entity, got %+v", second)
+	if len(second) != 1 || second[0].Player == nil {
+		t.Fatalf("expected second packet to contain exactly one player entity, got %+v", second)
 	}
-	if second[0].ID != conn.unitID {
-		t.Fatalf("expected unit entity id %d, got %d", conn.unitID, second[0].ID)
+	if second[0].ID != conn.playerID {
+		t.Fatalf("expected player entity id %d, got %d", conn.playerID, second[0].ID)
 	}
-	if second[0].Unit.TypeID != 35 {
-		t.Fatalf("expected unit type 35, got %d", second[0].Unit.TypeID)
+	if second[0].Player.Unit == nil {
+		t.Fatalf("expected player snapshot to retain unit reference when unit spills into next packet")
+	}
+	if second[0].Player.Unit.ID() != conn.unitID {
+		t.Fatalf("expected player unit reference id %d, got %d", conn.unitID, second[0].Player.Unit.ID())
 	}
 }
 
 func TestPrepareUnitEntitySnapshotAppliesOfficialGammaClassID(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
 
 	unit := &protocol.UnitEntitySync{
@@ -601,7 +1383,7 @@ func TestPrepareUnitEntitySnapshotAppliesOfficialGammaClassID(t *testing.T) {
 }
 
 func TestPrepareUnitEntitySnapshotAppliesPayloadUnitLayout(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 55, name: "emanate"})
 
 	unit := &protocol.UnitEntitySync{
@@ -649,7 +1431,7 @@ func TestPrepareUnitEntitySnapshotAppliesPayloadUnitLayout(t *testing.T) {
 }
 
 func TestBuildEntitySnapshotPacketsIncludeExtraWorldUnits(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.ExtraEntitySnapshotEntitiesFn = func() ([]protocol.UnitSyncEntity, error) {
 		return []protocol.UnitSyncEntity{
@@ -698,8 +1480,8 @@ func TestBuildEntitySnapshotPacketsIncludeExtraWorldUnits(t *testing.T) {
 	}
 }
 
-func TestBuildEntitySnapshotPacketsSkipPlayersInWorldReloadGrace(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+func TestBuildEntitySnapshotPacketsForConnKeepsOtherPlayersDuringWorldReloadGrace(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 
 	graceConn := &Conn{
@@ -731,12 +1513,15 @@ func TestBuildEntitySnapshotPacketsSkipPlayersInWorldReloadGrace(t *testing.T) {
 	srv.conns[activeConn] = struct{}{}
 	srv.mu.Unlock()
 
-	packets, err := srv.buildEntitySnapshotPackets()
+	packets, hiddenIDs, err := srv.buildEntitySnapshotPacketsForConn(activeConn)
 	if err != nil {
-		t.Fatalf("buildEntitySnapshotPackets returned error: %v", err)
+		t.Fatalf("buildEntitySnapshotPacketsForConn returned error: %v", err)
 	}
 	if len(packets) == 0 {
-		t.Fatal("expected packets for active player")
+		t.Fatal("expected packets for both players")
+	}
+	if len(hiddenIDs) != 0 {
+		t.Fatalf("expected no hidden ids, got %v", hiddenIDs)
 	}
 
 	seen := map[int32]bool{}
@@ -745,16 +1530,126 @@ func TestBuildEntitySnapshotPacketsSkipPlayersInWorldReloadGrace(t *testing.T) {
 			seen[entry.ID] = true
 		}
 	}
-	if seen[graceConn.playerID] || seen[graceConn.unitID] {
-		t.Fatalf("expected world-reload-grace player/unit to be skipped, seen=%v", seen)
+	if !seen[graceConn.playerID] || !seen[graceConn.unitID] {
+		t.Fatalf("expected world-reload-grace player/unit to remain visible to other viewers, seen=%v", seen)
 	}
 	if !seen[activeConn.playerID] || !seen[activeConn.unitID] {
 		t.Fatalf("expected active player/unit to remain in snapshot, seen=%v", seen)
 	}
 }
 
+func TestBroadcastSkipsPeersInWorldReloadGrace(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+
+	activeServer, activeClient := net.Pipe()
+	defer activeClient.Close()
+	activeConn := NewConn(activeServer, srv.Serial)
+	defer activeConn.Close()
+	activeConn.playerID = 4201
+	activeConn.hasConnected = true
+
+	graceServer, graceClient := net.Pipe()
+	defer graceClient.Close()
+	graceConn := NewConn(graceServer, srv.Serial)
+	defer graceConn.Close()
+	graceConn.playerID = 4202
+	graceConn.hasConnected = true
+	graceConn.SetWorldReloadGrace(2 * time.Second)
+
+	srv.mu.Lock()
+	srv.conns[activeConn] = struct{}{}
+	srv.conns[graceConn] = struct{}{}
+	srv.mu.Unlock()
+
+	var activeSends atomic.Int32
+	var graceSends atomic.Int32
+	activeConn.onSend = func(obj any, _ int, _ int, _ int) {
+		if _, ok := obj.(*protocol.Remote_NetClient_setPosition_29); ok {
+			activeSends.Add(1)
+		}
+	}
+	graceConn.onSend = func(obj any, _ int, _ int, _ int) {
+		if _, ok := obj.(*protocol.Remote_NetClient_setPosition_29); ok {
+			graceSends.Add(1)
+		}
+	}
+
+	activeDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, activeClient)
+		close(activeDone)
+	}()
+	graceDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, graceClient)
+		close(graceDone)
+	}()
+
+	srv.Broadcast(&protocol.Remote_NetClient_setPosition_29{X: 12, Y: 18})
+	time.Sleep(60 * time.Millisecond)
+
+	if activeSends.Load() != 1 {
+		t.Fatalf("expected active peer to receive one broadcast packet, got %d", activeSends.Load())
+	}
+	if graceSends.Load() != 0 {
+		t.Fatalf("expected world-reload-grace peer to be skipped, got %d packets", graceSends.Load())
+	}
+
+	_ = activeConn.Close()
+	_ = graceConn.Close()
+	<-activeDone
+	<-graceDone
+}
+
+func TestBroadcastUnreliableSkipsBlockSnapshotsWithoutUDPAddr(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("listen udp: %v", err)
+	}
+	defer udpConn.Close()
+	srv.udpConn = udpConn
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 4301
+	conn.hasConnected = true
+
+	srv.mu.Lock()
+	srv.conns[conn] = struct{}{}
+	srv.mu.Unlock()
+
+	var sends atomic.Int32
+	conn.onSend = func(obj any, _ int, _ int, _ int) {
+		if _, ok := obj.(*protocol.Remote_NetClient_blockSnapshot_34); ok {
+			sends.Add(1)
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.BroadcastUnreliable(&protocol.Remote_NetClient_blockSnapshot_34{
+		Amount: 1,
+		Data:   []byte{1, 2, 3},
+	})
+	time.Sleep(60 * time.Millisecond)
+
+	if sends.Load() != 0 {
+		t.Fatalf("expected blockSnapshot unreliable broadcast to skip tcp fallback peers without udp addr, got %d sends", sends.Load())
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
 func TestPostConnectLoopSkipsEntitySnapshotsDuringWorldReloadGrace(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.SetSnapshotIntervals(20, 20)
 
@@ -816,8 +1711,8 @@ func TestPostConnectLoopSkipsEntitySnapshotsDuringWorldReloadGrace(t *testing.T)
 	}
 }
 
-func TestEnsurePostConnectStartedSetsInitialWorldReloadGraceAndRunsOnce(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+func TestOfficialConnectConfirmPostConnectSetsInitialWorldReloadGraceAndRunsOnce(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
 	srv.SetSnapshotIntervals(250, 250)
@@ -826,8 +1721,95 @@ func TestEnsurePostConnectStartedSetsInitialWorldReloadGraceAndRunsOnce(t *testi
 	}
 
 	var spawnCalls atomic.Int32
+	spawnDone := make(chan struct{}, 2)
 	srv.SpawnUnitFn = func(_ *Conn, _ int32, _ protocol.Point2, _ int16) (float32, float32, bool) {
 		spawnCalls.Add(1)
+		select {
+		case spawnDone <- struct{}{}:
+		default:
+		}
+		return 64, 72, true
+	}
+
+	var postCalls atomic.Int32
+	postDone := make(chan struct{}, 1)
+	srv.OnPostConnect = func(_ *Conn) {
+		postCalls.Add(1)
+		select {
+		case postDone <- struct{}{}:
+		default:
+		}
+	}
+	var hotReloadCalls atomic.Int32
+	srv.OnHotReloadConnFn = func(_ *Conn) {
+		hotReloadCalls.Add(1)
+	}
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	conn := NewConn(serverSide, srv.Serial)
+	conn.playerID = 61
+	conn.teamID = 1
+	conn.hasBegunConnecting = true
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handleOfficialConnectConfirm(conn, &protocol.Remote_NetServer_connectConfirm_50{})
+	select {
+	case <-postDone:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected OnPostConnect to run")
+	}
+	if !conn.InWorldReloadGrace() {
+		t.Fatal("expected initial world reload grace after post-connect start")
+	}
+	select {
+	case <-spawnDone:
+	case <-time.After(time.Second):
+		t.Fatal("expected delayed initial spawn to run")
+	}
+	if spawnCalls.Load() != 1 {
+		t.Fatalf("expected one initial spawn, got %d", spawnCalls.Load())
+	}
+
+	srv.handleOfficialConnectConfirm(conn, &protocol.Remote_NetServer_connectConfirm_50{})
+	time.Sleep(30 * time.Millisecond)
+	if spawnCalls.Load() != 1 {
+		t.Fatalf("expected post-connect init to run once, got %d spawns", spawnCalls.Load())
+	}
+	if postCalls.Load() != 1 {
+		t.Fatalf("expected OnPostConnect to run once, got %d", postCalls.Load())
+	}
+	if hotReloadCalls.Load() != 0 {
+		t.Fatalf("expected duplicate official confirm without queued reload not to run hot reload hook, got %d", hotReloadCalls.Load())
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestDebugClientSnapshotFallbackPostConnectRunsOnceAndOfficialConfirmDoesNotRestart(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.SetClientSnapshotConnectFallbackEnabled(true)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.PlayerUnitTypeFn = func() int16 { return 35 }
+	srv.SetSnapshotIntervals(250, 250)
+	srv.SpawnTileFn = func() (protocol.Point2, bool) {
+		return protocol.Point2{X: 8, Y: 9}, true
+	}
+
+	var spawnCalls atomic.Int32
+	spawnDone := make(chan struct{}, 2)
+	srv.SpawnUnitFn = func(_ *Conn, _ int32, _ protocol.Point2, _ int16) (float32, float32, bool) {
+		spawnCalls.Add(1)
+		select {
+		case spawnDone <- struct{}{}:
+		default:
+		}
 		return 64, 72, true
 	}
 
@@ -844,9 +1826,9 @@ func TestEnsurePostConnectStartedSetsInitialWorldReloadGraceAndRunsOnce(t *testi
 	serverSide, clientSide := net.Pipe()
 	defer clientSide.Close()
 	conn := NewConn(serverSide, srv.Serial)
-	conn.playerID = 61
+	conn.playerID = 62
 	conn.teamID = 1
-	conn.hasConnected = true
+	conn.hasBegunConnecting = true
 
 	done := make(chan struct{})
 	go func() {
@@ -854,26 +1836,34 @@ func TestEnsurePostConnectStartedSetsInitialWorldReloadGraceAndRunsOnce(t *testi
 		close(done)
 	}()
 
-	srv.ensurePostConnectStarted(conn)
+	srv.handleClientSnapshotConnectFallback(conn, &protocol.Remote_NetServer_clientSnapshot_48{})
 	select {
 	case <-postDone:
 	case <-time.After(200 * time.Millisecond):
-		t.Fatal("expected OnPostConnect to run")
+		t.Fatal("expected OnPostConnect to run from clientSnapshot fallback")
+	}
+	if !conn.hasConnected {
+		t.Fatal("expected clientSnapshot fallback to mark connection connected")
 	}
 	if !conn.InWorldReloadGrace() {
-		t.Fatal("expected initial world reload grace after post-connect start")
+		t.Fatal("expected world reload grace after fallback post-connect start")
+	}
+	select {
+	case <-spawnDone:
+	case <-time.After(time.Second):
+		t.Fatal("expected delayed initial spawn from fallback chain")
 	}
 	if spawnCalls.Load() != 1 {
-		t.Fatalf("expected one initial spawn, got %d", spawnCalls.Load())
+		t.Fatalf("expected one initial spawn from fallback chain, got %d", spawnCalls.Load())
 	}
 
-	srv.ensurePostConnectStarted(conn)
+	srv.handleOfficialConnectConfirm(conn, &protocol.Remote_NetServer_connectConfirm_50{})
 	time.Sleep(30 * time.Millisecond)
 	if spawnCalls.Load() != 1 {
-		t.Fatalf("expected post-connect init to run once, got %d spawns", spawnCalls.Load())
+		t.Fatalf("expected official confirm not to restart post-connect, got %d spawns", spawnCalls.Load())
 	}
 	if postCalls.Load() != 1 {
-		t.Fatalf("expected OnPostConnect to run once, got %d", postCalls.Load())
+		t.Fatalf("expected OnPostConnect to run once across fallback+official confirm, got %d", postCalls.Load())
 	}
 
 	_ = conn.Close()
@@ -881,7 +1871,7 @@ func TestEnsurePostConnectStartedSetsInitialWorldReloadGraceAndRunsOnce(t *testi
 }
 
 func TestSerializeEntityIncludesIDClassAndSyncBytes(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 37, name: "gamma"})
 
 	unit := &protocol.UnitEntitySync{
@@ -943,7 +1933,7 @@ func TestSerializeEntityIncludesIDClassAndSyncBytes(t *testing.T) {
 }
 
 func TestSnapshotPlayerUnitEntityDoesNotCreatePhantomUnitWhenWorldUnitMissing(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
 	conn := &Conn{
@@ -969,7 +1959,7 @@ func TestSnapshotPlayerUnitEntityDoesNotCreatePhantomUnitWhenWorldUnitMissing(t 
 }
 
 func TestSnapshotPlayerUnitEntityCreatesMirrorOnlyForAliveWorldUnit(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 36, name: "beta"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
 	conn := &Conn{
@@ -1011,8 +2001,84 @@ func TestSnapshotPlayerUnitEntityCreatesMirrorOnlyForAliveWorldUnit(t *testing.T
 	}
 }
 
+func TestSnapshotPlayerUnitEntityUsesAuthoritativeUnitSync(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
+	srv.Content.RegisterItem(protocol.ItemRef{ItmID: 5, ItmName: "copper"})
+	srv.Content.RegisterBlock(protocol.BlockRef{BlkID: 12, BlkName: "conveyor"})
+
+	conn := &Conn{
+		playerID:     44,
+		unitID:       4400,
+		teamID:       1,
+		hasConnected: true,
+		snapX:        64,
+		snapY:        96,
+	}
+	srv.UnitSyncFn = func(unitID int32, controller protocol.UnitController) (*protocol.UnitEntitySync, bool) {
+		if unitID != conn.unitID {
+			return nil, false
+		}
+		ctrl, ok := controller.(*protocol.ControllerState)
+		if !ok || ctrl.Type != protocol.ControllerPlayer || ctrl.PlayerID != conn.playerID {
+			t.Fatalf("unexpected controller passed to UnitSyncFn: %+v", controller)
+		}
+		return &protocol.UnitEntitySync{
+			IDValue:        unitID,
+			Controller:     controller,
+			Health:         170,
+			Ammo:           4,
+			MineTile:       protocol.TileBox{PosValue: protocol.PackPoint2(2, 3)},
+			Plans:          []*protocol.BuildPlan{{X: 5, Y: 6, Rotation: 1, Block: protocol.BlockRef{BlkID: 12, BlkName: "conveyor"}}},
+			Stack:          protocol.ItemStack{Item: protocol.ItemRef{ItmID: 5, ItmName: "copper"}, Amount: 9},
+			SpawnedByCore:  true,
+			Statuses:       []protocol.StatusEntry{},
+			Abilities:      []protocol.Ability{},
+			Mounts:         []protocol.WeaponMount{},
+			TeamID:         1,
+			TypeID:         35,
+			Elevation:      1,
+			Rotation:       33,
+			BaseRotation:   33,
+			UpdateBuilding: true,
+			Vel:            protocol.Vec2{X: 1, Y: -1},
+			X:              80,
+			Y:              120,
+		}, true
+	}
+
+	unit := srv.snapshotPlayerUnitEntity(conn)
+	if unit == nil {
+		t.Fatal("expected authoritative player unit snapshot")
+	}
+	if unit.TypeID != 35 || unit.Health != 170 || unit.Ammo != 4 {
+		t.Fatalf("unexpected unit core fields %+v", unit)
+	}
+	if unit.MineTile == nil || unit.MineTile.Pos() != protocol.PackPoint2(2, 3) {
+		t.Fatalf("unexpected mine tile %+v", unit.MineTile)
+	}
+	if !unit.SpawnedByCore || !unit.UpdateBuilding {
+		t.Fatalf("expected spawnedByCore/updateBuilding to be preserved, got %+v", unit)
+	}
+	if unit.Stack.Item == nil || unit.Stack.Item.ID() != 5 || unit.Stack.Amount != 9 {
+		t.Fatalf("unexpected stack %+v", unit.Stack)
+	}
+	if len(unit.Plans) != 1 || unit.Plans[0] == nil || unit.Plans[0].Block == nil || unit.Plans[0].Block.ID() != 12 {
+		t.Fatalf("unexpected plans %+v", unit.Plans)
+	}
+	srv.entityMu.Lock()
+	cached, ok := srv.entities[conn.unitID].(*protocol.UnitEntitySync)
+	srv.entityMu.Unlock()
+	if !ok || cached == nil {
+		t.Fatal("expected authoritative snapshot to be cached as mirror entity")
+	}
+	if cached.TypeID != 35 || cached.Health != 170 {
+		t.Fatalf("unexpected cached unit %+v", cached)
+	}
+}
+
 func TestSyncUnitFromWorldKeepsPlayerUnitTypeValid(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
 	srv.UnitInfoFn = func(unitID int32) (UnitInfo, bool) {
@@ -1053,7 +2119,7 @@ func TestSyncUnitFromWorldKeepsPlayerUnitTypeValid(t *testing.T) {
 }
 
 func TestPlayerRespawnUnitTypeUsesResolveHook(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 35, name: "alpha"})
 	srv.Content.RegisterUnitType(testUnitType{id: 55, name: "emanate"})
 	srv.PlayerUnitTypeFn = func() int16 { return 35 }
@@ -1074,7 +2140,7 @@ func TestPlayerRespawnUnitTypeUsesResolveHook(t *testing.T) {
 }
 
 func TestTryDockedUnitClearRespawnSpawnsAttachedCoreUnit(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 156)
+	srv := NewServer("127.0.0.1:0", 157)
 	srv.Content.RegisterUnitType(testUnitType{id: 53, name: "evoke"})
 	srv.ResolveRespawnUnitTypeFn = func(c *Conn, tile protocol.Point2, fallback int16) int16 { return 53 }
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {

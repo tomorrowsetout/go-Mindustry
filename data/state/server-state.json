@@ -1,10 +1,10 @@
 {
-  "map_path": "",
+  "map_path": "assets\\worlds\\maps\\erekir\\origin.msav",
+  "wave_time": 41.728504,
+  "wave": 5,
+  "tick": 26551,
+  "time_data": 19972,
   "rand0": 0,
   "rand1": 0,
-  "saved_at": "",
-  "tick": 0,
-  "time_data": 0,
-  "wave": 0,
-  "wave_time": 0
+  "saved_at": "2026-04-22T07:12:31Z"
 }

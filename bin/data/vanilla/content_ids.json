@@ -1670,22 +1670,26 @@
     },
     {
       "id": 417,
-      "name": "reinforced-message"
+      "name": "large-canvas"
     },
     {
       "id": 418,
-      "name": "world-processor"
+      "name": "reinforced-message"
     },
     {
       "id": 419,
-      "name": "world-cell"
+      "name": "world-processor"
     },
     {
       "id": 420,
-      "name": "world-message"
+      "name": "world-cell"
     },
     {
       "id": 421,
+      "name": "world-message"
+    },
+    {
+      "id": 422,
       "name": "world-switch"
     }
   ],
@@ -1844,7 +1848,107 @@
     },
     {
       "id": 38,
+      "name": "stell"
+    },
+    {
+      "id": 39,
+      "name": "locus"
+    },
+    {
+      "id": 40,
+      "name": "precept"
+    },
+    {
+      "id": 41,
+      "name": "vanquish"
+    },
+    {
+      "id": 42,
+      "name": "conquer"
+    },
+    {
+      "id": 43,
+      "name": "merui"
+    },
+    {
+      "id": 44,
+      "name": "cleroi"
+    },
+    {
+      "id": 45,
+      "name": "anthicus"
+    },
+    {
+      "id": 46,
+      "name": "anthicus-missile"
+    },
+    {
+      "id": 47,
+      "name": "tecta"
+    },
+    {
+      "id": 48,
+      "name": "collaris"
+    },
+    {
+      "id": 49,
+      "name": "elude"
+    },
+    {
+      "id": 50,
+      "name": "avert"
+    },
+    {
+      "id": 51,
+      "name": "obviate"
+    },
+    {
+      "id": 52,
+      "name": "quell"
+    },
+    {
+      "id": 53,
+      "name": "quell-missile"
+    },
+    {
+      "id": 54,
+      "name": "disrupt"
+    },
+    {
+      "id": 55,
+      "name": "disrupt-missile"
+    },
+    {
+      "id": 56,
+      "name": "renale"
+    },
+    {
+      "id": 57,
+      "name": "latum"
+    },
+    {
+      "id": 58,
+      "name": "evoke"
+    },
+    {
+      "id": 59,
+      "name": "incite"
+    },
+    {
+      "id": 60,
+      "name": "emanate"
+    },
+    {
+      "id": 61,
       "name": "block"
+    },
+    {
+      "id": 62,
+      "name": "manifold"
+    },
+    {
+      "id": 63,
+      "name": "assembly-drone"
     }
   ],
   "items": [
@@ -2106,19 +2210,735 @@
   "bullets": [
     {
       "id": 0,
-      "name": "placeholder"
+      "name": "bullets.java:18:0"
     },
     {
       "id": 1,
-      "name": "damagelightning"
+      "name": "bullets.java:26:0"
     },
     {
       "id": 2,
-      "name": "fireball"
+      "name": "bullets.java:44:0"
     },
     {
       "id": 3,
-      "name": "spaceliquid"
+      "name": "bullets.java:48:0"
+    },
+    {
+      "id": 4,
+      "name": "unittypes.java:113:0"
+    },
+    {
+      "id": 5,
+      "name": "unittypes.java:136:0"
+    },
+    {
+      "id": 6,
+      "name": "unittypes.java:176:0"
+    },
+    {
+      "id": 7,
+      "name": "unittypes.java:211:0"
+    },
+    {
+      "id": 8,
+      "name": "unittypes.java:244:0"
+    },
+    {
+      "id": 9,
+      "name": "unittypes.java:261:0"
+    },
+    {
+      "id": 10,
+      "name": "unittypes.java:322:0"
+    },
+    {
+      "id": 11,
+      "name": "unittypes.java:340:0"
+    },
+    {
+      "id": 12,
+      "name": "unittypes.java:383:0"
+    },
+    {
+      "id": 13,
+      "name": "unittypes.java:426:0"
+    },
+    {
+      "id": 14,
+      "name": "unittypes.java:435:0"
+    },
+    {
+      "id": 15,
+      "name": "unittypes.java:482:0"
+    },
+    {
+      "id": 16,
+      "name": "unittypes.java:544:0"
+    },
+    {
+      "id": 17,
+      "name": "unittypes.java:578:0"
+    },
+    {
+      "id": 18,
+      "name": "unittypes.java:629:0"
+    },
+    {
+      "id": 19,
+      "name": "unittypes.java:684:0"
+    },
+    {
+      "id": 20,
+      "name": "unittypes.java:735:0"
+    },
+    {
+      "id": 21,
+      "name": "unittypes.java:779:0"
+    },
+    {
+      "id": 22,
+      "name": "unittypes.java:799:0"
+    },
+    {
+      "id": 23,
+      "name": "unittypes.java:845:0"
+    },
+    {
+      "id": 24,
+      "name": "unittypes.java:895:0"
+    },
+    {
+      "id": 25,
+      "name": "unittypes.java:966:0"
+    },
+    {
+      "id": 26,
+      "name": "unittypes.java:997:0"
+    },
+    {
+      "id": 27,
+      "name": "unittypes.java:1023:0"
+    },
+    {
+      "id": 28,
+      "name": "unittypes.java:1084:0"
+    },
+    {
+      "id": 29,
+      "name": "unittypes.java:1132:0"
+    },
+    {
+      "id": 30,
+      "name": "unittypes.java:1173:0"
+    },
+    {
+      "id": 31,
+      "name": "unittypes.java:1211:0"
+    },
+    {
+      "id": 32,
+      "name": "unittypes.java:1261:0"
+    },
+    {
+      "id": 33,
+      "name": "unittypes.java:1288:0"
+    },
+    {
+      "id": 34,
+      "name": "unittypes.java:1313:0"
+    },
+    {
+      "id": 35,
+      "name": "unittypes.java:1409:0"
+    },
+    {
+      "id": 36,
+      "name": "unittypes.java:1459:0"
+    },
+    {
+      "id": 37,
+      "name": "unittypes.java:1473:0"
+    },
+    {
+      "id": 38,
+      "name": "unittypes.java:1519:0"
+    },
+    {
+      "id": 39,
+      "name": "unittypes.java:1614:0"
+    },
+    {
+      "id": 40,
+      "name": "unittypes.java:1630:0"
+    },
+    {
+      "id": 41,
+      "name": "unittypes.java:1680:0"
+    },
+    {
+      "id": 42,
+      "name": "unittypes.java:1702:0"
+    },
+    {
+      "id": 43,
+      "name": "unittypes.java:1752:0"
+    },
+    {
+      "id": 44,
+      "name": "unittypes.java:1793:0"
+    },
+    {
+      "id": 45,
+      "name": "unittypes.java:1861:0"
+    },
+    {
+      "id": 46,
+      "name": "unittypes.java:1900:0"
+    },
+    {
+      "id": 47,
+      "name": "unittypes.java:1945:0"
+    },
+    {
+      "id": 48,
+      "name": "unittypes.java:1990:0"
+    },
+    {
+      "id": 49,
+      "name": "unittypes.java:2003:0"
+    },
+    {
+      "id": 50,
+      "name": "unittypes.java:2024:0"
+    },
+    {
+      "id": 51,
+      "name": "unittypes.java:2108:0"
+    },
+    {
+      "id": 52,
+      "name": "unittypes.java:2142:0"
+    },
+    {
+      "id": 53,
+      "name": "unittypes.java:2182:0"
+    },
+    {
+      "id": 54,
+      "name": "unittypes.java:2201:0"
+    },
+    {
+      "id": 55,
+      "name": "unittypes.java:2249:0"
+    },
+    {
+      "id": 56,
+      "name": "unittypes.java:2338:0"
+    },
+    {
+      "id": 57,
+      "name": "unittypes.java:2386:0"
+    },
+    {
+      "id": 58,
+      "name": "unittypes.java:2479:0"
+    },
+    {
+      "id": 59,
+      "name": "unittypes.java:2548:0"
+    },
+    {
+      "id": 60,
+      "name": "unittypes.java:2599:0"
+    },
+    {
+      "id": 61,
+      "name": "unittypes.java:2654:0"
+    },
+    {
+      "id": 62,
+      "name": "unittypes.java:2707:0"
+    },
+    {
+      "id": 63,
+      "name": "unittypes.java:2757:0"
+    },
+    {
+      "id": 64,
+      "name": "unittypes.java:2836:0"
+    },
+    {
+      "id": 65,
+      "name": "unittypes.java:2861:0"
+    },
+    {
+      "id": 66,
+      "name": "unittypes.java:2914:0"
+    },
+    {
+      "id": 67,
+      "name": "unittypes.java:2943:0"
+    },
+    {
+      "id": 68,
+      "name": "unittypes.java:2973:0"
+    },
+    {
+      "id": 69,
+      "name": "unittypes.java:3086:0"
+    },
+    {
+      "id": 70,
+      "name": "unittypes.java:3126:0"
+    },
+    {
+      "id": 71,
+      "name": "unittypes.java:3223:0"
+    },
+    {
+      "id": 72,
+      "name": "unittypes.java:3316:0"
+    },
+    {
+      "id": 73,
+      "name": "unittypes.java:3363:0"
+    },
+    {
+      "id": 74,
+      "name": "unittypes.java:3469:0"
+    },
+    {
+      "id": 75,
+      "name": "unittypes.java:3517:0"
+    },
+    {
+      "id": 76,
+      "name": "unittypes.java:3602:0"
+    },
+    {
+      "id": 77,
+      "name": "unittypes.java:3723:0"
+    },
+    {
+      "id": 78,
+      "name": "unittypes.java:3768:0"
+    },
+    {
+      "id": 79,
+      "name": "unittypes.java:3869:0"
+    },
+    {
+      "id": 80,
+      "name": "unittypes.java:3918:0"
+    },
+    {
+      "id": 81,
+      "name": "unittypes.java:3934:0"
+    },
+    {
+      "id": 82,
+      "name": "unittypes.java:3999:0"
+    },
+    {
+      "id": 83,
+      "name": "unittypes.java:4037:0"
+    },
+    {
+      "id": 84,
+      "name": "unittypes.java:4048:0"
+    },
+    {
+      "id": 85,
+      "name": "unittypes.java:4113:0"
+    },
+    {
+      "id": 86,
+      "name": "unittypes.java:4139:0"
+    },
+    {
+      "id": 87,
+      "name": "unittypes.java:4161:0"
+    },
+    {
+      "id": 88,
+      "name": "unittypes.java:4255:0"
+    },
+    {
+      "id": 89,
+      "name": "unittypes.java:4304:0"
+    },
+    {
+      "id": 90,
+      "name": "unittypes.java:4442:0"
+    },
+    {
+      "id": 91,
+      "name": "unittypes.java:4510:0"
+    },
+    {
+      "id": 92,
+      "name": "unittypes.java:4517:buildweapon"
+    },
+    {
+      "id": 93,
+      "name": "unittypes.java:4591:0"
+    },
+    {
+      "id": 94,
+      "name": "blocks.java:3273:0"
+    },
+    {
+      "id": 95,
+      "name": "blocks.java:3283:0"
+    },
+    {
+      "id": 96,
+      "name": "blocks.java:3295:0"
+    },
+    {
+      "id": 97,
+      "name": "blocks.java:3348:0"
+    },
+    {
+      "id": 98,
+      "name": "blocks.java:3363:0"
+    },
+    {
+      "id": 99,
+      "name": "blocks.java:3373:0"
+    },
+    {
+      "id": 100,
+      "name": "blocks.java:3388:0"
+    },
+    {
+      "id": 101,
+      "name": "blocks.java:3434:0"
+    },
+    {
+      "id": 102,
+      "name": "blocks.java:3448:0"
+    },
+    {
+      "id": 103,
+      "name": "blocks.java:3479:0"
+    },
+    {
+      "id": 104,
+      "name": "blocks.java:3491:0"
+    },
+    {
+      "id": 105,
+      "name": "blocks.java:3510:0"
+    },
+    {
+      "id": 106,
+      "name": "blocks.java:3545:0"
+    },
+    {
+      "id": 107,
+      "name": "blocks.java:3550:0"
+    },
+    {
+      "id": 108,
+      "name": "blocks.java:3554:0"
+    },
+    {
+      "id": 109,
+      "name": "blocks.java:3557:0"
+    },
+    {
+      "id": 110,
+      "name": "blocks.java:3597:0"
+    },
+    {
+      "id": 111,
+      "name": "blocks.java:3617:0"
+    },
+    {
+      "id": 112,
+      "name": "blocks.java:3626:0"
+    },
+    {
+      "id": 113,
+      "name": "blocks.java:3671:0"
+    },
+    {
+      "id": 114,
+      "name": "blocks.java:3686:0"
+    },
+    {
+      "id": 115,
+      "name": "blocks.java:3700:0"
+    },
+    {
+      "id": 116,
+      "name": "blocks.java:3746:0"
+    },
+    {
+      "id": 117,
+      "name": "blocks.java:3757:0"
+    },
+    {
+      "id": 118,
+      "name": "blocks.java:3770:0"
+    },
+    {
+      "id": 119,
+      "name": "blocks.java:3786:0"
+    },
+    {
+      "id": 120,
+      "name": "blocks.java:3800:0"
+    },
+    {
+      "id": 121,
+      "name": "blocks.java:3865:0"
+    },
+    {
+      "id": 122,
+      "name": "blocks.java:3877:0"
+    },
+    {
+      "id": 123,
+      "name": "blocks.java:3888:0"
+    },
+    {
+      "id": 124,
+      "name": "blocks.java:3899:0"
+    },
+    {
+      "id": 125,
+      "name": "blocks.java:3949:0"
+    },
+    {
+      "id": 126,
+      "name": "blocks.java:3956:0"
+    },
+    {
+      "id": 127,
+      "name": "blocks.java:3970:0"
+    },
+    {
+      "id": 128,
+      "name": "blocks.java:3986:0"
+    },
+    {
+      "id": 129,
+      "name": "blocks.java:4009:0"
+    },
+    {
+      "id": 130,
+      "name": "blocks.java:4029:0"
+    },
+    {
+      "id": 131,
+      "name": "blocks.java:4048:0"
+    },
+    {
+      "id": 132,
+      "name": "blocks.java:4057:0"
+    },
+    {
+      "id": 133,
+      "name": "blocks.java:4100:0"
+    },
+    {
+      "id": 134,
+      "name": "blocks.java:4109:0"
+    },
+    {
+      "id": 135,
+      "name": "blocks.java:4126:0"
+    },
+    {
+      "id": 136,
+      "name": "blocks.java:4139:0"
+    },
+    {
+      "id": 137,
+      "name": "blocks.java:4143:0"
+    },
+    {
+      "id": 138,
+      "name": "blocks.java:4161:0"
+    },
+    {
+      "id": 139,
+      "name": "blocks.java:4220:0"
+    },
+    {
+      "id": 140,
+      "name": "blocks.java:4263:0"
+    },
+    {
+      "id": 141,
+      "name": "blocks.java:4276:0"
+    },
+    {
+      "id": 142,
+      "name": "blocks.java:4288:0"
+    },
+    {
+      "id": 143,
+      "name": "blocks.java:4343:0"
+    },
+    {
+      "id": 144,
+      "name": "blocks.java:4369:0"
+    },
+    {
+      "id": 145,
+      "name": "blocks.java:4386:0"
+    },
+    {
+      "id": 146,
+      "name": "blocks.java:4405:0"
+    },
+    {
+      "id": 147,
+      "name": "blocks.java:4430:0"
+    },
+    {
+      "id": 148,
+      "name": "blocks.java:4479:0"
+    },
+    {
+      "id": 149,
+      "name": "blocks.java:4494:0"
+    },
+    {
+      "id": 150,
+      "name": "blocks.java:4509:0"
+    },
+    {
+      "id": 151,
+      "name": "blocks.java:4618:0"
+    },
+    {
+      "id": 152,
+      "name": "blocks.java:4629:0"
+    },
+    {
+      "id": 153,
+      "name": "blocks.java:4655:0"
+    },
+    {
+      "id": 154,
+      "name": "blocks.java:4687:0"
+    },
+    {
+      "id": 155,
+      "name": "blocks.java:4725:0"
+    },
+    {
+      "id": 156,
+      "name": "blocks.java:4747:0"
+    },
+    {
+      "id": 157,
+      "name": "blocks.java:4783:0"
+    },
+    {
+      "id": 158,
+      "name": "blocks.java:4788:0"
+    },
+    {
+      "id": 159,
+      "name": "blocks.java:4856:0"
+    },
+    {
+      "id": 160,
+      "name": "blocks.java:4880:0"
+    },
+    {
+      "id": 161,
+      "name": "blocks.java:4908:0"
+    },
+    {
+      "id": 162,
+      "name": "blocks.java:4934:0"
+    },
+    {
+      "id": 163,
+      "name": "blocks.java:4966:0"
+    },
+    {
+      "id": 164,
+      "name": "blocks.java:5040:0"
+    },
+    {
+      "id": 165,
+      "name": "blocks.java:5078:0"
+    },
+    {
+      "id": 166,
+      "name": "blocks.java:5162:0"
+    },
+    {
+      "id": 167,
+      "name": "blocks.java:5230:0"
+    },
+    {
+      "id": 168,
+      "name": "blocks.java:5267:0"
+    },
+    {
+      "id": 169,
+      "name": "blocks.java:5281:0"
+    },
+    {
+      "id": 170,
+      "name": "blocks.java:5317:0"
+    },
+    {
+      "id": 171,
+      "name": "blocks.java:5366:0"
+    },
+    {
+      "id": 172,
+      "name": "blocks.java:5382:0"
+    },
+    {
+      "id": 173,
+      "name": "blocks.java:5421:0"
+    },
+    {
+      "id": 174,
+      "name": "blocks.java:5461:0"
+    },
+    {
+      "id": 175,
+      "name": "blocks.java:5479:0"
+    },
+    {
+      "id": 176,
+      "name": "blocks.java:5514:0"
+    },
+    {
+      "id": 177,
+      "name": "blocks.java:5631:0"
+    },
+    {
+      "id": 178,
+      "name": "blocks.java:5666:0"
+    },
+    {
+      "id": 179,
+      "name": "blocks.java:5677:0"
+    },
+    {
+      "id": 180,
+      "name": "blocks.java:5912:0"
+    },
+    {
+      "id": 181,
+      "name": "blocks.java:5944:0"
+    },
+    {
+      "id": 182,
+      "name": "blocks.java:5952:0"
     }
   ],
   "effects": [
@@ -3314,682 +4134,698 @@
     },
     {
       "id": 31,
-      "name": "plantbreak"
+      "name": "payloaddrop1"
     },
     {
       "id": 32,
-      "name": "rockbreak"
+      "name": "payloaddrop2"
     },
     {
       "id": 33,
-      "name": "shieldbreak"
+      "name": "payloaddrop3"
     },
     {
       "id": 34,
-      "name": "shieldbreaksmall"
+      "name": "payloadpickup"
     },
     {
       "id": 35,
-      "name": "shieldhit"
+      "name": "plantbreak"
     },
     {
       "id": 36,
-      "name": "shieldwave"
+      "name": "rockbreak"
     },
     {
       "id": 37,
-      "name": "shockwavetower"
+      "name": "shieldbreak"
     },
     {
       "id": 38,
-      "name": "unitcreate"
+      "name": "shieldbreaksmall"
     },
     {
       "id": 39,
-      "name": "unitcreatebig"
+      "name": "shieldhit"
     },
     {
       "id": 40,
-      "name": "chargecorvus"
+      "name": "shieldwave"
     },
     {
       "id": 41,
-      "name": "chargelancer"
+      "name": "shockwavetower"
     },
     {
       "id": 42,
-      "name": "chargevela"
+      "name": "unitcreate"
     },
     {
       "id": 43,
-      "name": "rain"
+      "name": "unitcreatebig"
     },
     {
       "id": 44,
-      "name": "wind"
+      "name": "chargecorvus"
     },
     {
       "id": 45,
-      "name": "wind2"
+      "name": "chargelancer"
     },
     {
       "id": 46,
-      "name": "wind3"
+      "name": "chargevela"
     },
     {
       "id": 47,
-      "name": "windhowl"
+      "name": "rain"
     },
     {
       "id": 48,
-      "name": "blockexplode1"
+      "name": "wind"
     },
     {
       "id": 49,
-      "name": "blockexplode1alt"
+      "name": "wind2"
     },
     {
       "id": 50,
-      "name": "blockexplode2"
+      "name": "wind3"
     },
     {
       "id": 51,
-      "name": "blockexplode2alt"
+      "name": "windhowl"
     },
     {
       "id": 52,
-      "name": "blockexplode3"
+      "name": "blockexplode1"
     },
     {
       "id": 53,
-      "name": "blockexplodeelectric"
+      "name": "blockexplode1alt"
     },
     {
       "id": 54,
-      "name": "blockexplodeelectricbig"
+      "name": "blockexplode2"
     },
     {
       "id": 55,
-      "name": "blockexplodeexplosive"
+      "name": "blockexplode2alt"
     },
     {
       "id": 56,
-      "name": "blockexplodeexplosivealt"
+      "name": "blockexplode3"
     },
     {
       "id": 57,
-      "name": "blockexplodeflammable"
+      "name": "blockexplodeelectric"
     },
     {
       "id": 58,
-      "name": "blockexplodewall"
+      "name": "blockexplodeelectricbig"
     },
     {
       "id": 59,
-      "name": "explosion"
+      "name": "blockexplodeexplosive"
     },
     {
       "id": 60,
-      "name": "explosionafflict"
+      "name": "blockexplodeexplosivealt"
     },
     {
       "id": 61,
-      "name": "explosionartillery"
+      "name": "blockexplodeflammable"
     },
     {
       "id": 62,
-      "name": "explosionartilleryshock"
+      "name": "blockexplodewall"
     },
     {
       "id": 63,
-      "name": "explosionartilleryshockbig"
+      "name": "explosion"
     },
     {
       "id": 64,
-      "name": "explosioncleroi"
+      "name": "explosionafflict"
     },
     {
       "id": 65,
-      "name": "explosioncore"
+      "name": "explosionartillery"
     },
     {
       "id": 66,
-      "name": "explosioncrawler"
+      "name": "explosionartilleryshock"
     },
     {
       "id": 67,
-      "name": "explosiondull"
+      "name": "explosionartilleryshockbig"
     },
     {
       "id": 68,
-      "name": "explosionmissile"
+      "name": "explosioncleroi"
     },
     {
       "id": 69,
-      "name": "explosionnavanax"
+      "name": "explosioncore"
     },
     {
       "id": 70,
-      "name": "explosionobviate"
+      "name": "explosioncrawler"
     },
     {
       "id": 71,
-      "name": "explosionplasmasmall"
+      "name": "explosiondull"
     },
     {
       "id": 72,
-      "name": "explosionquad"
+      "name": "explosionmissile"
     },
     {
       "id": 73,
-      "name": "explosionreactor"
+      "name": "explosionnavanax"
     },
     {
       "id": 74,
-      "name": "explosionreactor2"
+      "name": "explosionobviate"
     },
     {
       "id": 75,
-      "name": "explosionreactorneoplasm"
+      "name": "explosionplasmasmall"
     },
     {
       "id": 76,
-      "name": "explosiontitan"
+      "name": "explosionquad"
     },
     {
       "id": 77,
-      "name": "shockbullet"
+      "name": "explosionreactor"
     },
     {
       "id": 78,
-      "name": "unitexplode1"
+      "name": "explosionreactor2"
     },
     {
       "id": 79,
-      "name": "unitexplode2"
+      "name": "explosionreactorneoplasm"
     },
     {
       "id": 80,
-      "name": "unitexplode3"
+      "name": "explosiontitan"
     },
     {
       "id": 81,
-      "name": "wreckfall"
+      "name": "shockbullet"
     },
     {
       "id": 82,
-      "name": "wreckfallbig"
+      "name": "unitexplode1"
     },
     {
       "id": 83,
-      "name": "loopbio"
+      "name": "unitexplode2"
     },
     {
       "id": 84,
-      "name": "loopbuild"
+      "name": "unitexplode3"
     },
     {
       "id": 85,
-      "name": "loopcircuit"
+      "name": "wreckfall"
     },
     {
       "id": 86,
-      "name": "loopcombustion"
+      "name": "wreckfallbig"
     },
     {
       "id": 87,
-      "name": "loopconveyor"
+      "name": "loopbio"
     },
     {
       "id": 88,
-      "name": "loopcultivator"
+      "name": "loopbuild"
     },
     {
       "id": 89,
-      "name": "loopcutter"
+      "name": "loopcircuit"
     },
     {
       "id": 90,
-      "name": "loopdifferential"
+      "name": "loopcombustion"
     },
     {
       "id": 91,
-      "name": "loopdrill"
+      "name": "loopconveyor"
     },
     {
       "id": 92,
-      "name": "loopelectrichum"
+      "name": "loopcultivator"
     },
     {
       "id": 93,
-      "name": "loopextract"
+      "name": "loopcutter"
     },
     {
       "id": 94,
-      "name": "loopfire"
+      "name": "loopdifferential"
     },
     {
       "id": 95,
-      "name": "loopflux"
+      "name": "loopdrill"
     },
     {
       "id": 96,
-      "name": "loopglow"
+      "name": "loopelectrichum"
     },
     {
       "id": 97,
-      "name": "loopgrind"
+      "name": "loopextract"
     },
     {
       "id": 98,
-      "name": "loophover"
+      "name": "loopfire"
     },
     {
       "id": 99,
-      "name": "loophover2"
+      "name": "loopflux"
     },
     {
       "id": 100,
-      "name": "loophum"
+      "name": "loopglow"
     },
     {
       "id": 101,
-      "name": "loopmachine"
+      "name": "loopgrind"
     },
     {
       "id": 102,
-      "name": "loopmachine2"
+      "name": "loophover"
     },
     {
       "id": 103,
-      "name": "loopmachinespin"
+      "name": "loophover2"
     },
     {
       "id": 104,
-      "name": "loopmalign"
+      "name": "loophum"
     },
     {
       "id": 105,
-      "name": "loopminebeam"
+      "name": "loopmachine"
     },
     {
       "id": 106,
-      "name": "loopmissiletrail"
+      "name": "loopmachine2"
     },
     {
       "id": 107,
-      "name": "looppulse"
+      "name": "loopmachinespin"
     },
     {
       "id": 108,
-      "name": "loopregen"
+      "name": "loopmalign"
     },
     {
       "id": 109,
-      "name": "loopshield"
+      "name": "loopminebeam"
     },
     {
       "id": 110,
-      "name": "loopsmelter"
+      "name": "loopmissiletrail"
     },
     {
       "id": 111,
-      "name": "loopspray"
+      "name": "looppulse"
     },
     {
       "id": 112,
-      "name": "loopsteam"
+      "name": "loopregen"
     },
     {
       "id": 113,
-      "name": "looptech"
+      "name": "loopshield"
     },
     {
       "id": 114,
-      "name": "loopthoriumreactor"
+      "name": "loopsmelter"
     },
     {
       "id": 115,
-      "name": "loopthruster"
+      "name": "loopspray"
     },
     {
       "id": 116,
-      "name": "loopunitbuilding"
+      "name": "loopsteam"
     },
     {
       "id": 117,
-      "name": "mechstep"
+      "name": "looptech"
     },
     {
       "id": 118,
-      "name": "mechstepheavy"
+      "name": "loopthoriumreactor"
     },
     {
       "id": 119,
-      "name": "mechstepsmall"
+      "name": "loopthruster"
     },
     {
       "id": 120,
-      "name": "shipmove"
+      "name": "loopunitbuilding"
     },
     {
       "id": 121,
-      "name": "shipmovebig"
+      "name": "mechstep"
     },
     {
       "id": 122,
-      "name": "stepmud"
+      "name": "mechstepheavy"
     },
     {
       "id": 123,
-      "name": "stepwater"
+      "name": "mechstepsmall"
     },
     {
       "id": 124,
-      "name": "tankmove"
+      "name": "shipmove"
     },
     {
       "id": 125,
-      "name": "tankmoveheavy"
+      "name": "shipmovebig"
     },
     {
       "id": 126,
-      "name": "tankmovesmall"
+      "name": "stepmud"
     },
     {
       "id": 127,
-      "name": "walkerstep"
+      "name": "stepwater"
     },
     {
       "id": 128,
-      "name": "walkerstepsmall"
+      "name": "tankmove"
     },
     {
       "id": 129,
-      "name": "walkersteptiny"
+      "name": "tankmoveheavy"
     },
     {
       "id": 130,
-      "name": "shoot"
+      "name": "tankmovesmall"
     },
     {
       "id": 131,
-      "name": "shootafflict"
+      "name": "walkerstep"
     },
     {
       "id": 132,
-      "name": "shootalpha"
+      "name": "walkerstepsmall"
     },
     {
       "id": 133,
-      "name": "shootarc"
+      "name": "walkersteptiny"
     },
     {
       "id": 134,
-      "name": "shootartillery"
+      "name": "shoot"
     },
     {
       "id": 135,
-      "name": "shootartillerysap"
+      "name": "shootafflict"
     },
     {
       "id": 136,
-      "name": "shootartillerysapbig"
+      "name": "shootalpha"
     },
     {
       "id": 137,
-      "name": "shootartillerysmall"
+      "name": "shootarc"
     },
     {
       "id": 138,
-      "name": "shootatrax"
+      "name": "shootartillery"
     },
     {
       "id": 139,
-      "name": "shootavert"
+      "name": "shootartillerysap"
     },
     {
       "id": 140,
-      "name": "shootbeamplasma"
+      "name": "shootartillerysapbig"
     },
     {
       "id": 141,
-      "name": "shootbeamplasmasmall"
+      "name": "shootartillerysmall"
     },
     {
       "id": 142,
-      "name": "shootbreach"
+      "name": "shootatrax"
     },
     {
       "id": 143,
-      "name": "shootbreachcarbide"
+      "name": "shootavert"
     },
     {
       "id": 144,
-      "name": "shootcleroi"
+      "name": "shootbeamplasma"
     },
     {
       "id": 145,
-      "name": "shootcollaris"
+      "name": "shootbeamplasmasmall"
     },
     {
       "id": 146,
-      "name": "shootconquer"
+      "name": "shootbreach"
     },
     {
       "id": 147,
-      "name": "shootcorvus"
+      "name": "shootbreachcarbide"
     },
     {
       "id": 148,
-      "name": "shootcyclone"
+      "name": "shootcleroi"
     },
     {
       "id": 149,
-      "name": "shootdiffuse"
+      "name": "shootcollaris"
     },
     {
       "id": 150,
-      "name": "shootdisperse"
+      "name": "shootconquer"
     },
     {
       "id": 151,
-      "name": "shootduo"
+      "name": "shootcorvus"
     },
     {
       "id": 152,
-      "name": "shooteclipse"
+      "name": "shootcyclone"
     },
     {
       "id": 153,
-      "name": "shootelude"
+      "name": "shootdiffuse"
     },
     {
       "id": 154,
-      "name": "shootenergyfield"
+      "name": "shootdisperse"
     },
     {
       "id": 155,
-      "name": "shootflame"
+      "name": "shootduo"
     },
     {
       "id": 156,
-      "name": "shootflameplasma"
+      "name": "shooteclipse"
     },
     {
       "id": 157,
-      "name": "shootforeshadow"
+      "name": "shootelude"
     },
     {
       "id": 158,
-      "name": "shootfuse"
+      "name": "shootenergyfield"
     },
     {
       "id": 159,
-      "name": "shoothorizon"
+      "name": "shootflame"
     },
     {
       "id": 160,
-      "name": "shootlancer"
+      "name": "shootflameplasma"
     },
     {
       "id": 161,
-      "name": "shootlaser"
+      "name": "shootforeshadow"
     },
     {
       "id": 162,
-      "name": "shootlocus"
+      "name": "shootfuse"
     },
     {
       "id": 163,
-      "name": "shootmalign"
+      "name": "shoothorizon"
     },
     {
       "id": 164,
-      "name": "shootmeltdown"
+      "name": "shootlancer"
     },
     {
       "id": 165,
-      "name": "shootmerui"
+      "name": "shootlaser"
     },
     {
       "id": 166,
-      "name": "shootmissile"
+      "name": "shootlocus"
     },
     {
       "id": 167,
-      "name": "shootmissilelarge"
+      "name": "shootmalign"
     },
     {
       "id": 168,
-      "name": "shootmissilelong"
+      "name": "shootmeltdown"
     },
     {
       "id": 169,
-      "name": "shootmissileplasma"
+      "name": "shootmerui"
     },
     {
       "id": 170,
-      "name": "shootmissileplasmashort"
+      "name": "shootmissile"
     },
     {
       "id": 171,
-      "name": "shootmissileshort"
+      "name": "shootmissilelarge"
     },
     {
       "id": 172,
-      "name": "shootmissilesmall"
+      "name": "shootmissilelong"
     },
     {
       "id": 173,
-      "name": "shootnavanax"
+      "name": "shootmissileplasma"
     },
     {
       "id": 174,
-      "name": "shootomura"
+      "name": "shootmissileplasmashort"
     },
     {
       "id": 175,
-      "name": "shootpayload"
+      "name": "shootmissileshort"
     },
     {
       "id": 176,
-      "name": "shootpulsar"
+      "name": "shootmissilesmall"
     },
     {
       "id": 177,
-      "name": "shootquad"
+      "name": "shootnavanax"
     },
     {
       "id": 178,
-      "name": "shootreign"
+      "name": "shootomura"
     },
     {
       "id": 179,
-      "name": "shootretusa"
+      "name": "shootpayload"
     },
     {
       "id": 180,
-      "name": "shootripple"
+      "name": "shootpulsar"
     },
     {
       "id": 181,
-      "name": "shootsalvo"
+      "name": "shootquad"
     },
     {
       "id": 182,
-      "name": "shootsap"
+      "name": "shootreign"
     },
     {
       "id": 183,
-      "name": "shootscathe"
+      "name": "shootretusa"
     },
     {
       "id": 184,
-      "name": "shootscatter"
+      "name": "shootripple"
     },
     {
       "id": 185,
-      "name": "shootscepter"
+      "name": "shootsalvo"
     },
     {
       "id": 186,
-      "name": "shootsceptersecondary"
+      "name": "shootsap"
     },
     {
       "id": 187,
-      "name": "shootsegment"
+      "name": "shootscathe"
     },
     {
       "id": 188,
-      "name": "shootsmite"
+      "name": "shootscatter"
     },
     {
       "id": 189,
-      "name": "shootspectre"
+      "name": "shootscepter"
     },
     {
       "id": 190,
-      "name": "shootstell"
+      "name": "shootsceptersecondary"
     },
     {
       "id": 191,
-      "name": "shootsublimate"
+      "name": "shootsegment"
     },
     {
       "id": 192,
-      "name": "shoottank"
+      "name": "shootsmite"
     },
     {
       "id": 193,
-      "name": "shoottoxopidshotgun"
+      "name": "shootspectre"
     },
     {
       "id": 194,
-      "name": "uiback"
+      "name": "shootstell"
     },
     {
       "id": 195,
-      "name": "uibutton"
+      "name": "shootsublimate"
     },
     {
       "id": 196,
-      "name": "uichat"
+      "name": "shoottank"
     },
     {
       "id": 197,
-      "name": "uifavorite"
+      "name": "shoottoxopidshotgun"
     },
     {
       "id": 198,
-      "name": "uinotify"
+      "name": "uiback"
     },
     {
       "id": 199,
-      "name": "uiunlock"
+      "name": "uibutton"
     },
     {
       "id": 200,
+      "name": "uichat"
+    },
+    {
+      "id": 201,
+      "name": "uifavorite"
+    },
+    {
+      "id": 202,
+      "name": "uinotify"
+    },
+    {
+      "id": 203,
+      "name": "uiunlock"
+    },
+    {
+      "id": 204,
       "name": "wavespawn"
     }
   ],
@@ -5042,26 +5878,22 @@
     },
     {
       "id": 5,
-      "name": "boost"
-    },
-    {
-      "id": 6,
       "name": "enterpayload"
     },
     {
-      "id": 7,
+      "id": 6,
       "name": "loadunits"
     },
     {
-      "id": 8,
+      "id": 7,
       "name": "loadblocks"
     },
     {
-      "id": 9,
+      "id": 8,
       "name": "unloadpayload"
     },
     {
-      "id": 10,
+      "id": 9,
       "name": "looppayload"
     }
   ],
@@ -5088,94 +5920,102 @@
     },
     {
       "id": 5,
-      "name": "mineauto"
+      "name": "boost"
     },
     {
       "id": 6,
-      "name": "item-copper"
+      "name": "holdposition"
     },
     {
       "id": 7,
-      "name": "item-lead"
+      "name": "mineauto"
     },
     {
       "id": 8,
-      "name": "item-metaglass"
+      "name": "item-copper"
     },
     {
       "id": 9,
-      "name": "item-graphite"
+      "name": "item-lead"
     },
     {
       "id": 10,
-      "name": "item-sand"
+      "name": "item-metaglass"
     },
     {
       "id": 11,
-      "name": "item-coal"
+      "name": "item-graphite"
     },
     {
       "id": 12,
-      "name": "item-titanium"
+      "name": "item-sand"
     },
     {
       "id": 13,
-      "name": "item-thorium"
+      "name": "item-coal"
     },
     {
       "id": 14,
-      "name": "item-scrap"
+      "name": "item-titanium"
     },
     {
       "id": 15,
-      "name": "item-silicon"
+      "name": "item-thorium"
     },
     {
       "id": 16,
-      "name": "item-plastanium"
+      "name": "item-scrap"
     },
     {
       "id": 17,
-      "name": "item-phase-fabric"
+      "name": "item-silicon"
     },
     {
       "id": 18,
-      "name": "item-surge-alloy"
+      "name": "item-plastanium"
     },
     {
       "id": 19,
-      "name": "item-spore-pod"
+      "name": "item-phase-fabric"
     },
     {
       "id": 20,
-      "name": "item-blast-compound"
+      "name": "item-surge-alloy"
     },
     {
       "id": 21,
-      "name": "item-pyratite"
+      "name": "item-spore-pod"
     },
     {
       "id": 22,
-      "name": "item-beryllium"
+      "name": "item-blast-compound"
     },
     {
       "id": 23,
-      "name": "item-tungsten"
+      "name": "item-pyratite"
     },
     {
       "id": 24,
-      "name": "item-oxide"
+      "name": "item-beryllium"
     },
     {
       "id": 25,
-      "name": "item-carbide"
+      "name": "item-tungsten"
     },
     {
       "id": 26,
-      "name": "item-fissile-matter"
+      "name": "item-oxide"
     },
     {
       "id": 27,
+      "name": "item-carbide"
+    },
+    {
+      "id": 28,
+      "name": "item-fissile-matter"
+    },
+    {
+      "id": 29,
       "name": "item-dormant-cyst"
     }
   ],
@@ -6219,6 +7059,10 @@
     {
       "id": 259,
       "name": "tile-logic-display"
+    },
+    {
+      "id": 260,
+      "name": "large-canvas"
     }
   ],
   "logic_units": [

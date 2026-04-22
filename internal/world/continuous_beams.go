@@ -87,6 +87,11 @@ func (w *World) spawnPersistentBeamBullet(src RawEntity, bullet *bulletRuntimePr
 		BulletClass:          bullet.ClassName,
 		SplashRadius:         src.AttackSplashRadius,
 		BuildingDamage:       entityBuildingDamageMultiplier(src),
+		ArmorMultiplier:      src.AttackArmorMultiplier,
+		MaxDamageFraction:    src.AttackMaxDamageFraction,
+		ShieldDamageMul:      src.AttackShieldDamageMul,
+		PierceDamageFactor:   src.AttackPierceDamageFactor,
+		PierceArmor:          src.AttackPierceArmor,
 		SlowSec:              src.AttackSlowSec,
 		SlowMul:              clampf(src.AttackSlowMul, 0.2, 1),
 		StatusID:             src.AttackStatusID,
@@ -191,7 +196,7 @@ func (w *World) applyPointBeamDamage(b simBullet) bool {
 			pos := int32(ty*w.model.Width + tx)
 			tile := &w.model.Tiles[pos]
 			if tile.Build != nil && tile.Build.Team != b.Team && tile.Build.Health > 0 {
-				if w.applyDamageToBuildingDetailed(pos, b.Damage*b.BuildingDamage) {
+				if w.applyDamageToBuildingProfile(pos, b.Damage*b.BuildingDamage, bulletDamageApplyProfile(b)) {
 					impacted = true
 				}
 			}
@@ -208,9 +213,11 @@ func (w *World) applyPointBeamDamage(b simBullet) bool {
 		if dx*dx+dy*dy > hitR*hitR {
 			continue
 		}
-		w.applyDamageToEntityDetailed(e, b.Damage, false)
-		applySlow(e, b.SlowSec, b.SlowMul)
-		w.applyStatusToEntity(e, b.StatusID, b.StatusName, b.StatusDuration)
+		if remaining, absorbed := w.absorbEntityAbilityDamage(e, b.X, b.Y, b.Damage); !absorbed {
+			w.applyDamageToEntityProfile(e, remaining, bulletDamageApplyProfile(b))
+			applySlow(e, b.SlowSec, b.SlowMul)
+			w.applyStatusToEntity(e, b.StatusID, b.StatusName, b.StatusDuration)
+		}
 		impacted = true
 	}
 	return impacted
@@ -232,9 +239,11 @@ func (w *World) applyLineBeamDamage(b simBullet) bool {
 		if distPointToSegmentSquared(e.X, e.Y, ax, ay, bx, by) > hitR*hitR {
 			continue
 		}
-		w.applyDamageToEntityDetailed(e, b.Damage, false)
-		applySlow(e, b.SlowSec, b.SlowMul)
-		w.applyStatusToEntity(e, b.StatusID, b.StatusName, b.StatusDuration)
+		if remaining, absorbed := w.absorbEntityAbilityDamage(e, ax, ay, b.Damage); !absorbed {
+			w.applyDamageToEntityProfile(e, remaining, bulletDamageApplyProfile(b))
+			applySlow(e, b.SlowSec, b.SlowMul)
+			w.applyStatusToEntity(e, b.StatusID, b.StatusName, b.StatusDuration)
+		}
 		impacted = true
 	}
 	if b.HitBuilds && b.TargetGround {
@@ -268,7 +277,7 @@ func (w *World) applyLineBeamDamage(b simBullet) bool {
 				if distPointToSegmentSquared(cx, cy, ax, ay, bx, by) > hitR*hitR {
 					continue
 				}
-				if w.applyDamageToBuildingDetailed(pos, b.Damage*b.BuildingDamage) {
+				if w.applyDamageToBuildingProfile(pos, b.Damage*b.BuildingDamage, bulletDamageApplyProfile(b)) {
 					impacted = true
 				}
 			}
@@ -291,8 +300,11 @@ func (w *World) stepPersistentBeamBullet(b *simBullet, dt float32) (bool, bool) 
 	}
 	impacted := false
 	b.DamageTick += dt
-	for b.BeamDamageInterval > 0 && b.DamageTick >= b.BeamDamageInterval {
+	for b.BeamDamageInterval > 0 && b.DamageTick+crafterProgressEpsilon >= b.BeamDamageInterval {
 		b.DamageTick -= b.BeamDamageInterval
+		if b.DamageTick < 0 {
+			b.DamageTick = 0
+		}
 		if isPointLaserBulletClass(b.BulletClass) {
 			impacted = w.applyPointBeamDamage(*b) || impacted
 		} else {
@@ -308,8 +320,15 @@ func (w *World) acquireBuildingWeaponTarget(src RawEntity, state *buildCombatSta
 	if state == nil {
 		return -1, -1, 0, 0
 	}
+	if prof.HitBuildings && prof.TargetBuilds {
+		if bpos, tx, ty, ok := w.findNearestEnemyBuilding(src, prof.Range); ok {
+			state.TargetID = 0
+			state.RetargetCD = 0
+			return -1, bpos, tx, ty
+		}
+	}
 	track := targetTrackState{TargetID: state.TargetID, RetargetCD: state.RetargetCD}
-	retargetDelay := maxf(prof.Interval*0.55, 0.22)
+	retargetDelay := buildingWeaponRetargetDelay(prof, track.TargetID != 0)
 	if tid, ok := w.acquireTrackedEntityTarget(src, ents, idToIndex, spatial, teamSpatial, prof.Range, prof.TargetAir, prof.TargetGround, prof.TargetPriority, &track, 0, retargetDelay); ok {
 		state.TargetID = track.TargetID
 		state.RetargetCD = track.RetargetCD
@@ -320,6 +339,10 @@ func (w *World) acquireBuildingWeaponTarget(src RawEntity, state *buildCombatSta
 	state.TargetID = track.TargetID
 	state.RetargetCD = track.RetargetCD
 	if prof.HitBuildings {
+		if prof.TargetBuilds {
+			state.TargetID = 0
+			state.RetargetCD = 0
+		}
 		if bpos, tx, ty, ok := w.findNearestEnemyBuilding(src, prof.Range); ok {
 			return -1, bpos, tx, ty
 		}
@@ -327,7 +350,7 @@ func (w *World) acquireBuildingWeaponTarget(src RawEntity, state *buildCombatSta
 	return -1, -1, 0, 0
 }
 
-func (w *World) updateBuildingContinuousBeam(src *RawEntity, state *buildCombatState, prof buildingWeaponProfile, hasTarget bool, tx, ty, dt float32) bool {
+func (w *World) updateBuildingContinuousBeam(src *RawEntity, state *buildCombatState, prof buildingWeaponProfile, hasAim, keepAliveInput bool, tx, ty, dt float32) bool {
 	if w == nil || src == nil || state == nil || state.BeamBulletID == 0 {
 		return false
 	}
@@ -339,10 +362,6 @@ func (w *World) updateBuildingContinuousBeam(src *RawEntity, state *buildCombatS
 	}
 	b := &w.bullets[idx]
 	angle := src.Rotation
-	if hasTarget {
-		angle = lookAt(src.X, src.Y, tx, ty)
-		src.Rotation = angle
-	}
 	rad := float32(angle * math.Pi / 180)
 	b.X = src.X
 	b.Y = src.Y
@@ -351,7 +370,7 @@ func (w *World) updateBuildingContinuousBeam(src *RawEntity, state *buildCombatS
 
 	if isPointLaserBulletClass(b.BulletClass) {
 		targetLength := state.BeamLastLength
-		if hasTarget {
+		if hasAim {
 			targetLength = float32(math.Sqrt(float64((tx-src.X)*(tx-src.X) + (ty-src.Y)*(ty-src.Y))))
 			if prof.Range > 0 && targetLength > prof.Range {
 				targetLength = prof.Range
@@ -385,7 +404,7 @@ func (w *World) updateBuildingContinuousBeam(src *RawEntity, state *buildCombatS
 			state.Cooldown = maxf(prof.Interval, 0.05)
 		}
 	case "continuousturret", "continuousliquidturret":
-		keepAlive = hasTarget
+		keepAlive = keepAliveInput
 		state.Cooldown = 0
 	}
 	if keepAlive {
@@ -394,20 +413,40 @@ func (w *World) updateBuildingContinuousBeam(src *RawEntity, state *buildCombatS
 	return true
 }
 
-func (w *World) stepBuildingContinuousBeam(src *RawEntity, state *buildCombatState, prof buildingWeaponProfile, ents []RawEntity, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex, dt float32) bool {
+func (w *World) stepBuildingContinuousBeam(buildPos int32, src *RawEntity, state *buildCombatState, prof buildingWeaponProfile, ents []RawEntity, idToIndex map[int32]int, spatial *entitySpatialIndex, teamSpatial map[TeamID]*entitySpatialIndex, dt float32) bool {
 	if w == nil || src == nil || state == nil || !prof.ContinuousHold || !isPersistentBeamBulletProfile(prof.Bullet) {
 		return false
 	}
-	targetIdx, buildPos, tx, ty := w.acquireBuildingWeaponTarget(*src, state, prof, ents, idToIndex, spatial, teamSpatial)
-	hasTarget := targetIdx >= 0 || buildPos >= 0
+	targetIdx, targetBuildPos, tx, ty := w.acquireBuildingWeaponTarget(*src, state, prof, ents, idToIndex, spatial, teamSpatial)
+	hasAim := targetIdx >= 0 || targetBuildPos >= 0
+	canFire := hasAim
+	if targetIdx >= 0 && targetIdx < len(ents) {
+		tx, ty = predictBuildingAimPosition(*src, ents[targetIdx], prof)
+	}
+	if controlled, canShoot, aimX, aimY := w.controlledBuildingAimLocked(buildPos); controlled {
+		tx, ty = aimX, aimY
+		hasAim = true
+		canFire = canShoot
+	}
+	if hasAim {
+		var tile *Tile
+		if buildPos >= 0 && w.model != nil && int(buildPos) < len(w.model.Tiles) {
+			tile = &w.model.Tiles[buildPos]
+		}
+		updateBuildingAim(tile, *src, prof, state, tx, ty, dt)
+		src.Rotation = state.TurretRotation
+	}
 	if state.BeamBulletID != 0 {
-		w.updateBuildingContinuousBeam(src, state, prof, hasTarget, tx, ty, dt)
+		w.updateBuildingContinuousBeam(src, state, prof, hasAim, canFire, tx, ty, dt)
 		if state.BeamBulletID != 0 {
-			return hasTarget || normalizeBulletClassName(prof.ClassName) == "laserturret"
+			return hasAim || state.BeamBulletID != 0
 		}
 	}
-	if !hasTarget || state.Cooldown > 0 {
-		return false
+	if !canFire || state.Cooldown > 0 {
+		return hasAim
+	}
+	if hasAim && !buildingCanFireAtAim(prof, src.Rotation, normalizeAngleDeg(lookAt(src.X, src.Y, tx, ty))) {
+		return true
 	}
 	if prof.AmmoPerShot > 0 && state.Ammo < prof.AmmoPerShot {
 		return false
@@ -416,7 +455,6 @@ func (w *World) stepBuildingContinuousBeam(src *RawEntity, state *buildCombatSta
 		return false
 	}
 
-	src.Rotation = lookAt(src.X, src.Y, tx, ty)
 	bid := w.spawnPersistentBeamBullet(*src, prof.Bullet, src.Rotation, tx, ty, true)
 	if bid == 0 {
 		return false
@@ -441,6 +479,6 @@ func (w *World) stepBuildingContinuousBeam(src *RawEntity, state *buildCombatSta
 			state.Power = 0
 		}
 	}
-	w.updateBuildingContinuousBeam(src, state, prof, true, tx, ty, dt)
+	w.updateBuildingContinuousBeam(src, state, prof, true, true, tx, ty, dt)
 	return true
 }

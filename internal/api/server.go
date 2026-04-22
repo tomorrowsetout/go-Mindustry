@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"runtime"
 	"sort"
@@ -86,6 +87,19 @@ func (s *Server) Serve() error {
 		return errors.New("api server not initialized")
 	}
 	return s.http.ListenAndServe()
+}
+
+func (s *Server) ServeListener(ln net.Listener) error {
+	if !s.cfg.Enabled {
+		return nil
+	}
+	if s.http == nil {
+		return errors.New("api server not initialized")
+	}
+	if ln == nil {
+		return errors.New("api listener is nil")
+	}
+	return s.http.Serve(ln)
 }
 
 func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {

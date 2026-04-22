@@ -87,7 +87,7 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 		return
 	}
 	rules := w.rulesMgr.Get()
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.factoryTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -135,11 +135,12 @@ func (w *World) stepFactoryProduction(delta time.Duration) {
 			st.Progress += deltaFrames * speedMul
 		}
 		if st.Progress >= plan.TimeFrames {
-			payload := w.newFactoryUnitPayloadLocked(t, st.UnitType)
+			payload := w.newFactoryUnitPayloadLocked(t, st)
 			if payload == nil {
 				st.Progress = clampf(st.Progress, 0, plan.TimeFrames)
 			} else {
 				removeItemStacksLocked(t.Build, scaledCost)
+				w.emitBlockItemSyncLocked(pos)
 				st.Progress = float32(math.Mod(float64(st.Progress), 1))
 				payloadState.Payload = payload
 				payloadState.Move = 0
@@ -309,6 +310,54 @@ func (w *World) configureUnitFactoryPlanLocked(pos int32, planIndex int16) bool 
 	return true
 }
 
+func cloneFactoryCommandPos(v *protocol.Vec2) *protocol.Vec2 {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneFactoryCommand(v *protocol.UnitCommand) *protocol.UnitCommand {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func (w *World) configureUnitFactoryCommandLocked(pos int32, command *protocol.UnitCommand) bool {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) || !w.unitFactoryConfigBlockAtLocked(pos) {
+		return false
+	}
+	st := w.factoryStates[pos]
+	st.Command = cloneFactoryCommand(command)
+	w.factoryStates[pos] = st
+	return true
+}
+
+func (w *World) clearUnitFactoryCommandLocked(pos int32) bool {
+	return w.configureUnitFactoryCommandLocked(pos, nil)
+}
+
+func (w *World) configureUnitFactoryCommandPosLocked(pos int32, target protocol.Vec2) bool {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) || !w.unitFactoryConfigBlockAtLocked(pos) {
+		return false
+	}
+	st := w.factoryStates[pos]
+	st.CommandPos = cloneFactoryCommandPos(&target)
+	w.factoryStates[pos] = st
+	return true
+}
+
+func (w *World) unitFactoryCommandStateLocked(pos int32) (*protocol.Vec2, *protocol.UnitCommand) {
+	st, ok := w.factoryStates[pos]
+	if !ok {
+		return nil, nil
+	}
+	return cloneFactoryCommandPos(st.CommandPos), cloneFactoryCommand(st.Command)
+}
+
 func (w *World) configureUnitFactoryUnitLocked(pos int32, typeID int16) bool {
 	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
 		return false
@@ -379,26 +428,28 @@ func (w *World) unitFactoryProgressLocked(pos int32, tile *Tile) float32 {
 	return st.Progress
 }
 
-func (w *World) newFactoryUnitPayloadLocked(tile *Tile, typeID int16) *payloadData {
+func (w *World) unitFactoryControllerStateLocked(state factoryState) *protocol.ControllerState {
+	if state.Command == nil && state.CommandPos == nil {
+		return nil
+	}
+	ctrl := &protocol.ControllerState{Type: protocol.ControllerCommand9}
+	if state.Command != nil {
+		ctrl.Command.CommandID = int8(state.Command.ID)
+	}
+	if state.CommandPos != nil {
+		ctrl.Command.HasPos = true
+		ctrl.Command.TargetPos = *state.CommandPos
+	}
+	return ctrl
+}
+
+func (w *World) newFactoryUnitPayloadLocked(tile *Tile, state factoryState) *payloadData {
+	typeID := state.UnitType
 	if tile == nil || tile.Build == nil || typeID <= 0 {
 		return nil
 	}
 	unit := w.newProducedUnitEntityLocked(typeID, tile.Build.Team, float32(tile.X*8+4), float32(tile.Y*8+4), float32(tile.Rotation)*90)
-	entity := &protocol.UnitEntitySync{
-		Controller:     nil,
-		Health:         unit.Health,
-		BaseRotation:   unit.Rotation,
-		Rotation:       unit.Rotation,
-		Shield:         unit.Shield,
-		SpawnedByCore:  false,
-		TeamID:         byte(unit.Team),
-		TypeID:         unit.TypeID,
-		UpdateBuilding: false,
-		Vel:            protocol.Vec2{X: unit.VelX, Y: unit.VelY},
-		X:              unit.X,
-		Y:              unit.Y,
-	}
-	entity.ApplyLayoutByName(w.unitNamesByID[typeID])
+	entity := w.entitySyncUnitLocked(unit, nil, w.unitFactoryControllerStateLocked(state))
 	writer := protocol.NewWriter()
 	if err := writer.WriteBool(true); err != nil {
 		return nil
@@ -416,6 +467,10 @@ func (w *World) newFactoryUnitPayloadLocked(tile *Tile, typeID int16) *payloadDa
 		Kind:       payloadKindUnit,
 		UnitTypeID: typeID,
 		Serialized: append([]byte(nil), writer.Bytes()...),
+		Rotation:   tile.Rotation,
+		Health:     unit.Health,
+		MaxHealth:  unit.MaxHealth,
+		UnitState:  func() *RawEntity { clone := cloneRawEntity(unit); return &clone }(),
 	}
 }
 
@@ -428,15 +483,19 @@ func (w *World) newProducedUnitEntityLocked(typeID int16, team TeamID, x, y, rot
 		Team:        team,
 		Health:      100,
 		MaxHealth:   100,
-		Shield:      25,
-		ShieldMax:   25,
-		ShieldRegen: 4.5,
-		Armor:       1.5,
+		Shield:      0,
+		ShieldMax:   0,
+		ShieldRegen: 0,
+		Armor:       0,
 		SlowMul:     1,
 		RuntimeInit: true,
+		MineTilePos: invalidEntityTilePos,
 	}
 	w.applyUnitTypeDef(&ent)
 	w.applyWeaponProfile(&ent)
+	if isEntityFlying(ent) {
+		ent.Elevation = 1
+	}
 	return ent
 }
 
@@ -717,16 +776,17 @@ func (w *World) teamCoreBuildsLocked(team TeamID) []*Building {
 	if w.model == nil || team == 0 {
 		return nil
 	}
-	out := make([]*Building, 0, 4)
-	for _, pos := range w.activeTilePositions {
+	positions := w.teamCoreTiles[team]
+	if len(positions) == 0 {
+		return nil
+	}
+	out := make([]*Building, 0, len(positions))
+	for _, pos := range positions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
 		tile := &w.model.Tiles[pos]
 		if tile.Team != team || tile.Build == nil || tile.Block <= 0 {
-			continue
-		}
-		if !strings.HasPrefix(w.blockNameByID(int16(tile.Block)), "core-") {
 			continue
 		}
 		out = append(out, tile.Build)
@@ -1166,6 +1226,10 @@ func (w *World) builderSpeedForOwnerLocked(owner int32, team TeamID) float32 {
 }
 
 func (w *World) buildDurationSecondsForOwnerLocked(blockID int16, owner int32, team TeamID, rules *Rules) float32 {
+	return w.buildDurationSecondsForBuilderSpeedLocked(blockID, team, rules, w.builderSpeedForOwnerLocked(owner, team))
+}
+
+func (w *World) buildDurationSecondsForBuilderSpeedLocked(blockID int16, team TeamID, rules *Rules, builderSpeed float32) float32 {
 	if rules != nil && (rules.InstantBuild || rules.Editor) {
 		return 0.01
 	}
@@ -1191,7 +1255,6 @@ func (w *World) buildDurationSecondsForOwnerLocked(blockID int16, owner int32, t
 	// bs = 1/buildCost * type.buildSpeed * buildSpeedMultiplier * rules.buildSpeed(team)
 	// Here "base" is buildCost/60, so divide only by unit buildSpeed and rules.buildSpeed(team).
 	// unitBuildSpeedMultiplier is for unit factories/spawners in vanilla, not BuilderComp.
-	builderSpeed := w.builderSpeedForOwnerLocked(owner, team)
 	if builderSpeed > 0 {
 		base /= builderSpeed
 	}

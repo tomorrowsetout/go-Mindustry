@@ -1,0 +1,8 @@
+./baseparts.go
+./combat_profiles_ext.go
+./content_ids.go
+./mount_profiles.go
+./profiles.go
+./unit_metadata.go
+./unit_types.go
+./unit_types_gen.go

@@ -7,17 +7,17 @@ import (
 	"testing"
 )
 
-func TestLoadConfigINI(t *testing.T) {
+func TestLoadConfigTOML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 	payload := `
 [runtime]
 cores = 2
-scheduler_enabled = 1
+scheduler_enabled = true
 
 [server]
-name = test-server
-desc = hello
+name = "test-server"
+desc = "hello"
 virtual_players = 9
 
 [sync]
@@ -25,48 +25,52 @@ entity_ms = 120
 state_ms = 260
 
 [data]
-mode = file
-directory = data/events
-database_enabled = 0
+mode = "file"
+directory = "data/events"
+database_enabled = false
 
 [mods]
-enabled = 1
-directory = mods
+enabled = true
+directory = "mods"
 
 [persist]
-enabled = 1
-directory = data/state
-file = server-state.json
+enabled = true
+directory = "data/state"
+file = "server-state.json"
 interval_sec = 15
-save_msav = 1
-msav_dir = data/snapshots
+save_msav = true
+msav_dir = "data/snapshots"
 
 [script]
-file = data/state/scripts.json
-daily_gc_time = 04:30
+file = "data/state/scripts.json"
+daily_gc_time = "04:30"
 
 [api]
-enabled = 1
-bind = 127.0.0.1:9000
-key = mdt-server-go-aaaaaaaaaaaaaaa-bbbbbbbbbbbbb-ccccccccccccccc-ddddddddddddddddddd-eeeeeeeeeeee-yzf-ffffffffff
-keys = mdt-server-go-111111111111111-2222222222222-333333333333333-4444444444444444444-555555555555-yzf-6666666666,mdt-server-go-777777777777777-8888888888888-999999999999999-0000000000000000000-aaaaaaaaaaaa-yzf-bbbbbbbbbb
-config_file = api.ini
+enabled = true
+bind = "127.0.0.1:9000"
+key = "mdt-server-go-aaaaaaaaaaaaaaa-bbbbbbbbbbbbb-ccccccccccccccc-ddddddddddddddddddd-eeeeeeeeeeee-yzf-ffffffffff"
+keys = ["mdt-server-go-111111111111111-2222222222222-333333333333333-4444444444444444444-555555555555-yzf-6666666666", "mdt-server-go-777777777777777-8888888888888-999999999999999-0000000000000000000-aaaaaaaaaaaa-yzf-bbbbbbbbbb"]
+config_file = "api.toml"
+
+[authority_sync]
+strategy = "static"
 `
 	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write temp config: %v", err)
 	}
-	// core.ini sidecar
-	corePath := filepath.Join(dir, "core.ini")
+	// core.toml sidecar
+	corePath := filepath.Join(dir, "core.toml")
 	corePayload := `
 [core]
-dual_core_enabled = 0
+dual_core_enabled = false
+tps = 120
 
 [memory]
 limit_mb = 0
 startup_max_mb = 0
 gc_trigger_mb = 0
 check_interval_sec = 5
-free_os_memory = 0
+free_os_memory = false
 `
 	if err := os.WriteFile(corePath, []byte(corePayload), 0o644); err != nil {
 		t.Fatalf("write temp core config: %v", err)
@@ -96,19 +100,68 @@ free_os_memory = 0
 	if cfg.Script.File != "data/state/scripts.json" || cfg.Script.DailyGCTime != "04:30" {
 		t.Fatalf("script config not loaded: %+v", cfg.Script)
 	}
-	if cfg.Core.DualCoreEnabled {
+	if cfg.Core.DualCoreEnabled || cfg.Core.TPS != 120 {
 		t.Fatalf("core sidecar not loaded: %+v", cfg.Core)
+	}
+	if cfg.Sync.Strategy != AuthoritySyncStatic {
+		t.Fatalf("authority sync strategy not loaded: %+v", cfg.Sync)
 	}
 }
 
-func TestLoadConfigINI_InvalidAPIKey(t *testing.T) {
+func TestSaveCoreSidecarIncludesTPS(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
+	cfg := Default()
+	cfg.Source = path
+	cfg.Core.DualCoreEnabled = false
+	cfg.Core.TPS = 120
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	coreRaw, err := os.ReadFile(filepath.Join(dir, "core.toml"))
+	if err != nil {
+		t.Fatalf("read core toml: %v", err)
+	}
+	coreText := string(coreRaw)
+	if !strings.Contains(coreText, "dual_core_enabled = false") {
+		t.Fatalf("expected dual_core_enabled in core toml, got:\n%s", coreText)
+	}
+	if !strings.Contains(coreText, "tps = 120") {
+		t.Fatalf("expected tps in core toml, got:\n%s", coreText)
+	}
+}
+
+func TestLoadCoreSidecarNormalizesTPSBounds(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	payload := `
+[core]
+tps = 999
+`
+	if err := os.WriteFile(filepath.Join(dir, "core.toml"), []byte(payload), 0o644); err != nil {
+		t.Fatalf("write core toml: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Core.TPS != 120 {
+		t.Fatalf("expected core tps to clamp at 120, got %d", cfg.Core.TPS)
+	}
+}
+
+func TestLoadConfigTOML_InvalidAPIKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
 	payload := `
 [api]
-enabled = 1
-bind = 127.0.0.1:9000
-key = abc
+enabled = true
+bind = "127.0.0.1:9000"
+key = "abc"
 `
 	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write temp config: %v", err)
@@ -120,7 +173,7 @@ key = abc
 
 func TestSaveSidecarsSeparatesDevelopmentAndSundriesLogs(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 	cfg := Default()
 	cfg.Source = path
 	cfg.Development.TerminalPlayerLogsEnabled = false
@@ -133,80 +186,89 @@ func TestSaveSidecarsSeparatesDevelopmentAndSundriesLogs(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 
-	devRaw, err := os.ReadFile(filepath.Join(dir, "Development mode.ini"))
+	devRaw, err := os.ReadFile(filepath.Join(dir, "development.toml"))
 	if err != nil {
-		t.Fatalf("read development ini: %v", err)
+		t.Fatalf("read development toml: %v", err)
 	}
 	devText := string(devRaw)
-	if !strings.Contains(devText, "terminal_player_logs_enabled = 0") {
-		t.Fatalf("expected terminal player log toggle in development ini, got:\n%s", devText)
+	if !strings.Contains(devText, "terminal_player_logs_enabled = false") {
+		t.Fatalf("expected terminal player log toggle in development toml, got:\n%s", devText)
 	}
-	if !strings.Contains(devText, "build_finish_logs_enabled = 0") {
-		t.Fatalf("expected build finish terminal toggle in development ini, got:\n%s", devText)
+	if !strings.Contains(devText, "build_finish_logs_enabled = false") {
+		t.Fatalf("expected build finish terminal toggle in development toml, got:\n%s", devText)
 	}
 	if strings.Contains(devText, "net_event_logs_enabled") {
-		t.Fatalf("development ini should not contain file log toggles, got:\n%s", devText)
+		t.Fatalf("development toml should not contain file log toggles, got:\n%s", devText)
 	}
 
-	sundriesRaw, err := os.ReadFile(filepath.Join(dir, "Sundries.ini"))
+	sundriesRaw, err := os.ReadFile(filepath.Join(dir, "sundries.toml"))
 	if err != nil {
-		t.Fatalf("read sundries ini: %v", err)
+		t.Fatalf("read sundries toml: %v", err)
 	}
 	sundriesText := string(sundriesRaw)
-	if !strings.Contains(sundriesText, "net_event_logs_enabled = 0") {
-		t.Fatalf("expected net event log toggle in sundries ini, got:\n%s", sundriesText)
+	if !strings.Contains(sundriesText, "net_event_logs_enabled = false") {
+		t.Fatalf("expected net event log toggle in sundries toml, got:\n%s", sundriesText)
 	}
-	if !strings.Contains(sundriesText, "chat_logs_enabled = 0") {
-		t.Fatalf("expected chat log toggle in sundries ini, got:\n%s", sundriesText)
+	if !strings.Contains(sundriesText, "chat_logs_enabled = false") {
+		t.Fatalf("expected chat log toggle in sundries toml, got:\n%s", sundriesText)
 	}
-	if !strings.Contains(sundriesText, "build_finish_logs_enabled = 0") {
-		t.Fatalf("expected build finish file toggle in sundries ini, got:\n%s", sundriesText)
+	if !strings.Contains(sundriesText, "build_finish_logs_enabled = false") {
+		t.Fatalf("expected build finish file toggle in sundries toml, got:\n%s", sundriesText)
 	}
 	if strings.Contains(sundriesText, "packet_recv_events_enabled") {
-		t.Fatalf("sundries ini should not contain development packet toggles, got:\n%s", sundriesText)
+		t.Fatalf("sundries toml should not contain development packet toggles, got:\n%s", sundriesText)
 	}
 }
 
-func TestLoadConfigSidecarsWithoutMainConfig(t *testing.T) {
+func TestLoadConfigTOMLSidecarsWithoutMainConfig(t *testing.T) {
 	dir := t.TempDir()
-	mainPath := filepath.Join(dir, "config.ini")
+	mainPath := filepath.Join(dir, "config.toml")
 
-	if err := os.WriteFile(filepath.Join(dir, "Development mode.ini"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "development.toml"), []byte(`
 [development]
-terminal_player_logs_enabled = 0
+terminal_player_logs_enabled = false
 `), 0o644); err != nil {
-		t.Fatalf("write development ini: %v", err)
+		t.Fatalf("write development toml: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "Sundries.ini"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "sundries.toml"), []byte(`
 [sundries]
-chat_logs_enabled = 0
-build_finish_logs_enabled = 0
+chat_logs_enabled = false
+build_finish_logs_enabled = false
 `), 0o644); err != nil {
-		t.Fatalf("write sundries ini: %v", err)
+		t.Fatalf("write sundries toml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sync.toml"), []byte(`
+[sync]
+block_sync_logs_enabled = true
+`), 0o644); err != nil {
+		t.Fatalf("write sync toml: %v", err)
 	}
 
 	cfg, err := Load(mainPath)
 	if err != nil {
-		t.Fatalf("load config from sidecars only: %v", err)
+		t.Fatalf("load config from toml sidecars only: %v", err)
 	}
 	if cfg.Development.TerminalPlayerLogsEnabled {
-		t.Fatalf("expected development sidecar to load without main config")
+		t.Fatalf("expected development sidecar toml to load without main config")
 	}
 	if cfg.Sundries.ChatLogsEnabled {
-		t.Fatalf("expected sundries chat log toggle to load without main config")
+		t.Fatalf("expected sundries chat log toggle from toml")
 	}
 	if cfg.Sundries.BuildFinishLogsEnabled {
-		t.Fatalf("expected sundries build finish toggle to load without main config")
+		t.Fatalf("expected sundries build finish toggle from toml")
+	}
+	if !cfg.Sync.BlockSyncLogsEnabled {
+		t.Fatalf("expected sync.toml to load")
 	}
 }
 
-func TestLoadConfigINI_PreservesMindustryColorTags(t *testing.T) {
+func TestLoadConfigTOML_PreservesMindustryColorTags(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 	payload := `
 [server]
-name = [#F285D1]镜[#F285E3]像[#E59AFF]物[#CC99FF]语
-desc = [accent]欢迎[] [#87ceeb]测试[]
+name = "[#F285D1]镜[#F285E3]像[#E59AFF]物[#CC99FF]语"
+desc = "[accent]欢迎[] [#87ceeb]测试[]"
 `
 	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write temp config: %v", err)
@@ -226,35 +288,31 @@ desc = [accent]欢迎[] [#87ceeb]测试[]
 
 func TestLoadJoinPopupSidecarPreservesMultilineAndColorTags(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 
 	payload := `
 [join_popup]
-enabled = 1
+enabled = true
 delay_ms = 150
-
-[title]
-[accent]入服菜单[]
-
-[message]
+title = "[accent]入服菜单[]"
+message = """
 第一行
 [accent]
 第二行[]
-
-[announcement]
+"""
+announcement_text = """
 [accent]公告[]
 
 [#87ceeb]第三行[]
-
-[link_url]
-https://example.com/rules
-
-[help]
+"""
+link_url = "https://example.com/rules"
+help_text = """
 [white]/help[] 查看帮助
 [white]/sync[] 请求同步
+"""
 `
-	if err := os.WriteFile(filepath.Join(dir, "Join popup.ini"), []byte(payload), 0o644); err != nil {
-		t.Fatalf("write join popup ini: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "join_popup.toml"), []byte(payload), 0o644); err != nil {
+		t.Fatalf("write join popup toml: %v", err)
 	}
 
 	cfg, err := Load(path)
@@ -283,7 +341,7 @@ https://example.com/rules
 
 func TestSaveJoinPopupSidecarSeparatesPopupContent(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 
 	cfg := Default()
 	cfg.JoinPopup.Enabled = true
@@ -298,54 +356,54 @@ func TestSaveJoinPopupSidecarSeparatesPopupContent(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 
-	popupRaw, err := os.ReadFile(filepath.Join(dir, "Join popup.ini"))
+	popupRaw, err := os.ReadFile(filepath.Join(dir, "join_popup.toml"))
 	if err != nil {
-		t.Fatalf("read join popup ini: %v", err)
+		t.Fatalf("read join popup toml: %v", err)
 	}
 	popupText := string(popupRaw)
 	for _, want := range []string{
 		"[join_popup]",
-		"enabled = 1",
+		"enabled = true",
 		"delay_ms = 480",
-		"[title]\n[accent]测试公告[]",
-		"[message]\n第一行\n第二行",
-		"[announcement]\n[accent]公告[]\n\n[#87ceeb]内容[]",
-		"[link_url]\nhttps://example.com/join",
-		"[help]\n[white]/help[]\n[white]/sync[]",
+		"title = \"[accent]测试公告[]\"",
+		"message = \"\"\"\n第一行\n第二行\n\"\"\"",
+		"announcement_text = \"\"\"\n[accent]公告[]\n\n[#87ceeb]内容[]\n\"\"\"",
+		"link_url = \"https://example.com/join\"",
+		"help_text = \"\"\"\n[white]/help[]\n[white]/sync[]\n\"\"\"",
 	} {
 		if !strings.Contains(popupText, want) {
-			t.Fatalf("expected join popup ini to contain %q, got:\n%s", want, popupText)
+			t.Fatalf("expected join popup toml to contain %q, got:\n%s", want, popupText)
 		}
 	}
 
-	personalizationRaw, err := os.ReadFile(filepath.Join(dir, "Personalization.ini"))
+	personalizationRaw, err := os.ReadFile(filepath.Join(dir, "personalization.toml"))
 	if err != nil {
-		t.Fatalf("read personalization ini: %v", err)
+		t.Fatalf("read personalization toml: %v", err)
 	}
 	personalizationText := string(personalizationRaw)
 	if strings.Contains(personalizationText, "join_popup_") {
-		t.Fatalf("personalization ini should not contain join popup fields, got:\n%s", personalizationText)
+		t.Fatalf("personalization toml should not contain join popup fields, got:\n%s", personalizationText)
 	}
 }
 
 func TestLoadMapVoteSidecar(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 
 	payload := `
 [map_vote]
 duration_sec = 21
 status_refresh_ms = 1200
 popup_duration_ms = 1600
-home_link_url = https://example.com/maps
-align = left
+home_link_url = "https://example.com/maps"
+align = "left"
 top = 32
 left = 14
 bottom = 7
 right = 3
 `
-	if err := os.WriteFile(filepath.Join(dir, "Vote map.ini"), []byte(payload), 0o644); err != nil {
-		t.Fatalf("write vote map ini: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "map_vote.toml"), []byte(payload), 0o644); err != nil {
+		t.Fatalf("write vote map toml: %v", err)
 	}
 
 	cfg, err := Load(path)
@@ -365,7 +423,7 @@ right = 3
 
 func TestSaveMapVoteSidecar(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "config.toml")
 
 	cfg := Default()
 	cfg.MapVote.DurationSec = 25
@@ -382,9 +440,9 @@ func TestSaveMapVoteSidecar(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, "Vote map.ini"))
+	raw, err := os.ReadFile(filepath.Join(dir, "map_vote.toml"))
 	if err != nil {
-		t.Fatalf("read vote map ini: %v", err)
+		t.Fatalf("read vote map toml: %v", err)
 	}
 	text := string(raw)
 	for _, want := range []string{
@@ -392,15 +450,15 @@ func TestSaveMapVoteSidecar(t *testing.T) {
 		"duration_sec = 25",
 		"status_refresh_ms = 900",
 		"popup_duration_ms = 1300",
-		"home_link_url = https://example.com/votemap",
-		"align = left",
+		"home_link_url = \"https://example.com/votemap\"",
+		"align = \"left\"",
 		"top = 48",
 		"left = 12",
 		"bottom = 5",
 		"right = 1",
 	} {
 		if !strings.Contains(text, want) {
-			t.Fatalf("expected vote map ini to contain %q, got:\n%s", want, text)
+			t.Fatalf("expected vote map toml to contain %q, got:\n%s", want, text)
 		}
 	}
 }

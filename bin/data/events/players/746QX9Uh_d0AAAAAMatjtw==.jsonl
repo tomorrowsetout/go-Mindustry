@@ -1,5 +1,0 @@
-{"timestamp":"2026-04-02T06:30:23.708198Z","kind":"connect_packet","packet":"*protocol.ConnectPacket","detail":"version=156 type=official mods=0","conn_id":613822434,"uuid":"746QX9Uh/d0AAAAAMatjtw==","ip":"124.235.142.90"}
-{"timestamp":"2026-04-02T06:30:23.880633Z","kind":"world_handshake_sent","conn_id":613822434,"uuid":"746QX9Uh/d0AAAAAMatjtw==","ip":"124.235.142.90","name":"[scarlet]（未绑定杂鱼~）[]比开局屯蛋萌新菜。[gray]57556[]"}
-{"timestamp":"2026-04-02T06:30:24.4295456Z","kind":"connect_confirm_client_snapshot","packet":"*protocol.Remote_NetServer_clientSnapshot_22","conn_id":613822434,"uuid":"746QX9Uh/d0AAAAAMatjtw==","ip":"124.235.142.90","name":"[scarlet]（未绑定杂鱼~）[]比开局屯蛋萌新菜。[gray]57556[]"}
-{"timestamp":"2026-04-02T06:30:41.1470364Z","kind":"tcp_closed","detail":"EOF","conn_id":613822434,"uuid":"746QX9Uh/d0AAAAAMatjtw==","ip":"124.235.142.90","name":"[scarlet]（未绑定杂鱼~）[]比开局屯蛋萌新菜。[gray]57556[]"}
-{"timestamp":"2026-04-02T06:30:41.1505713Z","kind":"connection_close","trigger":13,"conn_id":613822434,"uuid":"746QX9Uh/d0AAAAAMatjtw==","ip":"124.235.142.90:63398","name":"[scarlet]（未绑定杂鱼~）[]比开局屯蛋萌新菜。[gray]57556[]"}

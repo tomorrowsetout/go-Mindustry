@@ -7,26 +7,27 @@ package logic
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 // LogicExecutor executes Mindustry logic programs.
 type LogicExecutor struct {
-	Program     *Program        // Parsed program
-	VM          *VM             // Virtual machine
-	Instructions []Instruction   // Generated instructions
-	inputs      map[string]int32 // Input values
-	outputs     []string        // Output log
+	Program      *Program         // Parsed program
+	VM           *VM              // Virtual machine
+	Instructions []Instruction    // Generated instructions
+	inputs       map[string]int32 // Input values
+	outputs      []string         // Output log
 }
 
 // NewLogicExecutor creates a new logic executor.
 func NewLogicExecutor() *LogicExecutor {
 	return &LogicExecutor{
-		Program:     nil,
-		VM:          NewVM(),
+		Program:      nil,
+		VM:           NewVM(),
 		Instructions: make([]Instruction, 0),
-		inputs:      make(map[string]int32),
-		outputs:     make([]string, 0),
+		inputs:       make(map[string]int32),
+		outputs:      make([]string, 0),
 	}
 }
 
@@ -52,6 +53,15 @@ func (e *LogicExecutor) Compile(source string) error {
 
 // generateInstructions generates VM instructions from the parsed program.
 func (e *LogicExecutor) generateInstructions(program *Program) {
+	labelTargets := make(map[string]int32)
+	pc := 0
+	for _, stmt := range program.Statements {
+		if label, ok := stmt.(*LabelStatement); ok {
+			labelTargets[label.Name] = int32(pc)
+		}
+		pc += instructionCountForStatement(stmt)
+	}
+
 	e.Instructions = make([]Instruction, 0, len(program.Statements)*2)
 
 	for _, stmt := range program.Statements {
@@ -63,7 +73,7 @@ func (e *LogicExecutor) generateInstructions(program *Program) {
 			e.generatePrint(s)
 
 		case *JumpStatement:
-			e.generateJump(s)
+			e.generateJump(s, labelTargets)
 
 		case *LabelStatement:
 			e.generateLabel(s)
@@ -83,6 +93,21 @@ func (e *LogicExecutor) generateInstructions(program *Program) {
 	})
 }
 
+func instructionCountForStatement(stmt Statement) int {
+	switch s := stmt.(type) {
+	case *AssignStatement, *PrintStatement, *JumpStatement, *LabelStatement:
+		return 1
+	case *IfStatement:
+		total := 2
+		for _, bodyStmt := range s.Body {
+			total += instructionCountForStatement(bodyStmt)
+		}
+		return total
+	default:
+		return 0
+	}
+}
+
 // generateAssign generates instructions for an assignment statement.
 func (e *LogicExecutor) generateAssign(stmt *AssignStatement) {
 	e.Instructions = append(e.Instructions, Instruction{
@@ -100,11 +125,26 @@ func (e *LogicExecutor) generatePrint(stmt *PrintStatement) {
 }
 
 // generateJump generates instructions for a jump statement.
-func (e *LogicExecutor) generateJump(stmt *JumpStatement) {
-	// For now, use a placeholder - labels will be expanded later
+func (e *LogicExecutor) generateJump(stmt *JumpStatement, labelTargets map[string]int32) {
+	target := int32(0)
+	if labelTargets != nil {
+		if resolved, ok := labelTargets[stmt.Target]; ok {
+			target = resolved
+		}
+	}
+	opcode := JMP
+	args := []int32{target}
+	switch stmt.Token.Type {
+	case Jz:
+		opcode = JZ
+		args = []int32{0, target}
+	case Jnz:
+		opcode = JNZ
+		args = []int32{0, target}
+	}
 	e.Instructions = append(e.Instructions, Instruction{
-		Opcode: JMP,
-		Args:   []int32{0},
+		Opcode: opcode,
+		Args:   args,
 	})
 }
 
@@ -367,18 +407,219 @@ func (e *LogicExecutor) GetVMStats() map[string]interface{} {
 // ToJSON returns the executor state as a map for JSON serialization.
 func (e *LogicExecutor) ToJSON() map[string]interface{} {
 	state := make(map[string]interface{})
-	state["instructions"] = len(e.Instructions)
+	state["instruction_count"] = len(e.Instructions)
+	state["instructions"] = e.InstructionsToJSON()
 	state["pc"] = e.VM.GetPC()
 	state["halted"] = e.VM.IsHalted()
-	state["registers"] = e.VM.Registers
-	state["inputs"] = e.inputs
-	state["outputs"] = e.VM.Outputs
+	state["registers"] = cloneStringInt32Map(e.VM.Registers)
+	state["memory"] = cloneInt32Int32Map(e.VM.Memory)
+	state["stack"] = append([]int32(nil), e.VM.Stack...)
+	state["inputs"] = cloneStringInt32Map(e.inputs)
+	state["outputs"] = cloneStringInt32Map(e.VM.Outputs)
+	state["output_log"] = append([]string(nil), e.outputs...)
 	return state
 }
 
 // FromJSON loads the executor state from a map.
 func (e *LogicExecutor) FromJSON(state map[string]interface{}) error {
-	return nil // Not implemented
+	if e == nil {
+		return fmt.Errorf("nil logic executor")
+	}
+	e.Program = nil
+	e.Instructions = make([]Instruction, 0)
+	e.inputs = make(map[string]int32)
+	e.outputs = make([]string, 0)
+	e.VM = NewVM()
+
+	if rawInstructions, ok := state["instructions"]; ok {
+		items, err := instructionItemsFromAny(rawInstructions)
+		if err != nil {
+			return err
+		}
+		if len(items) > 0 {
+			if err := e.InstructionsFromJSON(items); err != nil {
+				return err
+			}
+			e.VM.LoadInstructions(e.Instructions)
+		}
+	}
+
+	e.VM.Registers = stringInt32MapFromAny(state["registers"])
+	e.VM.Memory = int32Int32MapFromAny(state["memory"])
+	e.VM.Stack = int32SliceFromAny(state["stack"])
+	e.VM.Inputs = stringInt32MapFromAny(state["inputs"])
+	e.VM.Outputs = stringInt32MapFromAny(state["outputs"])
+	e.inputs = cloneStringInt32Map(e.VM.Inputs)
+	e.outputs = stringSliceFromAny(state["output_log"])
+	if len(e.outputs) == 0 {
+		for key, value := range e.VM.Outputs {
+			e.outputs = append(e.outputs, fmt.Sprintf("%s=%d", key, value))
+		}
+	}
+
+	if pc, ok := toInt(state["pc"]); ok {
+		e.VM.PC = pc
+	}
+	if halted, ok := toBool(state["halted"]); ok {
+		e.VM.Halted = halted
+	}
+	return nil
+}
+
+func instructionItemsFromAny(raw interface{}) ([]map[string]interface{}, error) {
+	switch v := raw.(type) {
+	case []map[string]interface{}:
+		return v, nil
+	case []interface{}:
+		out := make([]map[string]interface{}, 0, len(v))
+		for _, item := range v {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("invalid instruction item type %T", item)
+			}
+			out = append(out, m)
+		}
+		return out, nil
+	case nil:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("invalid instructions payload type %T", raw)
+	}
+}
+
+func cloneStringInt32Map(src map[string]int32) map[string]int32 {
+	if len(src) == 0 {
+		return map[string]int32{}
+	}
+	out := make(map[string]int32, len(src))
+	for key, value := range src {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneInt32Int32Map(src map[int32]int32) map[int32]int32 {
+	if len(src) == 0 {
+		return map[int32]int32{}
+	}
+	out := make(map[int32]int32, len(src))
+	for key, value := range src {
+		out[key] = value
+	}
+	return out
+}
+
+func stringInt32MapFromAny(raw interface{}) map[string]int32 {
+	out := map[string]int32{}
+	switch v := raw.(type) {
+	case map[string]int32:
+		return cloneStringInt32Map(v)
+	case map[string]interface{}:
+		for key, value := range v {
+			if parsed, ok := toInt32(value); ok {
+				out[key] = parsed
+			}
+		}
+	}
+	return out
+}
+
+func int32Int32MapFromAny(raw interface{}) map[int32]int32 {
+	out := map[int32]int32{}
+	switch v := raw.(type) {
+	case map[int32]int32:
+		return cloneInt32Int32Map(v)
+	case map[string]interface{}:
+		for key, value := range v {
+			k, err := strconv.Atoi(key)
+			if err != nil {
+				continue
+			}
+			if parsed, ok := toInt32(value); ok {
+				out[int32(k)] = parsed
+			}
+		}
+	}
+	return out
+}
+
+func int32SliceFromAny(raw interface{}) []int32 {
+	switch v := raw.(type) {
+	case []int32:
+		return append([]int32(nil), v...)
+	case []interface{}:
+		out := make([]int32, 0, len(v))
+		for _, item := range v {
+			if parsed, ok := toInt32(item); ok {
+				out = append(out, parsed)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func stringSliceFromAny(raw interface{}) []string {
+	switch v := raw.(type) {
+	case []string:
+		return append([]string(nil), v...)
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if str, ok := item.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func toInt32(v interface{}) (int32, bool) {
+	switch n := v.(type) {
+	case int:
+		return int32(n), true
+	case int32:
+		return n, true
+	case int64:
+		return int32(n), true
+	case float32:
+		return int32(n), true
+	case float64:
+		return int32(n), true
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(n))
+		if err != nil {
+			return 0, false
+		}
+		return int32(parsed), true
+	default:
+		return 0, false
+	}
+}
+
+func toInt(v interface{}) (int, bool) {
+	if parsed, ok := toInt32(v); ok {
+		return int(parsed), true
+	}
+	return 0, false
+}
+
+func toBool(v interface{}) (bool, bool) {
+	switch b := v.(type) {
+	case bool:
+		return b, true
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(b))
+		if err != nil {
+			return false, false
+		}
+		return parsed, true
+	default:
+		return false, false
+	}
 }
 
 // MoveTo exec moves the executor to a target state.

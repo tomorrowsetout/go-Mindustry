@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"mdt-server/internal/protocol"
 )
 
 func stepWorldFrames(w *World, frames int) {
@@ -418,5 +420,84 @@ func TestLaserTurretContinuousBeamHonorsShootDuration(t *testing.T) {
 
 	if got := len(w.bullets); got != 1 {
 		t.Fatalf("expected laser turret to refire after cooldown completed, got %d bullets", got)
+	}
+}
+
+func TestControlledContinuousTurretRequiresShootInputAndTracksAim(t *testing.T) {
+	w := New(Config{TPS: 60})
+	model := NewWorldModel(64, 64)
+	model.BlockNames = map[int16]string{
+		902: "test-controlled-continuous-turret",
+	}
+	w.SetModel(model)
+
+	tile := placeTestBuilding(t, w, 10, 10, 902, 1, 0)
+	w.buildingProfilesByName = map[string]buildingWeaponProfile{
+		"test-controlled-continuous-turret": {
+			ClassName:      "ContinuousTurret",
+			FireMode:       "beam",
+			Range:          120,
+			Damage:         20,
+			Interval:       0.1,
+			TargetAir:      true,
+			TargetGround:   true,
+			HitBuildings:   true,
+			ContinuousHold: true,
+			AimChangeSpeed: 999,
+			Bullet: &bulletRuntimeProfile{
+				ClassName:        "PointLaserBulletType",
+				Lifetime:         10.0 / 60.0,
+				DamageInterval:   5.0 / 60.0,
+				OptimalLifeFract: 0.5,
+			},
+		},
+	}
+	w.rebuildActiveTilesLocked()
+
+	buildPos := protocol.PackPoint2(10, 10)
+	if _, ok := w.ClaimControlledBuildingPacked(7, buildPos); !ok {
+		t.Fatal("expected continuous turret to be claimable as a control block")
+	}
+
+	leftAimX := float32(10*8 - 48)
+	leftAimY := float32(10*8 + 4)
+	if ok := w.SetControlledBuildingInputPacked(7, buildPos, leftAimX, leftAimY, false); !ok {
+		t.Fatal("expected controlled turret idle aim update to succeed")
+	}
+	stepWorldFrames(w, 3)
+
+	if got := len(w.bullets); got != 0 {
+		t.Fatalf("expected controlled continuous turret to stay idle without shoot input, got %d bullets", got)
+	}
+	if tile.Rotation == 0 {
+		t.Fatalf("expected controlled continuous turret rotation to follow idle aim, got=%d", tile.Rotation)
+	}
+
+	rightAimX := float32(10*8 + 60)
+	rightAimY := float32(10*8 + 4)
+	if ok := w.SetControlledBuildingInputPacked(7, buildPos, rightAimX, rightAimY, true); !ok {
+		t.Fatal("expected controlled turret shooting update to succeed")
+	}
+	stepWorldFrames(w, 1)
+
+	pos := int32(10*model.Width + 10)
+	state := w.buildStates[pos]
+	if state.BeamBulletID == 0 {
+		t.Fatalf("expected controlled continuous turret to spawn a beam while shooting")
+	}
+	if got := len(w.bullets); got != 1 {
+		t.Fatalf("expected controlled continuous turret to keep one beam bullet, got %d", got)
+	}
+	if tile.Rotation != 0 {
+		t.Fatalf("expected controlled continuous turret to rotate toward new aim while firing, got=%d", tile.Rotation)
+	}
+
+	if ok := w.SetControlledBuildingInputPacked(7, buildPos, rightAimX, rightAimY, false); !ok {
+		t.Fatal("expected controlled turret shoot release update to succeed")
+	}
+	stepWorldFrames(w, 12)
+
+	if got := len(w.bullets); got != 0 {
+		t.Fatalf("expected controlled continuous beam to expire after shoot release, got %d bullets", got)
 	}
 }

@@ -73,7 +73,7 @@ func (w *World) stepPumpProduction(delta time.Duration) {
 	if deltaFrames <= 0 || deltaSeconds <= 0 {
 		return
 	}
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.pumpTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}

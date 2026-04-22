@@ -1,0 +1,24 @@
+# 附加日志配置
+# 控制文件日志大小、数量和若干运行日志输出。
+
+[sundries]
+# 单个详细日志文件最大体积，单位 MB。
+detailed_log_max_mb = 2
+# 详细日志文件最多保留数量。
+detailed_log_max_files = 100
+# 是否记录网络事件文件日志。
+net_event_logs_enabled = true
+# 是否记录聊天文件日志。
+chat_logs_enabled = true
+# 是否记录核心重生文件日志。
+respawn_core_logs_enabled = true
+# 是否记录单位重生文件日志。
+respawn_unit_logs_enabled = true
+# 是否记录建筑放置文件日志。
+build_place_logs_enabled = true
+# 是否记录建筑完成建造文件日志。
+build_finish_logs_enabled = true
+# 是否记录建筑开始拆除文件日志。
+build_break_start_logs_enabled = true
+# 是否记录建筑拆除完成文件日志。
+build_break_done_logs_enabled = true

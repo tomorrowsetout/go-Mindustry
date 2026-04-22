@@ -389,7 +389,7 @@ func (w *World) stepCrafterProduction(delta time.Duration) {
 	if deltaFrames <= 0 || deltaSeconds <= 0 {
 		return
 	}
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.crafterTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -451,17 +451,22 @@ func (w *World) stepGenericCrafterLocked(pos int32, tile *Tile, prof crafterProf
 		state.Warmup = approachf(state.Warmup, 0, prof.WarmupSpeed*deltaFrames)
 	}
 	w.updateCrafterHeatStateLocked(pos, tile, prof, active, deltaFrames)
+	itemsChanged := false
 	for state.Progress+crafterProgressEpsilon >= 1 {
 		if !hasRequiredItemsLocked(tile.Build, prof.InputItems) || !w.canStoreCrafterOutputsLocked(tile, prof.OutputItems) {
 			break
 		}
 		removeItemStacksLocked(tile.Build, prof.InputItems)
 		addItemStacksLocked(tile.Build, prof.OutputItems)
+		itemsChanged = true
 		state.Progress -= 1
 		if state.Progress < 0 {
 			state.Progress = 0
 		}
 		w.emitEffectLocked(prof.CraftEffect, float32(tile.X*8+4), float32(tile.Y*8+4), 0)
+	}
+	if itemsChanged {
+		w.emitBlockItemSyncLocked(pos)
 	}
 	w.dumpCrafterOutputsLocked(pos, tile, prof.OutputItems, prof.OutputLiquids, prof.OutputDirections)
 }
@@ -487,6 +492,7 @@ func (w *World) stepSeparatorLocked(pos int32, tile *Tile, prof separatorProfile
 	} else {
 		state.Warmup = approachf(state.Warmup, 0, prof.WarmupSpeed*deltaFrames)
 	}
+	itemsChanged := false
 	for state.Progress+crafterProgressEpsilon >= 1 && separatorStoredOutputsLocked(tile.Build, prof.InputItems) < prof.ItemCapacity {
 		item, ok := pickSeparatorResult(prof.Results, &state.Seed, pos)
 		if !ok {
@@ -494,10 +500,14 @@ func (w *World) stepSeparatorLocked(pos int32, tile *Tile, prof separatorProfile
 		}
 		removeItemStacksLocked(tile.Build, prof.InputItems)
 		tile.Build.AddItem(item, 1)
+		itemsChanged = true
 		state.Progress -= 1
 		if state.Progress < 0 {
 			state.Progress = 0
 		}
+	}
+	if itemsChanged {
+		w.emitBlockItemSyncLocked(pos)
 	}
 	w.dumpSingleItemLocked(pos, tile, nil, func(targetPos int32, item ItemID) bool {
 		return separatorCanDumpItem(prof.Results, item) && !separatorConsumesItem(prof.InputItems, item)

@@ -17,21 +17,28 @@ import (
 
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/runtimeassets"
+	"mdt-server/internal/world"
 )
 
 var ErrInvalidMSAV = errors.New("invalid msav file")
 var ErrUnsupportedMSAVVersion = errors.New("unsupported msav save version")
 
 type MSAVData struct {
-	Version     int32
-	Tags        map[string]string
-	Content     []byte
-	Patches     []byte
-	Map         []byte
-	Markers     []byte
-	Custom      []byte
-	RawMeta     []byte
-	RawEntities []byte
+	Version                  int32
+	Tags                     map[string]string
+	Content                  []byte
+	Patches                  []byte
+	Map                      []byte
+	Markers                  []byte
+	Custom                   []byte
+	RawMeta                  []byte
+	RawEntities              []byte
+	EntityMapping            []byte
+	TeamBlocks               []byte
+	WorldEntityChunks        []msavWorldEntityChunk
+	WorldEntitiesHaveIDs     bool
+	WorldEntitiesShortChunks bool
+	LegacyEntityGroups       bool
 }
 
 func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
@@ -39,8 +46,24 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if data.Version < 11 {
-		return nil, fmt.Errorf("%w: %d (need >= 11)", ErrUnsupportedMSAVVersion, data.Version)
+	mapChunk := data.Map
+	if err := skipMapData(newJavaReader(mapChunk)); err != nil {
+		model, merr := LoadWorldModelFromMSAV(path, nil)
+		if merr == nil {
+			clearInlineBuildingSyncData(model)
+			normalized, nerr := encodeMapChunkMinimal(model)
+			if nerr == nil {
+				mapChunk = normalized
+			}
+		}
+	}
+	// NetworkIO.writeWorld sends current runtime team plans, not the raw team-block
+	// section preserved inside an arbitrary save file. Old saves can carry plan config
+	// objects that deserialize differently clientside, so keep join-world payloads on
+	// the safest legal representation until runtime-owned team plans are tracked.
+	var teamBlocks bytes.Buffer
+	if err := writeMinimalTeamBlocks(&javaWriter{buf: &teamBlocks}); err != nil {
+		return nil, err
 	}
 
 	var out bytes.Buffer
@@ -107,21 +130,24 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err := w.WriteInt32(1); err != nil {
 		return nil, err
 	}
-	if err := writeTemplatePlayerForContent(w, data.Content); err != nil {
+	if err := writeDirectPlayerPayload(w); err != nil {
 		return nil, err
 	}
 
 	if err := w.WriteBytes(data.Content); err != nil {
 		return nil, err
 	}
-	// Always write empty content patches for compatibility across builds.
-	if err := w.WriteByte(0); err != nil {
+	patches := data.Patches
+	if len(patches) == 0 {
+		patches = []byte{0}
+	}
+	if err := w.WriteBytes(patches); err != nil {
 		return nil, err
 	}
-	if err := w.WriteBytes(data.Map); err != nil {
+	if err := w.WriteBytes(mapChunk); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalTeamBlocks(w); err != nil {
+	if err := w.WriteBytes(teamBlocks.Bytes()); err != nil {
 		return nil, err
 	}
 	markers := data.Markers
@@ -132,7 +158,11 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err := w.WriteBytes(markers); err != nil {
 		return nil, err
 	}
-	if err := writeMinimalCustomChunks(w); err != nil {
+	custom := data.Custom
+	if len(custom) == 0 {
+		custom = []byte{0, 0, 0, 0}
+	}
+	if err := w.WriteBytes(custom); err != nil {
 		return nil, err
 	}
 
@@ -146,6 +176,22 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 		return nil, err
 	}
 	return compressed.Bytes(), nil
+}
+
+func clearInlineBuildingSyncData(model *world.WorldModel) {
+	if model == nil {
+		return
+	}
+	for i := range model.Tiles {
+		build := model.Tiles[i].Build
+		if build == nil {
+			continue
+		}
+		build.MapSyncRevision = 0
+		build.MapSyncData = nil
+		build.MapSyncTail = nil
+		build.MapSyncAmmoLoaded = false
+	}
 }
 
 func ReadMSAVVersion(path string) (int32, error) {
@@ -204,65 +250,7 @@ func readMSAV(path string) (MSAVData, error) {
 	if err != nil {
 		return MSAVData{}, err
 	}
-
-	meta, err := r.ReadChunk()
-	if err != nil {
-		return MSAVData{}, err
-	}
-	tags, err := readStringMap(meta)
-	if err != nil {
-		return MSAVData{}, err
-	}
-	content, err := r.ReadChunk()
-	if err != nil {
-		return MSAVData{}, err
-	}
-
-	var patches []byte
-	if version >= 11 {
-		patches, err = r.ReadChunk()
-		if err != nil {
-			return MSAVData{}, err
-		}
-	}
-
-	mapChunk, err := r.ReadChunk()
-	if err != nil {
-		return MSAVData{}, err
-	}
-
-	entities, err := r.ReadChunk()
-	if err != nil {
-		return MSAVData{}, err
-	}
-
-	var markers []byte
-	if version >= 8 {
-		markers, err = r.ReadChunk()
-		if err != nil {
-			return MSAVData{}, err
-		}
-	}
-
-	var custom []byte
-	if version >= 7 {
-		custom, err = r.ReadChunk()
-		if err != nil {
-			return MSAVData{}, err
-		}
-	}
-
-	return MSAVData{
-		Version:     version,
-		Tags:        tags,
-		Content:     content,
-		Patches:     patches,
-		Map:         mapChunk,
-		Markers:     markers,
-		Custom:      custom,
-		RawMeta:     meta,
-		RawEntities: entities,
-	}, nil
+	return readMSAVVersioned(r, version)
 }
 
 // FindCoreTileFromMSAV tries to locate the first core tile position in a .msav map.
@@ -501,6 +489,60 @@ func readContentNamesFromRegistry(typeID byte, registry *protocol.ContentRegistr
 	return out
 }
 
+func buildContentHeaderFromRegistry(registry *protocol.ContentRegistry) ([]byte, error) {
+	if registry == nil {
+		return nil, errors.New("nil content registry")
+	}
+	snapshot := registry.SnapshotContentNames()
+	if len(snapshot) == 0 {
+		return nil, errors.New("empty content registry")
+	}
+
+	type section struct {
+		typ   protocol.ContentType
+		names map[int16]string
+	}
+	sections := make([]section, 0, len(snapshot))
+	for typ, names := range snapshot {
+		if len(names) == 0 {
+			continue
+		}
+		sections = append(sections, section{typ: typ, names: names})
+	}
+	sort.Slice(sections, func(i, j int) bool { return sections[i].typ < sections[j].typ })
+
+	var out bytes.Buffer
+	w := &javaWriter{buf: &out}
+	if err := w.WriteByte(byte(len(sections))); err != nil {
+		return nil, err
+	}
+	for _, section := range sections {
+		if err := w.WriteByte(byte(section.typ)); err != nil {
+			return nil, err
+		}
+		maxID := int16(-1)
+		for id := range section.names {
+			if id > maxID {
+				maxID = id
+			}
+		}
+		total := int(maxID) + 1
+		if total < 0 {
+			total = 0
+		}
+		if err := w.WriteInt16(int16(total)); err != nil {
+			return nil, err
+		}
+		for id := int16(0); id < int16(total); id++ {
+			name := strings.TrimSpace(section.names[id])
+			if err := w.WriteUTF(name); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return out.Bytes(), nil
+}
+
 func isCoreBlockName(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	// core-zone is a floor marker in Erekir, not an actual CoreBlock.
@@ -716,6 +758,92 @@ func (r *javaReader) SkipTypeIOString() error {
 	return r.SkipUTF()
 }
 
+func skipTypeIOObject(r *javaReader) error {
+	typ, err := r.ReadByte()
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case 0:
+		return nil
+	case 1, 3, 12, 17:
+		return r.Skip(4)
+	case 2, 11:
+		return r.Skip(8)
+	case 4:
+		return r.SkipTypeIOString()
+	case 5, 9:
+		return r.Skip(3)
+	case 6:
+		count, err := r.ReadInt16()
+		if err != nil {
+			return err
+		}
+		if count < 0 {
+			return ErrInvalidMSAV
+		}
+		return r.Skip(int(count) * 4)
+	case 7, 19:
+		return r.Skip(8)
+	case 8:
+		count, err := r.ReadByte()
+		if err != nil {
+			return err
+		}
+		return r.Skip(int(count) * 4)
+	case 10, 15, 20:
+		return r.Skip(1)
+	case 13, 23:
+		return r.Skip(2)
+	case 14, 16:
+		count, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		if count < 0 {
+			return ErrInvalidMSAV
+		}
+		if typ == 16 {
+			return r.Skip(int(count))
+		}
+		return r.Skip(int(count))
+	case 18:
+		count, err := r.ReadInt16()
+		if err != nil {
+			return err
+		}
+		if count < 0 {
+			return ErrInvalidMSAV
+		}
+		return r.Skip(int(count) * 8)
+	case 21:
+		count, err := r.ReadInt16()
+		if err != nil {
+			return err
+		}
+		if count < 0 {
+			return ErrInvalidMSAV
+		}
+		return r.Skip(int(count) * 4)
+	case 22:
+		count, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		if count < 0 {
+			return ErrInvalidMSAV
+		}
+		for i := 0; i < int(count); i++ {
+			if err := skipTypeIOObject(r); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported typeio object type: %d", typ)
+	}
+}
+
 type javaWriter struct {
 	buf *bytes.Buffer
 }
@@ -723,6 +851,13 @@ type javaWriter struct {
 func (w *javaWriter) WriteBytes(b []byte) error {
 	_, err := w.buf.Write(b)
 	return err
+}
+
+func (w *javaWriter) WriteChunkBytes(b []byte) error {
+	if err := w.WriteInt32(int32(len(b))); err != nil {
+		return err
+	}
+	return w.WriteBytes(b)
 }
 
 func (w *javaWriter) WriteByte(v byte) error {
@@ -810,6 +945,10 @@ func writeMinimalCustomChunks(w *javaWriter) error {
 	return w.WriteInt32(0)
 }
 
+func writeDirectPlayerPayload(w *javaWriter) error {
+	return writeMinimalPlayer(w)
+}
+
 func writeMinimalPlayer(w *javaWriter) error {
 	empty := ""
 	if err := w.WriteInt16(2); err != nil {
@@ -874,8 +1013,8 @@ func writeTemplatePlayerForContent(w *javaWriter, content []byte) error {
 	if err == nil && len(payload) > 0 {
 		return w.WriteBytes(payload)
 	}
-	// Fallback: old minimal payload (may be incompatible with newer clients).
-	return writeMinimalPlayer(w)
+	// Fallback: direct placeholder payload when template extraction fails.
+	return writeDirectPlayerPayload(w)
 }
 
 func templatePlayerPayloadForContent(content []byte) ([]byte, error) {
@@ -949,20 +1088,90 @@ func extractPlayerPayloadFromWorldStream(raw []byte) ([]byte, error) {
 		return nil, io.ErrUnexpectedEOF
 	}
 
-	validate := newJavaReader(raw[playerEnd:])
-	if err := skipContentHeader(validate); err != nil {
-		return nil, fmt.Errorf("template content header validation failed: %w", err)
-	}
-	if err := skipContentPatches(validate); err != nil {
-		return nil, fmt.Errorf("template content patches validation failed: %w", err)
-	}
-	if err := skipMapData(validate); err != nil {
-		return nil, fmt.Errorf("template map validation failed: %w", err)
+	if _, _, _, _, _, _, _, err := inspectWorldSections(raw, playerEnd); err != nil {
+		return nil, fmt.Errorf("template world section validation failed: %w", err)
 	}
 
 	out := make([]byte, playerEnd-playerStart)
 	copy(out, raw[playerStart:playerEnd])
 	return out, nil
+}
+
+func inspectWorldSections(raw []byte, start int) (contentEnd, patchesEnd, mapEnd, teamBlocksLen, markersLen, customLen int, chunked bool, err error) {
+	if start < 0 || start > len(raw) {
+		return 0, 0, 0, 0, 0, 0, false, io.ErrUnexpectedEOF
+	}
+
+	// Fallback for legacy/bootstrap assets that still store raw world sections without
+	// chunk prefixes after the player payload.
+	validate := newJavaReader(raw[start:])
+	if err := skipContentHeader(validate); err != nil {
+		// Some older locally generated payloads incorrectly wrapped sections with chunk
+		// lengths. Keep a compatibility fallback so diagnostics and legacy tests can still
+		// inspect those payloads.
+		chunkReader := newJavaReader(raw[start:])
+		contentChunk, cErr := chunkReader.ReadChunk()
+		if cErr == nil && skipContentHeader(newJavaReader(contentChunk)) == nil {
+			contentEnd = start + chunkReader.Offset()
+			patchesChunk, pErr := chunkReader.ReadChunk()
+			if pErr == nil && skipContentPatches(newJavaReader(patchesChunk)) == nil {
+				patchesEnd = start + chunkReader.Offset()
+				mapChunk, mErr := chunkReader.ReadChunk()
+				if mErr == nil && skipMapData(newJavaReader(mapChunk)) == nil {
+					mapEnd = start + chunkReader.Offset()
+					teamBlocks, tErr := chunkReader.ReadChunk()
+					if tErr == nil {
+						markers, mkErr := chunkReader.ReadChunk()
+						if mkErr == nil {
+							custom, cuErr := chunkReader.ReadChunk()
+							if cuErr == nil {
+								return contentEnd, patchesEnd, mapEnd, len(teamBlocks), len(markers), len(custom), true, nil
+							}
+						}
+					}
+				}
+			}
+		}
+		return 0, 0, 0, 0, 0, 0, false, err
+	}
+	contentEnd = start + validate.Offset()
+	if err := skipContentPatches(validate); err != nil {
+		return 0, 0, 0, 0, 0, 0, false, err
+	}
+	patchesEnd = start + validate.Offset()
+	if err := skipMapData(validate); err != nil {
+		return 0, 0, 0, 0, 0, 0, false, err
+	}
+	mapEnd = start + validate.Offset()
+	teamReader := newJavaReader(raw[mapEnd:])
+	teamBlocks, _, err := readModernTeamBlocksRaw(teamReader, raw[mapEnd:])
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, false, err
+	}
+	tail := raw[mapEnd+len(teamBlocks):]
+	markersLen, customLen, err = splitRawMarkersAndCustom(tail)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, false, err
+	}
+	return contentEnd, patchesEnd, mapEnd, len(teamBlocks), markersLen, customLen, false, nil
+}
+
+func splitRawMarkersAndCustom(tail []byte) (markersLen int, customLen int, err error) {
+	if len(tail) == 0 {
+		return 0, 0, nil
+	}
+	for split := 0; split <= len(tail); split++ {
+		custom := tail[split:]
+		r := newJavaReader(custom)
+		if err := skipCustomChunks(r); err != nil {
+			continue
+		}
+		if r.Offset() != len(custom) {
+			continue
+		}
+		return split, len(custom), nil
+	}
+	return 0, 0, fmt.Errorf("unable to split markers/custom tail len=%d", len(tail))
 }
 
 func locatePlayerStart(raw []byte) (int, error) {
@@ -1246,6 +1455,53 @@ func RewritePlayerIDInWorldStream(payload []byte, playerID int32) ([]byte, error
 	return out.Bytes(), nil
 }
 
+// RewriteRulesInWorldStream rewrites the leading rules JSON blob in a
+// zlib-compressed NetworkIO.writeWorld payload while preserving the rest.
+func RewriteRulesInWorldStream(payload []byte, rules string) ([]byte, error) {
+	if strings.TrimSpace(rules) == "" {
+		rules = "{}"
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(zr)
+	_ = zr.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	r := newJavaReader(raw)
+	if _, err := r.ReadUTF(); err != nil {
+		return nil, err
+	}
+	oldRulesEnd := r.Offset()
+	if oldRulesEnd > len(raw) {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	var head bytes.Buffer
+	w := &javaWriter{buf: &head}
+	if err := w.WriteUTF(rules); err != nil {
+		return nil, err
+	}
+
+	patched := make([]byte, 0, head.Len()+len(raw)-oldRulesEnd)
+	patched = append(patched, head.Bytes()...)
+	patched = append(patched, raw[oldRulesEnd:]...)
+
+	var out bytes.Buffer
+	zw := zlib.NewWriter(&out)
+	if _, err := zw.Write(patched); err != nil {
+		_ = zw.Close()
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
 // RewriteRuntimeStateInWorldStream rewrites wave/wavetime/tick/playerID fields in a
 // zlib-compressed NetworkIO.writeWorld payload while preserving the rest of the payload.
 func RewriteRuntimeStateInWorldStream(payload []byte, wave int32, wavetimeTicks float32, tick float64, playerID int32) ([]byte, error) {
@@ -1325,226 +1581,8 @@ func RewriteRuntimeStateInWorldStream(payload []byte, wave int32, wavetimeTicks 
 	return out.Bytes(), nil
 }
 
-// RewritePlayerToLegacyRev1 rewrites only the player entity blob in a
-// zlib-compressed NetworkIO.writeWorld payload, replacing it with a minimal
-// revision-1 player payload while preserving all subsequent bytes exactly.
-func RewritePlayerToLegacyRev1(payload []byte) ([]byte, error) {
-	zr, err := zlib.NewReader(bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	raw, err := io.ReadAll(zr)
-	_ = zr.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	r := newJavaReader(raw)
-	if _, err := r.ReadUTF(); err != nil {
-		return nil, err
-	}
-	if _, err := r.ReadUTF(); err != nil {
-		return nil, err
-	}
-	entries, err := r.ReadInt16()
-	if err != nil {
-		return nil, err
-	}
-	if entries < 0 {
-		return nil, ErrInvalidMSAV
-	}
-	for i := 0; i < int(entries); i++ {
-		if err := r.SkipUTF(); err != nil {
-			return nil, err
-		}
-		if err := r.SkipUTF(); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := r.ReadInt32(); err != nil { // wave
-		return nil, err
-	}
-	if _, err := r.ReadFloat32(); err != nil { // wavetime
-		return nil, err
-	}
-	if _, err := r.ReadFloat64(); err != nil { // tick
-		return nil, err
-	}
-	if _, err := r.ReadInt64(); err != nil { // seed0
-		return nil, err
-	}
-	if _, err := r.ReadInt64(); err != nil { // seed1
-		return nil, err
-	}
-	if _, err := r.ReadInt32(); err != nil { // player id
-		return nil, err
-	}
-
-	playerStart := r.Offset()
-	playerRev, err := r.ReadInt16()
-	if err != nil {
-		return nil, err
-	}
-	if err := skipPlayerPayload(r, playerRev); err != nil {
-		return nil, err
-	}
-	playerEnd := r.Offset()
-
-	var outRaw bytes.Buffer
-	w := &javaWriter{buf: &outRaw}
-	if err := w.WriteBytes(raw[:playerStart]); err != nil {
-		return nil, err
-	}
-	if err := writeMinimalPlayer(w); err != nil {
-		return nil, err
-	}
-	if err := w.WriteBytes(raw[playerEnd:]); err != nil {
-		return nil, err
-	}
-
-	var out bytes.Buffer
-	zw := zlib.NewWriter(&out)
-	if _, err := zw.Write(outRaw.Bytes()); err != nil {
-		_ = zw.Close()
-		return nil, err
-	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
-}
-
-// RebuildLegacyCompatibleWorldStream rewrites a network world-stream .bin payload
-// into a conservative format compatible with older clients:
-// - player entity serialized as revision 1 minimal payload
-// - team blocks replaced with an empty plan set
-// - markers/custom chunks replaced with empty values
-// Content header/patches/map are preserved from source payload.
-func RebuildLegacyCompatibleWorldStream(payload []byte) ([]byte, error) {
-	zr, err := zlib.NewReader(bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	raw, err := io.ReadAll(zr)
-	_ = zr.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	r := newJavaReader(raw)
-	if _, err := r.ReadUTF(); err != nil {
-		return nil, err
-	}
-	if _, err := r.ReadUTF(); err != nil {
-		return nil, err
-	}
-	entries, err := r.ReadInt16()
-	if err != nil {
-		return nil, err
-	}
-	if entries < 0 {
-		return nil, ErrInvalidMSAV
-	}
-	for i := 0; i < int(entries); i++ {
-		if err := r.SkipUTF(); err != nil {
-			return nil, err
-		}
-		if err := r.SkipUTF(); err != nil {
-			return nil, err
-		}
-	}
-
-	if _, err := r.ReadInt32(); err != nil { // wave
-		return nil, err
-	}
-	if _, err := r.ReadFloat32(); err != nil { // wavetime
-		return nil, err
-	}
-	if _, err := r.ReadFloat64(); err != nil { // tick
-		return nil, err
-	}
-	if _, err := r.ReadInt64(); err != nil { // seed0
-		return nil, err
-	}
-	if _, err := r.ReadInt64(); err != nil { // seed1
-		return nil, err
-	}
-	if _, err := r.ReadInt32(); err != nil { // player id
-		return nil, err
-	}
-
-	playerStart := r.Offset()
-	playerRev, err := r.ReadInt16()
-	if err != nil {
-		return nil, err
-	}
-	if err := skipPlayerPayload(r, playerRev); err != nil {
-		return nil, err
-	}
-	playerEnd := r.Offset()
-
-	contentStart := playerEnd
-	if err := skipContentHeader(r); err != nil {
-		return nil, err
-	}
-	contentEnd := r.Offset()
-
-	patchesStart := contentEnd
-	if err := skipContentPatches(r); err != nil {
-		return nil, err
-	}
-	patchesEnd := r.Offset()
-
-	mapStart := patchesEnd
-	if err := skipMapData(r); err != nil {
-		return nil, err
-	}
-	mapEnd := r.Offset()
-
-	var outRaw bytes.Buffer
-	w := &javaWriter{buf: &outRaw}
-
-	// Prefix through player id.
-	if err := w.WriteBytes(raw[:playerStart]); err != nil {
-		return nil, err
-	}
-	if err := writeTemplatePlayerForContent(w, raw[contentStart:contentEnd]); err != nil {
-		return nil, err
-	}
-	if err := w.WriteBytes(raw[contentStart:contentEnd]); err != nil {
-		return nil, err
-	}
-	if err := w.WriteBytes(raw[patchesStart:patchesEnd]); err != nil {
-		return nil, err
-	}
-	if err := w.WriteBytes(raw[mapStart:mapEnd]); err != nil {
-		return nil, err
-	}
-	if err := writeMinimalTeamBlocks(w); err != nil {
-		return nil, err
-	}
-	// Empty marker map in UBJSON.
-	if err := w.WriteBytes([]byte{0x7B, 0x7D}); err != nil {
-		return nil, err
-	}
-	if err := writeMinimalCustomChunks(w); err != nil {
-		return nil, err
-	}
-
-	var out bytes.Buffer
-	zw := zlib.NewWriter(&out)
-	if _, err := zw.Write(outRaw.Bytes()); err != nil {
-		_ = zw.Close()
-		return nil, err
-	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
-}
-
 func skipPlayerPayload(r *javaReader, rev int16) error {
-	// Matches Player.write()/read() revisions from Mindustry 156.2:
+	// Matches observed Player.write()/read() revisions in current official payloads:
 	// rev0: admin, boosting, color, mouseX, mouseY, name, shooting, team, typing, unit, x, y
 	// rev1: admin, boosting, color, lastCommand, mouseX, mouseY, name, shooting, team, typing, unit, x, y
 	// rev2: admin, boosting, color, lastCommand, mouseX, mouseY, name, selectedBlock, selectedRotation, shooting, team, typing, unit, x, y
@@ -1657,6 +1695,32 @@ func skipContentPatches(r *javaReader) error {
 			return ErrInvalidMSAV
 		}
 		if err := r.Skip(int(l)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func skipCustomChunks(r *javaReader) error {
+	count, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	if count < 0 {
+		return ErrInvalidMSAV
+	}
+	for i := 0; i < int(count); i++ {
+		if err := r.SkipUTF(); err != nil {
+			return err
+		}
+		length, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		if length < 0 {
+			return ErrInvalidMSAV
+		}
+		if err := r.Skip(int(length)); err != nil {
 			return err
 		}
 	}

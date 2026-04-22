@@ -107,8 +107,8 @@ func (op Opcode) String() string {
 
 // Instruction represents a single VM instruction.
 type Instruction struct {
-	Opcode Opcode   // The operation code
-	Args   []int32  // Operation arguments (register indices or values)
+	Opcode Opcode  // The operation code
+	Args   []int32 // Operation arguments (register indices or values)
 }
 
 // String returns a string representation of the instruction.
@@ -550,8 +550,26 @@ func (vm *VM) Clone() *VM {
 	newVM := NewVM()
 	newVM.Instructions = make([]Instruction, len(vm.Instructions))
 	copy(newVM.Instructions, vm.Instructions)
+	newVM.Memory = make(map[int32]int32, len(vm.Memory))
+	for key, value := range vm.Memory {
+		newVM.Memory[key] = value
+	}
+	newVM.Registers = make(map[string]int32, len(vm.Registers))
+	for key, value := range vm.Registers {
+		newVM.Registers[key] = value
+	}
+	newVM.Stack = append([]int32(nil), vm.Stack...)
+	newVM.Inputs = make(map[string]int32, len(vm.Inputs))
+	for key, value := range vm.Inputs {
+		newVM.Inputs[key] = value
+	}
+	newVM.Outputs = make(map[string]int32, len(vm.Outputs))
+	for key, value := range vm.Outputs {
+		newVM.Outputs[key] = value
+	}
 	newVM.PC = vm.PC
 	newVM.Halted = vm.Halted
+	newVM.Error = vm.Error
 	return newVM
 }
 

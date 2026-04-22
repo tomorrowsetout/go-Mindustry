@@ -6,10 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/pierrec/lz4/v4"
 
@@ -18,6 +14,7 @@ import (
 
 var (
 	ErrCompressedUnsupported = errors.New("lz4_compression_not_supported")
+	officialPacketRegistry   = protocol.NewRegistry()
 )
 
 // Serializer implements the packet framing expected by the official protocol.
@@ -26,112 +23,13 @@ type Serializer struct {
 	Ctx      *protocol.TypeIOContext
 }
 
-// CompatIgnoredPacket is returned for client packets that are intentionally
-// ignored under custom-client compatibility mode.
-type CompatIgnoredPacket struct {
-	ID      byte
-	Length  int
-	Payload []byte
-}
-
-// CompatUnitClearPacket represents UnitClearCallPacket from client (id=133),
-// which carries no payload on client->server direction.
-type CompatUnitClearPacket struct{}
-
-func compatPacketID(p protocol.Packet) (byte, bool) {
-	switch p.(type) {
-	case *protocol.Remote_NetClient_entitySnapshot_32:
-		return 43, true
-	case *protocol.Remote_NetClient_hiddenSnapshot_33:
-		return 46, true
-	case *protocol.Remote_NetClient_pingResponse_19:
-		// 注意：官方 155 客户端使用 65 作为 ping 响应 ID
-		// 之前错误地映射到 66，导致与某些客户端版本不兼容
-		return 65, true
-	case *protocol.Remote_NetClient_kick_22:
-		return 53, true
-	case *protocol.Remote_NetClient_kick_21:
-		return 54, true
-	case *protocol.Remote_NetClient_playerDisconnect_31:
-		return 67, true
-	case *protocol.Remote_CoreBlock_playerSpawn_140:
-		// 68 is interpreted by official 155 clients as UnitSpawnCallPacket,
-		// which crashes when payload is actually CoreBlock.playerSpawn.
-		// Keep this aligned with registry id for build 155.
-		return 144, true
-	case *protocol.Remote_NetClient_sendMessage_15:
-		return 82, true
-	case *protocol.Remote_NetClient_sendMessage_14:
-		return 83, true
-	case *protocol.Remote_NetClient_stateSnapshot_35:
-		return 117, true
-	case *protocol.Remote_Tile_buildHealthUpdate_135:
-		return 13, true
-	case *protocol.Remote_ConstructBlock_deconstructFinish_136:
-		return 136, true
-	case *protocol.Remote_ConstructBlock_constructFinish_137:
-		return 137, true
-	case *protocol.Remote_Tile_removeTile_130:
-		return 130, true
-	case *protocol.Remote_Menus_infoPopup_50:
-		return 53, true
-	case *protocol.Remote_Menus_infoPopup_49:
-		return 54, true
-	case *protocol.Remote_Menus_infoPopupReliable_52:
-		return 55, true
-	case *protocol.Remote_Menus_infoPopupReliable_51:
-		return 56, true
-	case *protocol.Remote_InputHandler_unitClear_91:
-		return 133, true
-	}
-	return 0, false
-}
-
-var reRemoteSuffixID = regexp.MustCompile(`_(\d+)$`)
-
-// officialPacketID maps generated Remote_*_*_NNN packet types to on-wire packet IDs.
-// Wire IDs include 4 base packets registered before Call.registerPackets:
-// StreamBegin, StreamChunk, WorldStream, ConnectPacket.
+// officialPacketID uses the canonical 157 packet registration order.
 func officialPacketID(p protocol.Packet) (byte, bool) {
-	if p == nil {
-		return 0, false
-	}
-	switch p.(type) {
-	case *protocol.Remote_Menus_infoPopup_50:
-		return 53, true
-	case *protocol.Remote_Menus_infoPopup_49:
-		return 54, true
-	case *protocol.Remote_Menus_infoPopupReliable_52:
-		return 55, true
-	case *protocol.Remote_Menus_infoPopupReliable_51:
-		return 56, true
-	}
-	t := reflect.TypeOf(p)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	name := t.Name()
-	m := reRemoteSuffixID.FindStringSubmatch(name)
-	if len(m) != 2 {
-		return 0, false
-	}
-	n, err := strconv.Atoi(m[1])
-	if err != nil || n < 0 || n > 251 {
-		return 0, false
-	}
-	// Fallback for packets not covered above.
-	return byte(n + 4), true
+	return officialPacketRegistry.PacketID(p)
 }
 
 // ReadObject reads a single framed object from buf.
 func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
-	return s.ReadObjectMode(buf, true)
-}
-
-// ReadObjectMode reads a single framed object with packet-ID mode.
-// compat=true: custom compat mapping mode.
-// compat=false: official call-id mode.
-func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error) {
 	id, err := buf.ReadByte()
 	if err != nil {
 		return nil, err
@@ -167,29 +65,6 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 		return nil, ErrCompressedUnsupported
 	}
 
-	if compat {
-		// Compatibility path: user custom 155.4 client observed IDs.
-		switch id {
-		case 29: // ConnectConfirmCallPacket (custom 155.4)
-			return &protocol.Remote_NetServer_connectConfirm_47{}, nil
-		case 24: // ClientSnapshotCallPacket (custom 155.4)
-			if snap, err := readClientSnapshotCompat(payload, s.Ctx); err == nil {
-				return snap, nil
-			}
-		case 65: // PingCallPacket (custom 155.4, payload is int64 only)
-			if len(payload) >= 8 {
-				t := int64(binary.BigEndian.Uint64(payload[:8]))
-				return &protocol.Remote_NetClient_ping_18{Time: t}, nil
-			}
-		case 81, 89: // SendChatMessageCallPacket(message), some clients use id=89 with string-only payload.
-			if msg, err := readSendChatMessageCompat(payload, s.Ctx); err == nil {
-				return msg, nil
-			}
-		case 133: // UnitClearCallPacket (client->server carries no fields)
-			return &CompatUnitClearPacket{}, nil
-		}
-	}
-
 	tryRead := func(pid byte) (any, bool) {
 		p, nerr := s.Registry.NewPacket(pid)
 		if nerr != nil {
@@ -201,153 +76,36 @@ func (s *Serializer) ReadObjectMode(buf *bytes.Reader, compat bool) (any, error)
 		return p, true
 	}
 
-	if !compat {
-		// Some official/modified clients send chat payload as plain string
-		// (without leading player entity). Try chat fallback before registry decode.
-		if id == 81 || id == 89 {
-			if msg, ferr := readSendChatMessageCompat(payload, s.Ctx); ferr == nil {
-				if strings.TrimSpace(msg.Message) != "" {
-					return msg, nil
-				}
-			}
-		}
-		// Official wire IDs already include the +4 base-packet offset.
-		if obj, ok := tryRead(id); ok {
-			return obj, nil
-		}
-		// Some 155 official clients still send a few legacy/compat call IDs.
-		// Accept them as fallbacks to avoid noisy EOF loops.
-		if id == 65 {
-			if len(payload) >= 8 {
-				t := int64(binary.BigEndian.Uint64(payload[:8]))
-				return &protocol.Remote_NetClient_ping_18{Time: t}, nil
-			}
-			// Some variants send truncated ping payloads; treat as keepalive.
-			return &protocol.Remote_NetClient_ping_18{Time: 0}, nil
-		}
-		if id == 29 {
-			return &protocol.Remote_NetServer_connectConfirm_47{}, nil
-		}
-		if id == 133 {
-			return &CompatUnitClearPacket{}, nil
-		}
-		// Do not tear down official connections on unknown/misaligned call IDs.
-		return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-	}
-
 	if obj, ok := tryRead(id); ok {
 		return obj, nil
 	}
-	// Compatibility fallback for older modified mappings.
-	if id == 25 {
-		if snap, ferr := readClientSnapshotCompat(payload, s.Ctx); ferr == nil {
-			return snap, nil
-		}
-	}
-	return &CompatIgnoredPacket{ID: id, Length: int(length), Payload: payload}, nil
-}
 
-func readClientSnapshotCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_NetServer_clientSnapshot_45, error) {
-	r := protocol.NewReaderWithContext(payload, ctx)
-	out := &protocol.Remote_NetServer_clientSnapshot_45{}
-	var err error
-	if out.SnapshotID, err = r.ReadInt32(); err != nil {
-		return nil, err
+	// A few official 157 client->server packets omit the injected player/entity
+	// parameter on the wire even though the generated packet struct keeps it.
+	switch id {
+	case 31:
+		return &protocol.Remote_NetServer_connectConfirm_50{}, nil
+	case 36:
+		return &protocol.Remote_NetServer_requestDebugStatus_36{Player: nil}, nil
+	case 72:
+		return readClientPingWithoutPlayer(payload)
+	case 81:
+		return readRequestBlockSnapshotWithoutPlayer(payload)
+	case 142:
+		return &protocol.Remote_InputHandler_unitClear_95{}, nil
+	default:
+		return nil, fmt.Errorf("unknown packet id: %d", id)
 	}
-	if out.UnitID, err = r.ReadInt32(); err != nil {
-		return nil, err
-	}
-	if out.Dead, err = r.ReadBool(); err != nil {
-		return nil, err
-	}
-	if out.X, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.Y, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.PointerX, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.PointerY, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.Rotation, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.BaseRotation, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.XVelocity, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.YVelocity, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.Mining, err = protocol.ReadTile(r, ctx); err != nil {
-		return nil, err
-	}
-	if out.Boosting, err = r.ReadBool(); err != nil {
-		return nil, err
-	}
-	if out.Shooting, err = r.ReadBool(); err != nil {
-		return nil, err
-	}
-	if out.Chatting, err = r.ReadBool(); err != nil {
-		return nil, err
-	}
-	if out.Building, err = r.ReadBool(); err != nil {
-		return nil, err
-	}
-	if out.SelectedBlock, err = protocol.ReadBlock(r, ctx); err != nil {
-		return nil, err
-	}
-	if out.SelectedRotation, err = r.ReadInt32(); err != nil {
-		return nil, err
-	}
-	plans, err := protocol.ReadPlansQueue(r, ctx)
-	if err != nil {
-		return nil, err
-	}
-	out.Plans = plans
-	if out.ViewX, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.ViewY, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.ViewWidth, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	if out.ViewHeight, err = r.ReadFloat32(); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 // WriteObject writes a framed object to buf.
 func (s *Serializer) WriteObject(buf *bytes.Buffer, obj any) error {
-	return s.writeObject(buf, obj, true)
-}
-
-// WriteObjectCompat writes a framed object with optional compat ID mapping.
-func (s *Serializer) WriteObjectCompat(buf *bytes.Buffer, obj any, compat bool) error {
-	return s.writeObject(buf, obj, compat)
-}
-
-func (s *Serializer) writeObject(buf *bytes.Buffer, obj any, compat bool) error {
 	switch v := obj.(type) {
 	case protocol.FrameworkMessage:
 		buf.WriteByte(0xFE)
 		return writeFramework(buf, v)
 	case protocol.Packet:
-		var id byte
-		var ok bool
-		if compat {
-			id, ok = compatPacketID(v)
-		} else {
-			id, ok = officialPacketID(v)
-		}
+		id, ok := officialPacketID(v)
 		if !ok {
 			id, ok = s.Registry.PacketID(v)
 		}
@@ -363,15 +121,14 @@ func (s *Serializer) writeObject(buf *bytes.Buffer, obj any, compat bool) error 
 		payload := w.Bytes()
 
 		// Compression: only when payload is large enough and not a stream chunk.
-		useCompression := len(payload) >= 36 && !isStreamChunk(v)
+		useCompression := shouldCompressPacket(v, len(payload))
 		if useCompression {
-			dst := make([]byte, lz4.CompressBlockBound(len(payload)))
-			if n, err := lz4.CompressBlock(payload, dst, nil); err == nil && n > 0 && n < len(payload) {
+			if compressed, ok := tryCompressPayload(payload); ok {
 				if err := writeUint16(buf, uint16(len(payload))); err != nil {
 					return err
 				}
 				buf.WriteByte(1)
-				_, err = buf.Write(dst[:n])
+				_, err := buf.Write(compressed)
 				return err
 			}
 		}
@@ -387,27 +144,67 @@ func (s *Serializer) writeObject(buf *bytes.Buffer, obj any, compat bool) error 
 	}
 }
 
-func readSendChatMessageCompat(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_NetClient_sendChatMessage_16, error) {
-	// First attempt official shape: (entity, string).
-	r := protocol.NewReaderWithContext(payload, ctx)
-	out := &protocol.Remote_NetClient_sendChatMessage_16{}
-	if player, err := protocol.ReadEntity(r, ctx); err == nil {
-		if msg, err2 := protocol.ReadString(r); err2 == nil && msg != nil {
-			out.Player = player
-			out.Message = *msg
-			return out, nil
-		}
+func shouldCompressPacket(p protocol.Packet, payloadLen int) bool {
+	if payloadLen < 36 || isStreamChunk(p) {
+		return false
 	}
-	// Fallback for string-only payload used by some clients.
-	r2 := protocol.NewReaderWithContext(payload, ctx)
-	msg, err := protocol.ReadString(r2)
+	switch p.(type) {
+	case *protocol.Remote_NetClient_entitySnapshot_32,
+		*protocol.Remote_NetClient_hiddenSnapshot_33,
+		*protocol.Remote_NetClient_stateSnapshot_35,
+		*protocol.Remote_NetClient_blockSnapshot_34:
+		// Snapshot packets are latency-sensitive, and large snapshot payloads have
+		// triggered lz4 crashes in practice. Favor stability over a few saved bytes.
+		return false
+	default:
+		return true
+	}
+}
+
+func tryCompressPayload(payload []byte) (compressed []byte, ok bool) {
+	defer func() {
+		if recover() != nil {
+			compressed = nil
+			ok = false
+		}
+	}()
+	bound := lz4.CompressBlockBound(len(payload))
+	if bound <= 0 {
+		return nil, false
+	}
+	// The upstream encoder has panicked on exact-bound buffers for a few large
+	// snapshot-shaped payloads. Keep a little slack instead of trusting the
+	// minimal bound exactly.
+	dst := make([]byte, bound+16)
+	n, err := lz4.CompressBlock(payload, dst, nil)
+	if err != nil || n <= 0 || n >= len(payload) {
+		return nil, false
+	}
+	return dst[:n], true
+}
+
+func readClientPingWithoutPlayer(payload []byte) (*protocol.Remote_NetClient_ping_18, error) {
+	r := bytes.NewReader(payload)
+	value, err := readInt64(r)
 	if err != nil {
 		return nil, err
 	}
-	if msg != nil {
-		out.Message = *msg
+	if r.Len() != 0 {
+		return nil, fmt.Errorf("unexpected ping payload length: %d", len(payload))
 	}
-	return out, nil
+	return &protocol.Remote_NetClient_ping_18{Player: nil, Time: value}, nil
+}
+
+func readRequestBlockSnapshotWithoutPlayer(payload []byte) (*protocol.Remote_NetServer_requestBlockSnapshot_45, error) {
+	r := bytes.NewReader(payload)
+	pos, err := readInt32(r)
+	if err != nil {
+		return nil, err
+	}
+	if r.Len() != 0 {
+		return nil, fmt.Errorf("unexpected requestBlockSnapshot payload length: %d", len(payload))
+	}
+	return &protocol.Remote_NetServer_requestBlockSnapshot_45{Player: nil, Pos: pos}, nil
 }
 
 func readFramework(buf *bytes.Reader) (protocol.FrameworkMessage, error) {
@@ -488,6 +285,12 @@ func writeUint16(w *bytes.Buffer, v uint16) error {
 
 func readInt32(r *bytes.Reader) (int32, error) {
 	var v int32
+	err := binary.Read(r, binary.BigEndian, &v)
+	return v, err
+}
+
+func readInt64(r *bytes.Reader) (int64, error) {
+	var v int64
 	err := binary.Read(r, binary.BigEndian, &v)
 	return v, err
 }

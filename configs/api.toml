@@ -1,0 +1,12 @@
+# API 配置
+# 控制内置 HTTP API 的监听地址与鉴权密钥。
+
+[api]
+# 是否启用内置 HTTP API。
+enabled = true
+# API 监听地址，格式为 IP:端口。
+bind = "0.0.0.0:8090"
+# 单个主 API Key；留空表示不使用这一项。
+key = ""
+# 多个 API Key 列表；留空数组表示不额外添加。
+keys = []

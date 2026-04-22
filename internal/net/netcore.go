@@ -190,9 +190,11 @@ func (nc *NetworkCore) BroadcastPacket(packet protocol.Packet) {
 // BroadcastToTeam 广播包到指定队伍
 func (nc *NetworkCore) BroadcastToTeam(packet protocol.Packet, teamID byte) {
 	conns := nc.GetAllConnections()
-	_ = teamID
 	for _, conn := range conns {
 		if conn == nil {
+			continue
+		}
+		if teamID != 0 && conn.TeamID() != teamID {
 			continue
 		}
 		_ = nc.SendPacket(conn, packet)

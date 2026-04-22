@@ -106,7 +106,7 @@ func (w *World) beginTeamPowerStep(delta time.Duration) {
 	}
 	w.ensurePowerNetsLocked()
 	w.rebuildPowerNetStatesLocked()
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.powerTilePositions {
 		if pos < 0 || w.model == nil || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -578,6 +578,7 @@ func (w *World) explodePowerGeneratorLocked(x, y int, pos int32, team TeamID, ra
 	rules := w.rulesMgr.Get()
 	if rules != nil && !rules.ReactorExplosions {
 		if pos >= 0 && int(pos) < len(w.model.Tiles) {
+			w.queueBrokenBuildPlanLocked(pos, &w.model.Tiles[pos])
 			w.destroyTileLocked(&w.model.Tiles[pos], team, 0)
 		}
 		return
@@ -600,6 +601,7 @@ func (w *World) explodePowerGeneratorLocked(x, y int, pos int32, team TeamID, ra
 		}
 	}
 	if pos >= 0 && int(pos) < len(w.model.Tiles) {
+		w.queueBrokenBuildPlanLocked(pos, &w.model.Tiles[pos])
 		w.destroyTileLocked(&w.model.Tiles[pos], team, 0)
 	}
 }
@@ -784,13 +786,13 @@ func (w *World) buildPowerNetsLocked() {
 		delete(w.powerNetByPos, pos)
 	}
 	relevant := map[int32]*Tile{}
-	positions := make([]int32, 0, len(w.activeTilePositions))
-	for _, pos := range w.activeTilePositions {
+	positions := make([]int32, 0, len(w.powerTilePositions))
+	for _, pos := range w.powerTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
 		tile := &w.model.Tiles[pos]
-		if !w.isPowerRelevantBuildingLocked(tile) {
+		if tile == nil || tile.Build == nil || tile.Block == 0 || tile.Build.Team == 0 {
 			continue
 		}
 		relevant[pos] = tile
@@ -891,7 +893,7 @@ func (w *World) rebuildPowerNetStatesLocked() {
 	if w == nil || w.model == nil {
 		return
 	}
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.powerTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -922,7 +924,7 @@ func (w *World) stepPowerDiodesLocked() {
 	if w == nil || w.model == nil {
 		return
 	}
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.powerDiodeTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -976,7 +978,7 @@ func (w *World) stepPowerVoidsLocked() {
 		return
 	}
 	drained := make(map[int32]struct{})
-	for _, pos := range w.activeTilePositions {
+	for _, pos := range w.powerVoidTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -1025,7 +1027,19 @@ func isPowerProducerBlockName(name string) bool {
 
 func isPowerConsumerBlockName(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "ground-factory", "air-factory", "naval-factory", "surge-conveyor", "surge-router", "mass-driver", "payload-mass-driver", "large-payload-mass-driver", "laser-drill", "blast-drill", "rotary-pump", "impulse-pump", "water-extractor", "oil-extractor", "multi-press", "silicon-smelter", "silicon-arc-furnace", "electrolyzer", "atmospheric-concentrator", "oxidation-chamber", "electric-heater", "silicon-crucible", "carbide-crucible", "surge-crucible", "cyanogen-synthesizer", "phase-synthesizer", "kiln", "plastanium-compressor", "phase-weaver", "surge-smelter", "cryofluid-mixer", "pyratite-mixer", "blast-mixer", "melter", "separator", "disassembler", "slag-centrifuge", "pulverizer", "coal-centrifuge", "spore-press", "cultivator", "vent-condenser", "incinerator":
+	case "ground-factory", "air-factory", "naval-factory",
+		"additive-reconstructor", "multiplicative-reconstructor", "exponential-reconstructor", "tetrative-reconstructor",
+		"tank-refabricator", "ship-refabricator", "mech-refabricator", "prime-refabricator",
+		"small-deconstructor", "deconstructor", "payload-deconstructor",
+		"surge-conveyor", "surge-router", "mass-driver", "payload-mass-driver", "large-payload-mass-driver",
+		"laser-drill", "blast-drill", "impact-drill", "eruption-drill", "plasma-bore", "large-plasma-bore",
+		"repair-point", "repair-turret", "unit-repair-tower",
+		"rotary-pump", "impulse-pump", "water-extractor", "oil-extractor",
+		"multi-press", "silicon-smelter", "silicon-arc-furnace", "electrolyzer", "atmospheric-concentrator",
+		"oxidation-chamber", "electric-heater", "silicon-crucible", "carbide-crucible", "surge-crucible",
+		"cyanogen-synthesizer", "phase-synthesizer", "kiln", "plastanium-compressor", "phase-weaver", "surge-smelter",
+		"cryofluid-mixer", "pyratite-mixer", "blast-mixer", "melter", "separator", "disassembler", "slag-centrifuge",
+		"pulverizer", "coal-centrifuge", "spore-press", "cultivator", "vent-condenser", "incinerator":
 		return true
 	default:
 		return false
@@ -1252,6 +1266,154 @@ func appendUniquePowerPos(values []int32, value int32) []int32 {
 	return append(values, value)
 }
 
+func removePowerPos(values []int32, value int32) ([]int32, bool) {
+	for i, cur := range values {
+		if cur != value {
+			continue
+		}
+		out := append([]int32(nil), values[:i]...)
+		out = append(out, values[i+1:]...)
+		return out, true
+	}
+	return values, false
+}
+
+func (w *World) persistPowerNodeConfigLocked(pos int32) {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return
+	}
+	tile := &w.model.Tiles[pos]
+	if tile.Build == nil || tile.Block == 0 {
+		return
+	}
+	if !isPowerNodeBlockName(w.blockNameByID(int16(tile.Block))) {
+		return
+	}
+	if normalized, ok := w.normalizedBuildingConfigLocked(pos); ok {
+		w.storeBuildingConfigLocked(tile, normalized)
+		return
+	}
+	tile.Build.Config = nil
+}
+
+func (w *World) addPowerLinkOneWayLocked(pos, target int32) bool {
+	if w == nil {
+		return false
+	}
+	links := w.powerNodeLinks[pos]
+	for _, cur := range links {
+		if cur == target {
+			return false
+		}
+	}
+	w.powerNodeLinks[pos] = append(links, target)
+	w.persistPowerNodeConfigLocked(pos)
+	return true
+}
+
+func (w *World) removePowerLinkOneWayLocked(pos, target int32) bool {
+	if w == nil {
+		return false
+	}
+	links, removed := removePowerPos(w.powerNodeLinks[pos], target)
+	if !removed {
+		return false
+	}
+	if len(links) == 0 {
+		delete(w.powerNodeLinks, pos)
+	} else {
+		w.powerNodeLinks[pos] = links
+	}
+	w.persistPowerNodeConfigLocked(pos)
+	return true
+}
+
+func (w *World) powerNodeCanAcceptLinkLocked(pos, target int32) bool {
+	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return false
+	}
+	for _, cur := range w.powerNodeLinks[pos] {
+		if cur == target {
+			return true
+		}
+	}
+	name := w.blockNameByID(int16(w.model.Tiles[pos].Block))
+	if !isPowerNodeBlockName(name) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(name), "beam-link") {
+		return true
+	}
+	maxNodes, _, ok := powerNodeRulesByBlockName(name)
+	if !ok {
+		return false
+	}
+	return len(w.powerNodeLinks[pos]) < maxNodes
+}
+
+func (w *World) addPowerLinkPairLocked(pos, target int32) bool {
+	if !w.powerNodeLinkValidLocked(pos, target) {
+		return false
+	}
+	if !w.powerNodeCanAcceptLinkLocked(pos, target) || !w.powerNodeCanAcceptLinkLocked(target, pos) {
+		return false
+	}
+	changed := w.addPowerLinkOneWayLocked(pos, target)
+	changed = w.addPowerLinkOneWayLocked(target, pos) || changed
+	if changed {
+		w.invalidatePowerNetsLocked()
+	}
+	return changed
+}
+
+func (w *World) removePowerLinkPairLocked(pos, target int32) bool {
+	if w == nil {
+		return false
+	}
+	changed := w.removePowerLinkOneWayLocked(pos, target)
+	changed = w.removePowerLinkOneWayLocked(target, pos) || changed
+	if changed {
+		w.invalidatePowerNetsLocked()
+	}
+	return changed
+}
+
+func (w *World) clearPowerLinksForBuildingLocked(pos int32) bool {
+	if w == nil {
+		return false
+	}
+	related := make([]int32, 0, len(w.powerNodeLinks[pos]))
+	seen := map[int32]struct{}{}
+	for _, target := range w.powerNodeLinks[pos] {
+		if _, ok := seen[target]; ok {
+			continue
+		}
+		seen[target] = struct{}{}
+		related = append(related, target)
+	}
+	for otherPos, otherLinks := range w.powerNodeLinks {
+		if otherPos == pos {
+			continue
+		}
+		for _, link := range otherLinks {
+			if link != pos {
+				continue
+			}
+			if _, ok := seen[otherPos]; ok {
+				break
+			}
+			seen[otherPos] = struct{}{}
+			related = append(related, otherPos)
+			break
+		}
+	}
+	changed := false
+	for _, otherPos := range related {
+		changed = w.removePowerLinkPairLocked(pos, otherPos) || changed
+	}
+	return changed
+}
+
 func (w *World) configurePowerNodeLinksLocked(pos int32, targets []int32) bool {
 	if w == nil || w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
 		return false
@@ -1280,13 +1442,23 @@ func (w *World) configurePowerNodeLinksLocked(pos int32, targets []int32) bool {
 			break
 		}
 	}
-	if len(out) == 0 {
-		delete(w.powerNodeLinks, pos)
-		w.invalidatePowerNetsLocked()
-		return true
+	current := append([]int32(nil), w.powerNodeLinks[pos]...)
+	want := make(map[int32]struct{}, len(out))
+	for _, target := range out {
+		want[target] = struct{}{}
 	}
-	w.powerNodeLinks[pos] = out
-	w.invalidatePowerNetsLocked()
+	for _, target := range current {
+		if _, keep := want[target]; keep {
+			continue
+		}
+		w.removePowerLinkPairLocked(pos, target)
+	}
+	for _, target := range out {
+		w.addPowerLinkPairLocked(pos, target)
+	}
+	if len(out) == 0 {
+		w.persistPowerNodeConfigLocked(pos)
+	}
 	return true
 }
 
@@ -1328,7 +1500,7 @@ func (w *World) autoLinkPowerNodeLocked(pos int32) []int32 {
 	}
 
 	candidates := make([]powerNodeCandidate, 0, maxNodes)
-	for _, otherPos := range w.activeTilePositions {
+	for _, otherPos := range w.teamPowerTiles[tile.Build.Team] {
 		if otherPos == pos || otherPos < 0 || int(otherPos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -1388,9 +1560,13 @@ func (w *World) autoLinkPowerNodeLocked(pos int32) []int32 {
 	if len(links) == 0 {
 		return nil
 	}
-	w.powerNodeLinks[pos] = links
-	w.invalidatePowerNetsLocked()
-	return links
+	added := make([]int32, 0, len(links))
+	for _, target := range links {
+		if w.addPowerLinkPairLocked(pos, target) {
+			added = append(added, target)
+		}
+	}
+	return added
 }
 
 type powerAutoLinkChange struct {
@@ -1412,6 +1588,10 @@ func (w *World) autoLinkNearbyPowerNodesForBuildingLocked(pos int32) []powerAuto
 
 	w.ensurePowerNetsLocked()
 
+	placedName := w.blockNameByID(int16(tile.Block))
+	placedConsumes := w.blockConsumesPowerLocked(placedName)
+	placedOutputs := w.blockOutputsPowerLocked(placedName)
+
 	type candidate struct {
 		pos      int32
 		dist2    float32
@@ -1419,7 +1599,7 @@ func (w *World) autoLinkNearbyPowerNodesForBuildingLocked(pos int32) []powerAuto
 		hasNetID bool
 	}
 	candidates := make([]candidate, 0, 8)
-	for _, otherPos := range w.activeTilePositions {
+	for _, otherPos := range w.teamPowerNodeTiles[tile.Build.Team] {
 		if otherPos == pos || otherPos < 0 || int(otherPos) >= len(w.model.Tiles) {
 			continue
 		}
@@ -1457,32 +1637,64 @@ func (w *World) autoLinkNearbyPowerNodesForBuildingLocked(pos int32) []powerAuto
 	})
 
 	seenNet := map[int32]struct{}{}
+	adjacentPowered := make([]int32, 0, 8)
+	for _, edge := range blockEdgeOffsets(w.blockSizeForTileLocked(tile)) {
+		otherPos, ok := w.buildingOccupyingCellLocked(tile.X+edge[0], tile.Y+edge[1])
+		if !ok || otherPos == pos || otherPos < 0 || int(otherPos) >= len(w.model.Tiles) {
+			continue
+		}
+		other := &w.model.Tiles[otherPos]
+		if other.Build == nil || other.Block == 0 || other.Build.Team != tile.Build.Team {
+			continue
+		}
+		otherName := w.blockNameByID(int16(other.Block))
+		otherConsumes := w.blockConsumesPowerLocked(otherName)
+		otherOutputs := w.blockOutputsPowerLocked(otherName)
+		if placedConsumes && otherConsumes && !placedOutputs && !otherOutputs {
+			continue
+		}
+		adjacentPowered = appendUniquePowerPos(adjacentPowered, otherPos)
+		if netID, ok := w.powerNetByPos[otherPos]; ok {
+			seenNet[netID] = struct{}{}
+		}
+	}
 	changed := make([]powerAutoLinkChange, 0, len(candidates))
 	for _, cand := range candidates {
+		skip := false
+		for _, adjacentPos := range adjacentPowered {
+			for _, link := range w.powerNodeLinks[cand.pos] {
+				if link == adjacentPos {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				break
+			}
+			for _, link := range w.powerNodeLinks[adjacentPos] {
+				if link == cand.pos {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				break
+			}
+		}
+		if skip {
+			continue
+		}
 		if cand.hasNetID {
 			if _, dup := seenNet[cand.netID]; dup {
 				continue
 			}
 		}
-		links := w.powerNodeLinks[cand.pos]
-		dup := false
-		for _, cur := range links {
-			if cur == pos {
-				dup = true
-				break
-			}
+		if w.addPowerLinkPairLocked(cand.pos, pos) {
+			changed = append(changed, powerAutoLinkChange{nodePos: cand.pos, targetPos: pos})
 		}
-		if dup {
-			continue
-		}
-		w.powerNodeLinks[cand.pos] = append(links, pos)
-		changed = append(changed, powerAutoLinkChange{nodePos: cand.pos, targetPos: pos})
 		if cand.hasNetID {
 			seenNet[cand.netID] = struct{}{}
 		}
-	}
-	if len(changed) > 0 {
-		w.invalidatePowerNetsLocked()
 	}
 	return changed
 }
@@ -1502,27 +1714,12 @@ func (w *World) togglePowerNodeLinkLocked(pos, rawTarget int32) bool {
 	if !ok || !w.powerNodeLinkValidLocked(pos, target) {
 		return false
 	}
-	links := append([]int32(nil), w.powerNodeLinks[pos]...)
-	for i, cur := range links {
-		if cur != target {
-			continue
+	for _, cur := range w.powerNodeLinks[pos] {
+		if cur == target {
+			return w.removePowerLinkPairLocked(pos, target)
 		}
-		links = append(links[:i], links[i+1:]...)
-		if len(links) == 0 {
-			delete(w.powerNodeLinks, pos)
-		} else {
-			w.powerNodeLinks[pos] = links
-		}
-		w.invalidatePowerNetsLocked()
-		return true
 	}
-	maxNodes, _, ok := powerNodeRulesByBlockName(w.blockNameByID(int16(w.model.Tiles[pos].Block)))
-	if !ok || len(links) >= maxNodes {
-		return false
-	}
-	w.powerNodeLinks[pos] = append(links, target)
-	w.invalidatePowerNetsLocked()
-	return true
+	return w.addPowerLinkPairLocked(pos, target)
 }
 
 func (w *World) powerNodeLinkValidLocked(pos, target int32) bool {

@@ -6,12 +6,12 @@ import (
 
 // 核心方块 ID - 使用内容注册表中的实际 ID
 const (
-	BlockCoreShard     BlockID = 316 // core-shard - 最小核心
+	BlockCoreShard      BlockID = 316 // core-shard - 最小核心
 	BlockCoreFoundation BlockID = 317 // core-foundation - 中等核心
-	BlockCoreNucleus   BlockID = 318 // core-nucleus - 最大核心
-	BlockCoreBastion   BlockID = 319 // core-bastion - 艾里克尔最小核心
-	BlockCoreCitadel   BlockID = 320 // core-citadel - 艾里克尔中等核心
-	BlockCoreAcropolis BlockID = 321 // core-acropolis - 艾里克尔最大核心
+	BlockCoreNucleus    BlockID = 318 // core-nucleus - 最大核心
+	BlockCoreBastion    BlockID = 319 // core-bastion - 艾里克尔最小核心
+	BlockCoreCitadel    BlockID = 320 // core-citadel - 艾里克尔中等核心
+	BlockCoreAcropolis  BlockID = 321 // core-acropolis - 艾里克尔最大核心
 )
 
 // BlockCore 是旧的向后兼容常量，已弃用
@@ -20,14 +20,14 @@ const BlockCore BlockID = BlockCoreShard
 
 // RaycastResult 射线投射结果
 type RaycastResult struct {
-	Hit        bool
-	Pos        Point2
-	Normal     Vec2
-	Building   *Building
-	Tile       *Tile
-	Distance   float32
-	Blocked    bool
-	Team       TeamID
+	Hit      bool
+	Pos      Point2
+	Normal   Vec2
+	Building *Building
+	Tile     *Tile
+	Distance float32
+	Blocked  bool
+	Team     TeamID
 }
 
 // Point2 点2D
@@ -38,78 +38,225 @@ type Point2 struct {
 
 // Raycast 射线投射（完整实现）
 func (w *World) Raycast(startX, startY, endX, endY float32, team TeamID, rangeVal float32) *RaycastResult {
-	// DDA算法进行射线投射
 	dx := endX - startX
 	dy := endY - startY
 
 	dist := float32(math.Sqrt(float64(dx*dx + dy*dy)))
 	if dist == 0 {
 		return &RaycastResult{
-			Hit:    false,
-			Pos:    Point2{X: int32(startX), Y: int32(startY)},
+			Hit: false,
+			Pos: Point2{X: int32(startX), Y: int32(startY)},
 		}
 	}
 
-	// 限制范围
 	if rangeVal > 0 && dist > rangeVal {
+		scale := rangeVal / dist
+		endX = startX + dx*scale
+		endY = startY + dy*scale
 		dist = rangeVal
+		dx = endX - startX
+		dy = endY - startY
 	}
 
-	dx /= dist
-	dy /= dist
-
-	x := startX
-	y := startY
-
-	// TODO: 实现完整的射线投射逻辑（需要 World 结构体的方法）
-	_ = x
-	_ = y
-	_ = dx
-	_ = dy
-
-	return &RaycastResult{
-		Hit:      false,
-		Pos:      Point2{X: int32(endX), Y: int32(endY)},
-		Distance: dist,
+	if w == nil {
+		return &RaycastResult{Hit: false, Pos: Point2{X: int32(endX), Y: int32(endY)}, Distance: dist}
 	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.raycastLocked(startX, startY, endX, endY, team, false)
+}
+
+func (w *World) raycastLocked(startX, startY, endX, endY float32, team TeamID, ignoreEndTile bool) *RaycastResult {
+	if w == nil || w.model == nil {
+		return &RaycastResult{Hit: false, Pos: Point2{X: int32(endX), Y: int32(endY)}}
+	}
+	dx := endX - startX
+	dy := endY - startY
+	dist := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+	if dist <= 0 {
+		return &RaycastResult{Hit: false, Pos: Point2{X: worldToTileCoord(startX), Y: worldToTileCoord(startY)}}
+	}
+
+	steps := int(math.Ceil(float64(dist / 2)))
+	if steps < 1 {
+		steps = 1
+	}
+	startTX, startTY := worldToTileCoord(startX), worldToTileCoord(startY)
+	endTX, endTY := worldToTileCoord(endX), worldToTileCoord(endY)
+	prevTX, prevTY := startTX, startTY
+	for i := 1; i <= steps; i++ {
+		t := float32(i) / float32(steps)
+		x := startX + dx*t
+		y := startY + dy*t
+		tx, ty := worldToTileCoord(x), worldToTileCoord(y)
+		if tx == startTX && ty == startTY {
+			continue
+		}
+		if ignoreEndTile && tx == endTX && ty == endTY {
+			continue
+		}
+		if !w.model.InBounds(int(tx), int(ty)) {
+			return &RaycastResult{Hit: false, Pos: Point2{X: tx, Y: ty}, Distance: distance2D(startX, startY, x, y)}
+		}
+		tile := &w.model.Tiles[int(ty)*w.model.Width+int(tx)]
+		if raycastTileBlocks(tile) {
+			normal := raycastNormal(prevTX, prevTY, tx, ty)
+			hitTeam := tile.Team
+			var building *Building
+			if tile.Build != nil {
+				building = tile.Build
+				if building.Team != 0 {
+					hitTeam = building.Team
+				}
+			}
+			return &RaycastResult{
+				Hit:      true,
+				Pos:      Point2{X: tx, Y: ty},
+				Normal:   normal,
+				Building: building,
+				Tile:     tile,
+				Distance: distance2D(startX, startY, x, y),
+				Blocked:  true,
+				Team:     hitTeam,
+			}
+		}
+		prevTX, prevTY = tx, ty
+		_ = team
+	}
+	return &RaycastResult{Hit: false, Pos: Point2{X: endTX, Y: endTY}, Distance: dist}
 }
 
 // RaycastBlock 射线投射（块级别）
 func (w *World) RaycastBlock(startX, startY, endX, endY float32, rangeVal float32) *RaycastResult {
-	// TODO: 实现块级别的射线投射
-	return nil
+	return w.Raycast(startX, startY, endX, endY, 0, rangeVal)
 }
 
 // LineBlock 直线块
 func (w *World) LineBlock(x1, y1, x2, y2 float32, rangeVal float32) bool {
-	// TODO: 实现直线块检测
-	return false
+	result := w.RaycastBlock(x1, y1, x2, y2, rangeVal)
+	return result != nil && result.Hit
 }
 
 // LineBuild 直线建造
 func (w *World) LineBuild(x1, y1, x2, y2 float32, rangeVal float32) []Point2 {
-	// TODO: 实现直线建造路径
-	return nil
+	points := lineTilesForWorldCoords(x1, y1, x2, y2, rangeVal)
+	if w == nil || w.model == nil {
+		return points
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	out := points[:0]
+	for _, p := range points {
+		if w.model.InBounds(int(p.X), int(p.Y)) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func worldToTileCoord(v float32) int32 {
+	return int32(math.Floor(float64(v / 8)))
+}
+
+func distance2D(x1, y1, x2, y2 float32) float32 {
+	dx := x2 - x1
+	dy := y2 - y1
+	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
+}
+
+func raycastTileBlocks(tile *Tile) bool {
+	if tile == nil {
+		return false
+	}
+	if tile.Build != nil && tile.Build.Health > 0 {
+		return true
+	}
+	return tile.Block != 0
+}
+
+func raycastNormal(prevX, prevY, x, y int32) Vec2 {
+	switch {
+	case x > prevX:
+		return Vec2{X: -1}
+	case x < prevX:
+		return Vec2{X: 1}
+	case y > prevY:
+		return Vec2{Y: -1}
+	case y < prevY:
+		return Vec2{Y: 1}
+	default:
+		return Vec2{}
+	}
+}
+
+func lineTilesForWorldCoords(x1, y1, x2, y2 float32, rangeVal float32) []Point2 {
+	dx := x2 - x1
+	dy := y2 - y1
+	dist := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+	if rangeVal > 0 && dist > rangeVal && dist > 0 {
+		scale := rangeVal / dist
+		x2 = x1 + dx*scale
+		y2 = y1 + dy*scale
+	}
+	return bresenhamLine(worldToTileCoord(x1), worldToTileCoord(y1), worldToTileCoord(x2), worldToTileCoord(y2))
+}
+
+func bresenhamLine(x0, y0, x1, y1 int32) []Point2 {
+	points := make([]Point2, 0)
+	dx := abs32(x1 - x0)
+	dy := -abs32(y1 - y0)
+	sx := int32(-1)
+	if x0 < x1 {
+		sx = 1
+	}
+	sy := int32(-1)
+	if y0 < y1 {
+		sy = 1
+	}
+	err := dx + dy
+	for {
+		points = append(points, Point2{X: x0, Y: y0})
+		if x0 == x1 && y0 == y1 {
+			break
+		}
+		e2 := 2 * err
+		if e2 >= dy {
+			err += dy
+			x0 += sx
+		}
+		if e2 <= dx {
+			err += dx
+			y0 += sy
+		}
+	}
+	return points
+}
+
+func abs32(v int32) int32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // WorldTime 时间管理
 type WorldTime struct {
-	Tick          uint64
-	WaveTime      float32
-	TotalTime     float32
-	TimeScale     float32
-	DayTime       float32
-	DayLength     float32
-	WeatherTimer  float32
-	Weather       *Weather
+	Tick         uint64
+	WaveTime     float32
+	TotalTime    float32
+	TimeScale    float32
+	DayTime      float32
+	DayLength    float32
+	WeatherTimer float32
+	Weather      *Weather
 }
 
 // NewWorldTime 创建时间管理
 func NewWorldTime() *WorldTime {
 	return &WorldTime{
-		TimeScale:  1.0,
-		DayLength:  24000, // 24000 ticks = 1 day
-		Weather:    &Weather{Type: WeatherClear},
+		TimeScale: 1.0,
+		DayLength: 24000, // 24000 ticks = 1 day
+		Weather:   &Weather{Type: WeatherClear},
 	}
 }
 
@@ -129,32 +276,34 @@ func (t *WorldTime) Update(dt float32) {
 // updateWeather 更新天气
 func (t *WorldTime) updateWeather(dt float32) {
 	if t.Weather != nil && t.Weather.Completed {
-		// 天气结束，生成新天气
-		// TODO: 实现天气生成逻辑
+		t.Weather = &Weather{Type: WeatherClear}
+		t.WeatherTimer = 0
+		return
 	}
+	t.WeatherTimer += dt * t.TimeScale
 }
 
 // Weather 天气
 type Weather struct {
-	Type        WeatherType
-	Intensity   float32
-	Duration    float32
-	WindX       float32
-	WindY       float32
-	Completed   bool
-	StartTick   uint64
+	Type      WeatherType
+	Intensity float32
+	Duration  float32
+	WindX     float32
+	WindY     float32
+	Completed bool
+	StartTick uint64
 }
 
 // WeatherType 天气类型
 type WeatherType byte
 
 const (
-	WeatherClear    WeatherType = iota // 晴天
-	WeatherRain                        // 雨天
-	WeatherSnow                        // 雪天
-	WeatherSandstorm                   // 沙暴
-	WeatherSlag                        // 泥浆
-	WeatherFog                         // 雾
+	WeatherClear     WeatherType = iota // 晴天
+	WeatherRain                         // 雨天
+	WeatherSnow                         // 雪天
+	WeatherSandstorm                    // 沙暴
+	WeatherSlag                         // 泥浆
+	WeatherFog                          // 雾
 )
 
 // NewWeather 创建天气
@@ -181,7 +330,7 @@ func (w *Weather) Update(dt float32) {
 type BiomeType byte
 
 const (
-	BiomeNormal    BiomeType = iota // 普通
+	BiomeNormal     BiomeType = iota // 普通
 	BiomeSnow                        // 雪地
 	BiomeDesert                      // 沙漠
 	BiomeWastes                      // 废土
@@ -205,18 +354,18 @@ const (
 
 // Biome 生物群系
 type Biome struct {
-	Type         BiomeType
-	Name         string
-	Temp         float32 // 温度
-	Wetness      float32 // 湿度
-	Fertility    float32 // 肥沃度
-	Shore        bool    // 是否海岸
-	Surface      string  // 地表块
-	Wall         string  // 墙块
-	Sprout       string  // 生长块
-	Walls        []string
-	Sprouts      []string
-	Items        []string
+	Type      BiomeType
+	Name      string
+	Temp      float32 // 温度
+	Wetness   float32 // 湿度
+	Fertility float32 // 肥沃度
+	Shore     bool    // 是否海岸
+	Surface   string  // 地表块
+	Wall      string  // 墙块
+	Sprout    string  // 生长块
+	Walls     []string
+	Sprouts   []string
+	Items     []string
 }
 
 // NewBiome 创建生物群系
@@ -229,14 +378,19 @@ func NewBiome(btype BiomeType, name string) *Biome {
 
 // WeatherFilter 天气过滤器
 type WeatherFilter struct {
-	Team     int32
-	Weather  *Weather
+	Team    int32
+	Weather *Weather
 }
 
 // Accept 接受
 func (f *WeatherFilter) Accept(entity Entity) bool {
-	// TODO: 实现天气过滤逻辑
-	return true
+	if f == nil || f.Weather == nil || f.Weather.Completed {
+		return true
+	}
+	if f.Team == 0 {
+		return true
+	}
+	return entity != nil && entity.GetTeam() == TeamID(f.Team)
 }
 
 // TeamFilter 队伍过滤器
@@ -273,9 +427,9 @@ func (f *EnemyFilter) Accept(entity Entity) bool {
 
 // RangeFilter 范围过滤器
 type RangeFilter struct {
-	X, Y     float32
-	Range    float32
-	Team     TeamID
+	X, Y  float32
+	Range float32
+	Team  TeamID
 }
 
 // Accept 接受
@@ -349,10 +503,10 @@ func (d *Darkness) ClearDarkness() {
 
 // Fog 阴影/迷雾
 type Fog struct {
-	Visible   []bool
-	Width     int32
-	Height    int32
-	Teams     map[TeamID]*TeamFog
+	Visible []bool
+	Width   int32
+	Height  int32
+	Teams   map[TeamID]*TeamFog
 }
 
 // TeamFog 队伍迷雾
@@ -363,6 +517,8 @@ type TeamFog struct {
 // NewFog 创建迷雾
 func NewFog(width, height int32) *Fog {
 	return &Fog{
+		Width:   width,
+		Height:  height,
 		Visible: make([]bool, width*height),
 		Teams:   make(map[TeamID]*TeamFog),
 	}
@@ -385,7 +541,7 @@ func (f *Fog) SetFog(x, y int32, team TeamID, visible bool) {
 
 // isVisible 检查是否可见
 func (f *Fog) isVisible(x, y int32, visible []bool) bool {
-	idx := y * f.Width + x
+	idx := y*f.Width + x
 	if idx >= 0 && idx < int32(len(visible)) {
 		return visible[idx]
 	}
@@ -394,7 +550,7 @@ func (f *Fog) isVisible(x, y int32, visible []bool) bool {
 
 // setVisible 设置可见
 func (f *Fog) setVisible(x, y int32, visible []bool, state bool) {
-	idx := y * f.Width + x
+	idx := y*f.Width + x
 	if idx >= 0 && idx < int32(len(visible)) {
 		visible[idx] = state
 	}
@@ -434,12 +590,12 @@ func NewCoreBuild(x, y int32, team TeamID) *CoreBuild {
 			Health:    750,
 			MaxHealth: 750,
 		},
-		Units:       make([]*Unit, 0),
-		LaunchCap:   15,
-		CanLaunch:   true,
-		CanSpeed:    true,
+		Units:        make([]*Unit, 0),
+		LaunchCap:    15,
+		CanLaunch:    true,
+		CanSpeed:     true,
 		LaunchCapMod: 1.0,
-		CanCapture:  true,
+		CanCapture:   true,
 	}
 }
 
@@ -527,8 +683,7 @@ func (b *CoreBuild) Heal(amount float32) {
 
 // IsProtected 核心是否受保护
 func (b *CoreBuild) IsProtected() bool {
-	// TODO: 实现核心保护检查
-	return true
+	return b != nil && !b.CanCapture
 }
 
 // CanDrop 是否可以掉落
@@ -544,39 +699,47 @@ func (b *CoreBuild) CanSpeedUp() bool {
 // BehaviorTile 属性Tile（完整实现）
 type BehaviorTile struct {
 	Tile
-	Health      float32
-	MaxHealth   float32
-	Items       []ItemStack
-	Liquids     []LiquidStack
-	Rotation    int8
-	Config      []byte
-	Flash       float32
-	FlashTimer  float32
-	Output      bool
-	Team        TeamID
-	Block       BlockID
-	Breaking    bool
-	BreakProgress float32
+	Health         float32
+	MaxHealth      float32
+	Items          []ItemStack
+	Liquids        []LiquidStack
+	Power          float32
+	PowerCapacity  float32
+	Payload        []byte
+	ItemCapacity   int32
+	LiquidCapacity float32
+	Rotation       int8
+	Config         []byte
+	Flash          float32
+	FlashTimer     float32
+	Output         bool
+	Team           TeamID
+	Block          BlockID
+	Breaking       bool
+	BreakProgress  float32
+	World          *World
 }
 
 // NewBehaviorTile 创建新的属性Tile
 func NewBehaviorTile(x, y int32, block BlockID, team TeamID) *BehaviorTile {
 	return &BehaviorTile{
 		Tile: Tile{
-			X:      int(x),
-			Y:      int(y),
-			Block:  block,
-			Team:   team,
+			X:     int(x),
+			Y:     int(y),
+			Block: block,
+			Team:  team,
 		},
-		Health:      750,
-		MaxHealth:   750,
-		Items:       make([]ItemStack, 0),
-		Liquids:     make([]LiquidStack, 0),
-		Team:        team,
-		Block:       block,
-		Flash:       0,
-		FlashTimer:  0,
-		Output:      false,
+		Health:         750,
+		MaxHealth:      750,
+		Items:          make([]ItemStack, 0),
+		Liquids:        make([]LiquidStack, 0),
+		ItemCapacity:   10,
+		LiquidCapacity: 100,
+		Team:           team,
+		Block:          block,
+		Flash:          0,
+		FlashTimer:     0,
+		Output:         false,
 	}
 }
 
@@ -619,7 +782,16 @@ func (b *BehaviorTile) ConsumeLiquids(liquid LiquidID, amount float32) bool {
 
 // ConsumePower 消耗电力
 func (b *BehaviorTile) ConsumePower(amount float32) bool {
-	// TODO: 实现消耗电力逻辑
+	if amount <= 0 {
+		return true
+	}
+	if b == nil || b.Power+0.0001 < amount {
+		return false
+	}
+	b.Power -= amount
+	if b.Power < 0 {
+		b.Power = 0
+	}
 	return true
 }
 
@@ -721,24 +893,36 @@ func (b *BehaviorTile) AddItem(item ItemID, amount int32) bool {
 
 // HandlePayload 处理载荷
 func (b *BehaviorTile) HandlePayload() {
-	// TODO: 实现载荷处理逻辑
+	if b == nil {
+		return
+	}
+	b.Output = len(b.Payload) > 0
 }
 
 // LoadPayload 装载载荷
 func (b *BehaviorTile) LoadPayload(payload []byte) bool {
-	// TODO: 实现装载载荷逻辑
+	if b == nil || len(payload) == 0 || b.IsLoaded() {
+		return false
+	}
+	b.Payload = append([]byte(nil), payload...)
+	b.Output = true
 	return true
 }
 
 // DumpPayload 卸载载荷
 func (b *BehaviorTile) DumpPayload() []byte {
-	// TODO: 实现卸载载荷逻辑
-	return nil
+	if b == nil || len(b.Payload) == 0 {
+		return nil
+	}
+	out := append([]byte(nil), b.Payload...)
+	b.Payload = nil
+	b.Output = false
+	return out
 }
 
 // IsLoaded 是否已装载
 func (b *BehaviorTile) IsLoaded() bool {
-	return false // TODO: 实现装载状态检查
+	return b != nil && len(b.Payload) > 0
 }
 
 // HasOutput 是否有输出
@@ -748,67 +932,101 @@ func (b *BehaviorTile) HasOutput() bool {
 
 // HasCapacity 是否有容量
 func (b *BehaviorTile) HasCapacity() bool {
-	// TODO: 实现容量检查
-	return len(b.Items) < 10
+	if b == nil {
+		return false
+	}
+	capacity := b.ItemCapacity
+	if capacity <= 0 {
+		capacity = 10
+	}
+	return b.GetTotalItems() < capacity && !b.IsLoaded()
 }
 
 // Consume 消耗
 func (b *BehaviorTile) Consume() bool {
-	// TODO: 实现消耗逻辑
+	if b == nil {
+		return false
+	}
+	if len(b.Items) > 0 {
+		return b.RemoveItem(b.Items[0].Item, 1)
+	}
+	if len(b.Liquids) > 0 {
+		amount := float32(1)
+		if b.Liquids[0].Amount < amount {
+			amount = b.Liquids[0].Amount
+		}
+		return b.ConsumeLiquids(b.Liquids[0].Liquid, amount)
+	}
 	return true
 }
 
 // Produce 生产
 func (b *BehaviorTile) Produce() bool {
-	// TODO: 实现生产逻辑
+	if !b.CanProduce() {
+		return false
+	}
+	b.Output = true
 	return true
 }
 
 // CanProduce 是否可以生产
 func (b *BehaviorTile) CanProduce() bool {
-	// TODO: 实现生产 Capability检查
-	return true
+	return b != nil && b.IsAlive() && b.HasCapacity()
 }
 
 // Update 更新
 func (b *BehaviorTile) Update() {
-	// TODO: 实现更新逻辑
+	if b == nil {
+		return
+	}
+	if b.FlashTimer > 0 {
+		b.FlashTimer--
+		if b.FlashTimer <= 0 {
+			b.Flash = 0
+		}
+	}
 	b.UpdateConsumers()
+	b.HandlePayload()
 }
 
 // UpdateConsumers 更新Consumers
 func (b *BehaviorTile) UpdateConsumers() {
-	// TODO: 实现Consumers更新逻辑
+	if b == nil {
+		return
+	}
+	if b.IsAlive() && (b.HasItems() || b.HasLiquids() || b.Power > 0) {
+		b.Output = true
+	}
 }
 
 // Draw 绘制
 func (b *BehaviorTile) Draw() {
-	// TODO: 实现绘制逻辑
+	// 服务器不执行客户端绘制，保留为空实现。
 }
 
 // DrawPlaced 绘制已放置
 func (b *BehaviorTile) DrawPlaced() {
-	// TODO: 实现已放置绘制逻辑
+	// 服务器不执行客户端绘制，保留为空实现。
 }
 
 // DrawPlan 绘制计划
 func (b *BehaviorTile) DrawPlan() {
-	// TODO: 实现计划绘制逻辑
+	// 服务器不执行客户端绘制，保留为空实现。
 }
 
 // DrawPlanOverlay 绘制计划叠加
 func (b *BehaviorTile) DrawPlanOverlay() {
-	// TODO: 实现计划叠加绘制逻辑
+	// 服务器不执行客户端绘制，保留为空实现。
 }
 
 // DrawPlanOverlayPlan 绘制计划叠加计划
 func (b *BehaviorTile) DrawPlanOverlayPlan() {
-	// TODO: 实现计划叠加计划绘制逻辑
+	// 服务器不执行客户端绘制，保留为空实现。
 }
 
 // DrawPlanOverlayPlanOverlay 绘制计划叠加计划叠加
 func (b *BehaviorTile) DrawPlanOverlayPlanOverlay() {
-	// TODO: 实现计划叠加计划叠加绘制逻辑
+	// 服务器不执行客户端绘制，保留为空实现。
 }
 
 // GetHealth 获取健康度
@@ -907,60 +1125,184 @@ func (b *BehaviorTile) InRangePos(x, y int32, rangeVal float32) bool {
 
 // CanSee 是否可见
 func (b *BehaviorTile) CanSee(target *BehaviorTile) bool {
-	// TODO: 实现可见性检查
-	return true
+	if b == nil || target == nil {
+		return false
+	}
+	if b.World == nil {
+		return true
+	}
+	sx, sy := behaviorTileWorldCenter(b)
+	tx, ty := behaviorTileWorldCenter(target)
+	b.World.mu.RLock()
+	defer b.World.mu.RUnlock()
+	result := b.World.raycastLocked(sx, sy, tx, ty, b.Team, true)
+	return result == nil || !result.Hit
 }
 
 // CanSeePos 是否可见位置
 func (b *BehaviorTile) CanSeePos(x, y int32) bool {
-	// TODO: 实现可见性检查
-	return true
+	if b == nil || b.World == nil {
+		return true
+	}
+	sx, sy := behaviorTileWorldCenter(b)
+	tx := float32(x*8 + 4)
+	ty := float32(y*8 + 4)
+	b.World.mu.RLock()
+	defer b.World.mu.RUnlock()
+	result := b.World.raycastLocked(sx, sy, tx, ty, b.Team, true)
+	return result == nil || !result.Hit
 }
 
 // TargetTarget 目标目标
 func (b *BehaviorTile) TargetTarget(team TeamID) *BehaviorTile {
-	// TODO: 实现目标查找逻辑
-	return nil
+	return b.TargetEnemy(team)
 }
 
 // TargetEnemy 目标敌人
 func (b *BehaviorTile) TargetEnemy(team TeamID) *BehaviorTile {
-	// TODO: 实现敌人目标查找逻辑
-	return nil
+	return b.findTarget(func(candidate *BehaviorTile) bool {
+		return candidate != nil && candidate.Team != 0 && candidate.Team != team
+	})
 }
 
 // TargetFriendly 目标盟友
 func (b *BehaviorTile) TargetFriendly(team TeamID) *BehaviorTile {
-	// TODO: 实现盟友目标查找逻辑
-	return nil
+	return b.findTarget(func(candidate *BehaviorTile) bool {
+		return candidate != nil && candidate.Team == team
+	})
 }
 
 // TargetBuilding 目标建筑
 func (b *BehaviorTile) TargetBuilding() *BehaviorTile {
-	// TODO: 实现建筑目标查找逻辑
-	return nil
+	return b.findTarget(func(candidate *BehaviorTile) bool {
+		return candidate != nil && candidate.Block != 0
+	})
 }
 
 // TargetUnit 目标单位
 func (b *BehaviorTile) TargetUnit() *BehaviorTile {
-	// TODO: 实现单位目标查找逻辑
-	return nil
+	return b.findTarget(func(candidate *BehaviorTile) bool {
+		return candidate != nil && candidate.Block == 0
+	})
 }
 
 // TargetCore 目标核心
 func (b *BehaviorTile) TargetCore() *BehaviorTile {
-	// TODO: 实现核心目标查找逻辑
-	return nil
+	return b.findTarget(func(candidate *BehaviorTile) bool {
+		if candidate == nil || candidate.World == nil || candidate.Block == 0 {
+			return false
+		}
+		return isCoreBlockName(candidate.World.blockNameByID(int16(candidate.Block)))
+	})
 }
 
 // TargetPlayer 目标玩家
 func (b *BehaviorTile) TargetPlayer() *BehaviorTile {
-	// TODO: 实现玩家目标查找逻辑
-	return nil
+	return b.TargetUnit()
 }
 
 // TargetAny 目标任意
 func (b *BehaviorTile) TargetAny() *BehaviorTile {
-	// TODO: 实现任意目标查找逻辑
-	return nil
+	return b.findTarget(func(candidate *BehaviorTile) bool { return candidate != nil })
+}
+
+func behaviorTileWorldCenter(b *BehaviorTile) (float32, float32) {
+	return float32(b.Tile.X*8 + 4), float32(b.Tile.Y*8 + 4)
+}
+
+func behaviorTileDistanceSq(a, c *BehaviorTile) float32 {
+	ax, ay := behaviorTileWorldCenter(a)
+	cx, cy := behaviorTileWorldCenter(c)
+	dx := cx - ax
+	dy := cy - ay
+	return dx*dx + dy*dy
+}
+
+func (b *BehaviorTile) findTarget(match func(*BehaviorTile) bool) *BehaviorTile {
+	if b == nil || b.World == nil || b.World.model == nil {
+		return nil
+	}
+	b.World.mu.RLock()
+	defer b.World.mu.RUnlock()
+
+	var best *BehaviorTile
+	bestDist := float32(math.MaxFloat32)
+	for i := range b.World.model.Tiles {
+		tile := &b.World.model.Tiles[i]
+		if tile.Build == nil || tile.Build.Health <= 0 {
+			continue
+		}
+		candidate := behaviorTileFromTileLocked(b.World, tile)
+		if !match(candidate) || sameBehaviorTilePosition(b, candidate) {
+			continue
+		}
+		if d2 := behaviorTileDistanceSq(b, candidate); d2 < bestDist {
+			best = candidate
+			bestDist = d2
+		}
+	}
+	for i := range b.World.model.Entities {
+		entity := &b.World.model.Entities[i]
+		if entity.Health <= 0 {
+			continue
+		}
+		candidate := behaviorTileFromEntityLocked(b.World, entity)
+		if !match(candidate) || sameBehaviorTilePosition(b, candidate) {
+			continue
+		}
+		if d2 := behaviorTileDistanceSq(b, candidate); d2 < bestDist {
+			best = candidate
+			bestDist = d2
+		}
+	}
+	return best
+}
+
+func sameBehaviorTilePosition(a, b *BehaviorTile) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Tile.X == b.Tile.X && a.Tile.Y == b.Tile.Y && a.Block == b.Block
+}
+
+func behaviorTileFromTileLocked(w *World, tile *Tile) *BehaviorTile {
+	if tile == nil {
+		return nil
+	}
+	out := &BehaviorTile{
+		Tile:  *tile,
+		World: w,
+		Block: tile.Block,
+		Team:  tile.Team,
+	}
+	if tile.Build != nil {
+		out.Health = tile.Build.Health
+		out.MaxHealth = tile.Build.MaxHealth
+		out.Items = append([]ItemStack(nil), tile.Build.Items...)
+		out.Liquids = append([]LiquidStack(nil), tile.Build.Liquids...)
+		out.Rotation = tile.Build.Rotation
+		out.Config = append([]byte(nil), tile.Build.Config...)
+		out.Payload = append([]byte(nil), tile.Build.Payload...)
+		if tile.Build.Team != 0 {
+			out.Team = tile.Build.Team
+		}
+	}
+	return out
+}
+
+func behaviorTileFromEntityLocked(w *World, entity *RawEntity) *BehaviorTile {
+	if entity == nil {
+		return nil
+	}
+	return &BehaviorTile{
+		Tile: Tile{
+			X: int(entity.X / 8),
+			Y: int(entity.Y / 8),
+		},
+		World:     w,
+		Health:    entity.Health,
+		MaxHealth: entity.MaxHealth,
+		Rotation:  int8(entity.Rotation),
+		Team:      entity.Team,
+	}
 }

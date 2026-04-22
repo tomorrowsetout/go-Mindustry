@@ -1,0 +1,20 @@
+# 核心配置
+# tps 为服务端逻辑帧率上限，默认 60，最高 120。
+
+[core]
+# 是否启用主逻辑核 + IO 核的双核分工模式。
+dual_core_enabled = true
+# 服务端逻辑目标帧率。
+tps = 120
+
+[memory]
+# 内存硬上限，0 表示不限制，单位 MB。
+limit_mb = 0
+# 启动阶段允许的最大内存，0 表示不单独限制，单位 MB。
+startup_max_mb = 0
+# 触发主动 GC 的阈值，0 表示关闭，单位 MB。
+gc_trigger_mb = 0
+# 内存巡检间隔，单位秒。
+check_interval_sec = 5
+# GC 后是否尝试把空闲内存归还给操作系统。
+free_os_memory = false
