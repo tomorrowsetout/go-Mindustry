@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务器，目前仅支持官方 `build 157`。
+`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务器，目前支持官方 `build 157`。
 
 项目除了基础开服能力，还内置了 HTTP API，方便按需接入你自己的前端或管理工具。
 
@@ -101,9 +101,6 @@ go build -o bin/mdt-server ./cmd/mdt-server
 
 如果你只想开服，这部分可以先不管；如果后续要接前端，再根据 `configs/api.toml` 开关和密钥配置使用即可。
 
-## 游戏内聊天命令
-
-游戏内命令不在这里展开写，进入服务器后可以直接使用 `/help` 查看。
 
 ## 控制台命令
 
