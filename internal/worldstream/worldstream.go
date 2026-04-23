@@ -42,6 +42,14 @@ type MSAVData struct {
 }
 
 func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
+	if model, err := LoadWorldModelFromMSAV(path, nil); err == nil && model != nil {
+		if payload, berr := BuildWorldStreamFromModel(model, 1); berr == nil && len(payload) > 0 {
+			if _, inspectErr := InspectWorldStreamPayload(payload); inspectErr == nil {
+				return payload, nil
+			}
+		}
+	}
+
 	data, err := readMSAV(path)
 	if err != nil {
 		return nil, err

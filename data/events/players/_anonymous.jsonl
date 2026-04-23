@@ -44,3 +44,32 @@
 {"timestamp":"2026-04-22T07:12:13.5942507Z","kind":"tcp_accept","conn_id":900763254,"ip":"10.147.17.101"}
 {"timestamp":"2026-04-22T07:19:51.8085074Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:9557 udp=","conn_id":895640639,"ip":"127.0.0.1:9557"}
 {"timestamp":"2026-04-22T07:19:51.8095818Z","kind":"tcp_accept","conn_id":895640639,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-22T09:10:36.2343143Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:9440 udp=","conn_id":1568082477,"ip":"127.0.0.1:9440"}
+{"timestamp":"2026-04-22T09:10:36.2358253Z","kind":"tcp_accept","conn_id":1568082477,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-22T15:43:10.8884642Z","kind":"connection_open","trigger":11,"detail":"tcp=1.193.154.3:2732 udp=","conn_id":329823162,"ip":"1.193.154.3:2732"}
+{"timestamp":"2026-04-22T15:43:10.8901197Z","kind":"tcp_accept","conn_id":329823162,"ip":"1.193.154.3"}
+{"timestamp":"2026-04-22T15:43:26.4799023Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:3369 udp=","conn_id":1334825322,"ip":"127.0.0.1:3369"}
+{"timestamp":"2026-04-22T15:43:26.4814141Z","kind":"tcp_accept","conn_id":1334825322,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-22T15:43:38.5165192Z","kind":"tcp_closed","detail":"EOF","conn_id":1334825322,"ip":"127.0.0.1","name":"[scarlet]（未绑定）[]未知玩家[gray]1334825322[]"}
+{"timestamp":"2026-04-22T15:43:45.5259393Z","kind":"connection_open","trigger":11,"detail":"tcp=144.12.74.175:22986 udp=","conn_id":1356079706,"ip":"144.12.74.175:22986"}
+{"timestamp":"2026-04-22T15:43:45.527011Z","kind":"tcp_accept","conn_id":1356079706,"ip":"144.12.74.175"}
+{"timestamp":"2026-04-22T15:43:57.6539024Z","kind":"tcp_closed","detail":"EOF","conn_id":1356079706,"ip":"144.12.74.175","name":"[scarlet]（未绑定）[]未知玩家[gray]1356079706[]"}
+{"timestamp":"2026-04-22T15:44:01.4267757Z","kind":"connection_close","trigger":13,"conn_id":1334825322,"ip":"127.0.0.1:3369","name":"[scarlet]（未绑定）[]未知玩家[gray]1334825322[]"}
+{"timestamp":"2026-04-22T15:44:45.545035Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:12841 udp=","conn_id":1478834452,"ip":"127.0.0.1:12841"}
+{"timestamp":"2026-04-22T15:44:45.5462866Z","kind":"tcp_accept","conn_id":1478834452,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-22T15:44:51.8455362Z","kind":"connection_open","trigger":11,"detail":"tcp=1.193.154.3:6999 udp=","conn_id":701994379,"ip":"1.193.154.3:6999"}
+{"timestamp":"2026-04-22T15:44:51.8468125Z","kind":"tcp_accept","conn_id":701994379,"ip":"1.193.154.3"}
+{"timestamp":"2026-04-22T15:44:52.7224065Z","kind":"tcp_closed","detail":"EOF","conn_id":701994379,"ip":"1.193.154.3"}
+{"timestamp":"2026-04-22T15:44:53.3471068Z","kind":"connection_open","trigger":11,"detail":"tcp=144.12.74.175:22915 udp=","conn_id":430990804,"ip":"144.12.74.175:22915"}
+{"timestamp":"2026-04-22T15:44:53.348685Z","kind":"tcp_accept","conn_id":430990804,"ip":"144.12.74.175"}
+{"timestamp":"2026-04-22T15:44:54.6868211Z","kind":"tcp_accept","conn_id":1092946462,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-22T15:44:54.8013994Z","kind":"tcp_closed","detail":"EOF","conn_id":430990804,"ip":"144.12.74.175"}
+{"timestamp":"2026-04-22T15:44:55.4712382Z","kind":"tcp_closed","detail":"EOF","conn_id":1092946462,"ip":"192.168.0.101"}
+{"timestamp":"2026-04-22T15:44:58.0024484Z","kind":"tcp_accept","conn_id":927505686,"ip":"144.12.74.175"}
+{"timestamp":"2026-04-22T15:44:58.9762191Z","kind":"tcp_closed","detail":"EOF","conn_id":927505686,"ip":"144.12.74.175","name":"[scarlet]（未绑定）[]未知玩家[gray]927505686[]"}
+{"timestamp":"2026-04-23T03:40:20.031804Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:4197 udp=","conn_id":2036446926,"ip":"127.0.0.1:4197"}
+{"timestamp":"2026-04-23T03:40:20.0329024Z","kind":"tcp_accept","conn_id":2036446926,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-23T04:44:54.829553Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:13858 udp=","conn_id":89342271,"ip":"127.0.0.1:13858"}
+{"timestamp":"2026-04-23T04:44:54.8310197Z","kind":"tcp_accept","conn_id":89342271,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-23T05:03:53.4205865Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:10348 udp=","conn_id":1680309439,"ip":"127.0.0.1:10348"}
+{"timestamp":"2026-04-23T05:03:53.421197Z","kind":"tcp_accept","conn_id":1680309439,"ip":"127.0.0.1"}

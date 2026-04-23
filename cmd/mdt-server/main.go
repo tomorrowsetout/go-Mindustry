@@ -101,9 +101,6 @@ func preferredConfigBases(preferExecutable bool) []string {
 			return
 		}
 		clean := filepath.Clean(path)
-		if strings.EqualFold(filepath.Base(clean), "bin") {
-			add(filepath.Dir(clean))
-		}
 		add(clean)
 	}
 
@@ -144,6 +141,13 @@ func resolvePathFromBases(path string, bases []string) string {
 			}
 			return filepath.Clean(candidate)
 		}
+	}
+	if len(bases) > 0 {
+		candidate := filepath.Join(bases[0], path)
+		if abs, err := filepath.Abs(candidate); err == nil {
+			return abs
+		}
+		return filepath.Clean(candidate)
 	}
 	if abs, err := filepath.Abs(path); err == nil {
 		return abs
@@ -388,6 +392,93 @@ func resolveConfigSidecarPath(configDir, raw string) string {
 	return filepath.Clean(filepath.Join(configDir, raw))
 }
 
+func runtimePathBases() []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 4)
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		clean := filepath.Clean(path)
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		out = append(out, clean)
+	}
+	add(runtimeBaseDir)
+	if abs, err := filepath.Abs(runtimeBaseDir); err == nil {
+		add(abs)
+	}
+	if wd, err := os.Getwd(); err == nil {
+		add(wd)
+	}
+	return out
+}
+
+func resolveRuntimePath(raw string) string {
+	raw = normalizeRelativePath(raw)
+	if raw == "" {
+		return ""
+	}
+	if filepath.IsAbs(raw) {
+		return filepath.Clean(raw)
+	}
+	for _, base := range runtimePathBases() {
+		candidate := filepath.Join(base, raw)
+		if _, err := os.Stat(candidate); err == nil {
+			if abs, aerr := filepath.Abs(candidate); aerr == nil {
+				return abs
+			}
+			return filepath.Clean(candidate)
+		}
+	}
+	if base := strings.TrimSpace(runtimeBaseDir); base != "" {
+		candidate := filepath.Join(base, raw)
+		if abs, err := filepath.Abs(candidate); err == nil {
+			return abs
+		}
+		return filepath.Clean(candidate)
+	}
+	if abs, err := filepath.Abs(raw); err == nil {
+		return abs
+	}
+	return filepath.Clean(raw)
+}
+
+func canonicalRuntimePath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	clean := filepath.Clean(filepath.FromSlash(raw))
+	abs := clean
+	if !filepath.IsAbs(abs) {
+		abs = resolveRuntimePath(clean)
+	}
+	base := strings.TrimSpace(runtimeBaseDir)
+	if base != "" {
+		if baseAbs, err := filepath.Abs(base); err == nil {
+			if absClean, aerr := filepath.Abs(abs); aerr == nil {
+				if rel, rerr := filepath.Rel(baseAbs, absClean); rerr == nil {
+					rel = filepath.Clean(rel)
+					if rel == "." {
+						return rel
+					}
+					if rel != "" && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+						return rel
+					}
+				}
+			}
+		}
+	}
+	if filepath.IsAbs(clean) {
+		return abs
+	}
+	return clean
+}
+
 func publicConnIDValue(store *persist.PublicConnUUIDStore, uuid string, connID int32) string {
 	if !runtimePublicConnUUIDEnabled.Load() {
 		return strconv.FormatInt(int64(connID), 10)
@@ -406,6 +497,68 @@ func publicConnUUIDValue(store *persist.PublicConnUUIDStore, uuid string) string
 		}
 	}
 	return ""
+}
+
+func ensureConnIdentityRecords(publicStore *persist.PublicConnUUIDStore, identityStore *persist.PlayerIdentityStore, uuid, name, ip string) (string, bool) {
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" || publicStore == nil || !runtimePublicConnUUIDEnabled.Load() {
+		return "", false
+	}
+	connUUID, err := publicStore.Ensure(uuid, name, ip)
+	if err != nil {
+		return "", false
+	}
+	connUUID = strings.TrimSpace(connUUID)
+	if connUUID == "" {
+		return "", false
+	}
+	if identityStore == nil {
+		return connUUID, false
+	}
+	_, ok, err := identityStore.Ensure(connUUID)
+	if err != nil {
+		return connUUID, false
+	}
+	return connUUID, ok
+}
+
+func lookupConnIdentityState(publicStore *persist.PublicConnUUIDStore, identityStore *persist.PlayerIdentityStore, uuid string) (string, bool, bool) {
+	if !runtimePublicConnUUIDEnabled.Load() {
+		return "", false, false
+	}
+	connUUID := publicConnUUIDValue(publicStore, uuid)
+	if connUUID == "" {
+		return "", false, false
+	}
+	if identityStore == nil {
+		return connUUID, true, false
+	}
+	_, ok := identityStore.Lookup(connUUID)
+	return connUUID, true, ok
+}
+
+func shouldAnnotateConnectionCheckpoint(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "connect_packet", "world_handshake_sent", "connect_confirm", "connect_aborted_pre_confirm":
+		return true
+	default:
+		return false
+	}
+}
+
+func appendConnectionCheckpointDetail(detail string, ev netserver.NetEvent, publicStore *persist.PublicConnUUIDStore, identityStore *persist.PlayerIdentityStore) string {
+	if !shouldAnnotateConnectionCheckpoint(ev.Kind) {
+		return detail
+	}
+	connUUID, connUUIDReady, identityReady := lookupConnIdentityState(publicStore, identityStore, ev.UUID)
+	displayName := strings.TrimSpace(ev.Name)
+	displayNameReady := displayName != ""
+	checkpoint := fmt.Sprintf("checkpoint conn_uuid=%q conn_uuid_ready=%t identity_ready=%t display_name_ready=%t display_name=%q",
+		connUUID, connUUIDReady, identityReady, displayNameReady, displayName)
+	if strings.TrimSpace(detail) == "" {
+		return checkpoint
+	}
+	return detail + " | " + checkpoint
 }
 
 func buildCoreSnapshotData(wld *world.World) []byte {
@@ -563,6 +716,7 @@ var (
 	runtimeWorldRoots []string
 	runtimeAssetsDir  = "assets"
 	runtimeConfigDir  = "configs"
+	runtimeBaseDir    = "."
 )
 
 type startupStatus int
@@ -825,6 +979,7 @@ func main() {
 	if strings.TrimSpace(rootDir) == "" || rootDir == configDir {
 		rootDir = "."
 	}
+	runtimeBaseDir = rootDir
 	// 非配置类目录/文件全部以 EXE 根目录为基准生成；configs 只存放配置文件。
 	config.ApplyBaseDir(&cfg, rootDir)
 	detailLog, detailLogErr := newDetailedLogWriter(cfg.Runtime.LogsDir, cfg.Sundries.DetailedLogMaxMB, cfg.Sundries.DetailedLogMaxFiles)
@@ -903,7 +1058,7 @@ func main() {
 		nameForBanner = "mdt-server"
 	}
 	fmt.Fprintf(os.Stdout, "%s %s (%s)\n", nameForBanner, buildinfo.Version, buildinfo.Commit)
-	fmt.Fprintf(os.Stdout, "config=%s cores=%d tps=%d addr=%s build=%d world=%s vanilla=%s\n", cfg.Source, cfg.Runtime.Cores, cfg.Core.TPS, *addr, *buildVersion, *worldArg, cfg.Runtime.VanillaProfiles)
+	fmt.Fprintf(os.Stdout, "config=%s cores=%d tps=%d addr=%s build=%d world=%s vanilla=%s\n", canonicalRuntimePath(cfg.Source), cfg.Runtime.Cores, cfg.Core.TPS, *addr, *buildVersion, *worldArg, canonicalRuntimePath(cfg.Runtime.VanillaProfiles))
 	if len(bootstrapResult.CreatedDirs) > 0 || len(bootstrapResult.CreatedFiles) > 0 {
 		fmt.Fprintf(os.Stdout, "workspace initialized: dirs=%d files=%d\n", len(bootstrapResult.CreatedDirs), len(bootstrapResult.CreatedFiles))
 	}
@@ -957,6 +1112,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "世界选择无效: %v\n", err)
 		os.Exit(1)
 	}
+	initialWorld = canonicalRuntimePath(initialWorld)
 	state := &worldState{current: initialWorld}
 	runtimePlayerNameColorEnabled.Store(cfg.Personalization.PlayerNameColorEnabled)
 	runtimeJoinLeaveChatEnabled.Store(cfg.Personalization.JoinLeaveChatEnabled)
@@ -969,7 +1125,7 @@ func main() {
 	runtimePlayerConnIDSuffixEnabled.Store(cfg.Personalization.PlayerConnIDSuffixEnabled)
 	runtimePlayerConnIDSuffixFormat.Store(cfg.Personalization.PlayerConnIDSuffixFormat)
 	if cfg.Personalization.StartupCurrentMapLineEnabled {
-		fmt.Fprintf(os.Stdout, "当前地图: %s\n", initialWorld)
+		fmt.Fprintf(os.Stdout, "当前地图: %s\n", canonicalRuntimePath(initialWorld))
 	}
 
 	var publicConnUUIDStore *persist.PublicConnUUIDStore
@@ -1046,7 +1202,7 @@ func main() {
 		if c == nil {
 			return ""
 		}
-		return formatDisplayPlayerNameRaw(c.Name(), c, publicConnUUIDStore, playerIdentityStore)
+		return formatDisplayPlayerNameRaw(c.BaseName(), c, publicConnUUIDStore, playerIdentityStore)
 	})
 	srv.RefreshPlayerDisplayNames()
 	var (
@@ -1080,11 +1236,11 @@ func main() {
 	}
 	contentIDsPath := filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json")
 	if ids, err := vanilla.LoadContentIDs(contentIDsPath); err != nil {
-		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", contentIDsPath, err))
+		startup.warn("原版 content IDs", fmt.Sprintf("未加载(%s): %v", canonicalRuntimePath(contentIDsPath), err))
 	} else {
 		setEffectIDs(ids)
 		count := vanilla.ApplyContentIDs(srv.Content, ids)
-		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, contentIDsPath))
+		startup.ok("原版 content IDs", fmt.Sprintf("entries=%d path=%s", count, canonicalRuntimePath(contentIDsPath)))
 	}
 	srv.SetServerName(cfg.Runtime.ServerName)
 	srv.SetServerDescription(cfg.Runtime.ServerDesc)
@@ -1418,9 +1574,11 @@ func main() {
 		log.Warn("vanilla profiles load failed", logging.Field{Key: "path", Value: cfg.Runtime.VanillaProfiles}, logging.Field{Key: "error", Value: err.Error()})
 		startup.warn("原版 profiles", fmt.Sprintf("加载失败: %s", err.Error()))
 	} else if strings.TrimSpace(cfg.Runtime.VanillaProfiles) != "" {
-		startup.ok("原版 profiles", cfg.Runtime.VanillaProfiles)
+		startup.ok("原版 profiles", canonicalRuntimePath(cfg.Runtime.VanillaProfiles))
 	}
 	loadWorldModel := func(path string) {
+		path = canonicalRuntimePath(path)
+		actualPath := resolveRuntimePath(path)
 		buildService.Reset()
 		lower := strings.ToLower(path)
 		if !strings.HasSuffix(lower, ".msav") && !strings.HasSuffix(lower, ".msav.msav") {
@@ -1429,7 +1587,7 @@ func main() {
 			loadedMapPath = ""
 			return
 		}
-		model, lerr := worldstream.LoadWorldModelFromMSAV(path, srv.Content)
+		model, lerr := worldstream.LoadWorldModelFromMSAV(actualPath, srv.Content)
 		if lerr != nil {
 			log.Warn("world model load failed", logging.Field{Key: "path", Value: path}, logging.Field{Key: "error", Value: lerr.Error()})
 			startup.warn("地图模型", fmt.Sprintf("加载失败: %s", lerr.Error()))
@@ -1464,6 +1622,23 @@ func main() {
 		loadedModel = model
 		loadedMapPath = path
 		startup.ok("地图模型", fmt.Sprintf("%s (%dx%d)", path, model.Width, model.Height))
+		if summary := world.DescribeRuleMode(model, wld.GetRulesManager().Get()); summary.Mode != "" {
+			modeName := summary.ModeName
+			if modeName == "" {
+				modeName = "-"
+			}
+			startup.info("地图模式", fmt.Sprintf("mode=%s modeName=%s waves=%v waveTimer=%v pvp=%v attack=%v editor=%v infiniteResources=%v infiniteAmmo=%v",
+				summary.Mode,
+				modeName,
+				summary.Waves,
+				summary.WaveTimer,
+				summary.Pvp,
+				summary.AttackMode,
+				summary.Editor,
+				summary.InfiniteResources,
+				summary.InfiniteAmmo,
+			))
+		}
 		if model != nil && len(model.UnitNames) > 0 {
 			unitNamesByID = make(map[int16]string, len(model.UnitNames))
 			for k, v := range model.UnitNames {
@@ -1489,6 +1664,7 @@ func main() {
 		}
 		startup.ok("玩家出生单位", fmt.Sprintf("typeId=%d", spawnType))
 	}
+	var cache *worldCache
 	applyVotedWorld := func(next string) error {
 		state.set(next)
 		loadWorldModel(next)
@@ -1553,6 +1729,16 @@ func main() {
 	} else {
 		runtimePlayerIdentityStore = playerIdentityStore
 	}
+	srv.OnConnectAccepted = func(conn *netserver.Conn, pkt *protocol.ConnectPacket) {
+		if conn == nil {
+			return
+		}
+		sourceName := strings.TrimSpace(conn.BaseName())
+		if sourceName == "" && pkt != nil {
+			sourceName = strings.TrimSpace(pkt.Name)
+		}
+		_, _ = ensureConnIdentityRecords(publicConnUUIDStore, playerIdentityStore, conn.UUID(), sourceName, connRemoteIP(conn))
+	}
 	runtimeBindStatusResolver = newBindStatusResolver(
 		cfg.Personalization.PlayerBindSource,
 		cfg.Personalization.PlayerBindAPIURL,
@@ -1562,11 +1748,12 @@ func main() {
 	)
 	srv.OnEvent = func(ev netserver.NetEvent) {
 		if publicConnUUIDStore != nil && ev.Kind == "connect_packet" && runtimePublicConnUUIDEnabled.Load() {
-			connUUID, _ := publicConnUUIDStore.Ensure(ev.UUID, ev.Name, ev.IP)
-			if playerIdentityStore != nil && strings.TrimSpace(connUUID) != "" {
-				_, _, _ = playerIdentityStore.Ensure(connUUID)
+			if current := publicConnUUIDValue(publicConnUUIDStore, ev.UUID); current == "" {
+				name := strings.TrimSpace(netserver.StripMindustryColorTags(ev.Name))
+				_, _ = ensureConnIdentityRecords(publicConnUUIDStore, playerIdentityStore, ev.UUID, name, ev.IP)
 			}
 		}
+		ev.Detail = appendConnectionCheckpointDetail(ev.Detail, ev, publicConnUUIDStore, playerIdentityStore)
 		_ = recorder.Record(storage.Event{
 			Timestamp: ev.Timestamp,
 			Kind:      ev.Kind,
@@ -1642,8 +1829,19 @@ func main() {
 	scriptCtl.ScheduleStartupTasks(cfg.Script.StartupTasks)
 	scriptCtl.SetDailyGC(cfg.Script.DailyGCTime)
 
-	cache := &worldCache{content: srv.Content}
-	invalidateWorldCache = cache.invalidate
+	cache = &worldCache{content: srv.Content}
+	invalidateWorldCache = func() {
+		cache.invalidate()
+		if err := warmWorldCache(cache, state.get()); err != nil {
+			log.Warn("world cache warm failed", logging.Field{Key: "path", Value: state.get()}, logging.Field{Key: "error", Value: err.Error()})
+		}
+	}
+	if err := warmWorldCache(cache, state.get()); err != nil {
+		log.Warn("world cache warm failed", logging.Field{Key: "path", Value: state.get()}, logging.Field{Key: "error", Value: err.Error()})
+		startup.warn("世界流缓存", err.Error())
+	} else {
+		startup.ok("世界流缓存", state.get())
+	}
 	srv.WorldDataFn = func(conn *netserver.Conn, _ *protocol.ConnectPacket) ([]byte, error) {
 		payload, err := buildInitialWorldDataPayload(conn, wld, cache, state.get())
 		if err == nil {
@@ -2982,6 +3180,7 @@ func main() {
 			if serverCore != nil {
 				serverCore.StopAll()
 			}
+			_ = traceLog.Close()
 			_ = detailLog.Close()
 			_ = recorder.Close()
 			os.Exit(0)
@@ -3224,7 +3423,12 @@ func main() {
 	if cfg.Personalization.UnitIDListEnabled {
 		printUnitIDList(unitNamesByID)
 	}
-	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, invalidateWorldCache, reloadVanillaProfiles, reloadVanillaContentIDs, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer)
+	closeImmediate := func() {
+		_ = traceLog.Close()
+		_ = detailLog.Close()
+		_ = recorder.Close()
+	}
+	go runConsole(srv, state, modMgr, apiSrv, scriptCtl, *addr, *buildVersion, &cfg, saveConfig, saveScript, recorder, monitor, saveOps, loadWorldModel, invalidateWorldCache, reloadVanillaProfiles, reloadVanillaContentIDs, removeEntityByID, setEntityMotion, setEntityPos, setEntityLife, setEntityFollow, setEntityPatrol, clearEntityBehavior, stopServer, closeImmediate)
 	if serverCore != nil {
 		go func() {
 			if err := srv.Serve(); err != nil {
@@ -3298,7 +3502,7 @@ func startMemoryGuard(cfg config.CoreConfig) {
 func (s *worldState) set(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.current = path
+	s.current = canonicalRuntimePath(path)
 }
 
 func (s *worldState) get() string {
@@ -3344,6 +3548,7 @@ func runConsole(
 	setEntityPatrol func(id int32, x1, y1, x2, y2, speed float32) bool,
 	clearEntityBehavior func(id int32) bool,
 	stopServer func(reason string),
+	closeImmediate func(),
 ) {
 	sc := bufio.NewScanner(os.Stdin)
 	name, _, _ := srv.ServerMeta()
@@ -3409,7 +3614,7 @@ func runConsole(
 				fmt.Printf("plugin type=%s name=%s path=%s\n", p.Runtime, p.Name, p.Path)
 			}
 		case "world":
-			fmt.Printf("当前地图: %s\n", state.get())
+			fmt.Printf("当前地图: %s\n", canonicalRuntimePath(state.get()))
 		case "host":
 			if len(parts) < 2 {
 				fmt.Println("用法: host random | host <地图名> | host <.msav 文件路径>")
@@ -3458,11 +3663,15 @@ func runConsole(
 			stopServer("正在保存并关闭服务器")
 		case "exit":
 			fmt.Println("直接退出服务器（不保存）")
-			_ = recorder.Close()
+			if closeImmediate != nil {
+				closeImmediate()
+			}
 			os.Exit(0)
 		case "quit":
 			fmt.Println("直接退出服务器（不保存）")
-			_ = recorder.Close()
+			if closeImmediate != nil {
+				closeImmediate()
+			}
 			os.Exit(0)
 		case "ip":
 			printIPs(listenAddr)
@@ -3516,7 +3725,7 @@ func runConsole(
 			printAPIKey(*cfg)
 		case "storage", "data":
 			if len(parts) == 1 || strings.EqualFold(parts[1], "status") {
-				fmt.Printf("storage: %s (db_enabled=%v mode=%s dir=%s dsn=%q)\n", recorder.Status(), cfg.Storage.DatabaseEnabled, cfg.Storage.Mode, cfg.Storage.Directory, cfg.Storage.DSN)
+				fmt.Printf("storage: file:%s (db_enabled=%v mode=%s dir=%s dsn=%q)\n", canonicalRuntimePath(cfg.Storage.Directory), cfg.Storage.DatabaseEnabled, cfg.Storage.Mode, canonicalRuntimePath(cfg.Storage.Directory), cfg.Storage.DSN)
 				continue
 			}
 			if len(parts) >= 3 && strings.EqualFold(parts[1], "db") {
@@ -3649,8 +3858,8 @@ func runConsole(
 			}
 		case "vanilla":
 			if len(parts) == 1 || strings.EqualFold(parts[1], "status") {
-				fmt.Printf("vanilla profiles: %s\n", cfg.Runtime.VanillaProfiles)
-				fmt.Printf("vanilla content ids: %s\n", filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json"))
+				fmt.Printf("vanilla profiles: %s\n", canonicalRuntimePath(cfg.Runtime.VanillaProfiles))
+				fmt.Printf("vanilla content ids: %s\n", canonicalRuntimePath(filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json")))
 				continue
 			}
 			sub := strings.ToLower(parts[1])
@@ -3666,7 +3875,7 @@ func runConsole(
 					fmt.Printf("vanilla reload 失败: %v\n", err)
 					continue
 				}
-				fmt.Printf("vanilla profiles 已加载: %s\n", path)
+				fmt.Printf("vanilla profiles 已加载: %s\n", canonicalRuntimePath(path))
 			case "gen":
 				out := cfg.Runtime.VanillaProfiles
 				repoRoot := "."
@@ -3692,7 +3901,7 @@ func runConsole(
 					fmt.Printf("profiles 生成成功但加载失败: %v\n", err)
 					continue
 				}
-				fmt.Printf("vanilla profiles 生成并加载完成: units_by_name=%d turrets=%d blocks=%d path=%s\n", units, turrets, blocks, out)
+				fmt.Printf("vanilla profiles 生成并加载完成: units_by_name=%d turrets=%d blocks=%d path=%s\n", units, turrets, blocks, canonicalRuntimePath(out))
 			case "ids":
 				if len(parts) < 3 {
 					fmt.Println("用法: vanilla ids gen [repoRoot] [outPath] | vanilla ids reload [path]")
@@ -3730,7 +3939,7 @@ func runConsole(
 						fmt.Printf("vanilla ids reload 失败: %v\n", err)
 						continue
 					}
-					fmt.Printf("vanilla content ids 已加载: %s\n", path)
+					fmt.Printf("vanilla content ids 已加载: %s\n", canonicalRuntimePath(path))
 				default:
 					fmt.Println("用法: vanilla ids gen [repoRoot] [outPath] | vanilla ids reload [path]")
 				}
@@ -4283,7 +4492,7 @@ func printHelpCategory(cfg config.Config, category string) {
 		printHelpCmd("vanilla gen [repoRoot] [outPath]", "从原版源码自动生成并加载 profiles.json（可选输出路径）")
 		printHelpCmd("vanilla ids gen [repoRoot] [outPath]", "从原版源码/logicids.dat 生成并加载 content IDs")
 		printHelpCmd("vanilla ids reload [path]", "重载 content IDs 到协议内容注册表")
-		fmt.Printf("  当前文件: %s\n", cfg.Runtime.VanillaProfiles)
+		fmt.Printf("  当前文件: %s\n", canonicalRuntimePath(cfg.Runtime.VanillaProfiles))
 	case "runtime":
 		printHelpCmd("status", "输出服务器资源状态")
 		printHelpCmd("status watch on|off", "周期输出服务器资源状态")
@@ -4327,10 +4536,10 @@ func printHelpCategory(cfg config.Config, category string) {
 		printHelpCmd("scheduler status|on|off", "调度器配置")
 		fmt.Printf("  scheduler 状态:           %s\n", colorState(cfg.Runtime.SchedulerEnabled))
 	case "persist":
-		fmt.Printf("  persist: enabled=%v dir=%s file=%s interval=%ds\n", cfg.Persist.Enabled, cfg.Persist.Directory, cfg.Persist.File, cfg.Persist.IntervalSec)
-		fmt.Printf("  msav: enabled=%v dir=%s file=%s\n", cfg.Persist.SaveMSAV, cfg.Persist.MSAVDir, cfg.Persist.MSAVFile)
-		fmt.Printf("  script file: %s\n", cfg.Script.File)
-		fmt.Printf("  ops file: %s\n", cfg.Admin.OpsFile)
+		fmt.Printf("  persist: enabled=%v dir=%s file=%s interval=%ds\n", cfg.Persist.Enabled, canonicalRuntimePath(cfg.Persist.Directory), cfg.Persist.File, cfg.Persist.IntervalSec)
+		fmt.Printf("  msav: enabled=%v dir=%s file=%s\n", cfg.Persist.SaveMSAV, canonicalRuntimePath(cfg.Persist.MSAVDir), cfg.Persist.MSAVFile)
+		fmt.Printf("  script file: %s\n", canonicalRuntimePath(cfg.Script.File))
+		fmt.Printf("  ops file: %s\n", canonicalRuntimePath(cfg.Admin.OpsFile))
 	case "net":
 		fmt.Printf("  UDP 重试次数: %d\n", cfg.Net.UdpRetryCount)
 		fmt.Printf("  UDP 重试间隔: %dms\n", cfg.Net.UdpRetryDelayMs)
@@ -4806,9 +5015,11 @@ func displayPlayerName(c *netserver.Conn) string {
 	if c == nil {
 		return "未知玩家"
 	}
-	name := strings.TrimSpace(c.Name())
+	name := strings.TrimSpace(c.BaseName())
 	if name == "" {
-		name = fmt.Sprintf("player-%d", c.PlayerID())
+		if c.PlayerID() != 0 {
+			name = fmt.Sprintf("player-%d", c.PlayerID())
+		}
 	}
 	name = formatDisplayPlayerNameRaw(name, c, nil, nil)
 	if runtimePlayerNameColorEnabled.Load() {
@@ -5996,6 +6207,18 @@ func buildRuntimeRulesRaw(wld *world.World, mapPath string) string {
 	if wld == nil {
 		return "{}"
 	}
+	marshal := func() string {
+		// The Go server does not currently synchronize Mindustry's fog discovery
+		// bitsets. Leaving map/campaign fog enabled makes official clients render
+		// the world and minimap as fully undiscovered black.
+		merged["fog"] = false
+		merged["staticFog"] = false
+		raw, err := json.Marshal(merged)
+		if err != nil || len(raw) == 0 {
+			return "{}"
+		}
+		return string(raw)
+	}
 	model := wld.Model()
 	if model != nil && model.Tags != nil {
 		if raw := strings.TrimSpace(model.Tags["rules"]); raw != "" {
@@ -6004,17 +6227,11 @@ func buildRuntimeRulesRaw(wld *world.World, mapPath string) string {
 	}
 	rulesMgr := wld.GetRulesManager()
 	if rulesMgr == nil {
-		if raw, err := json.Marshal(merged); err == nil && len(raw) > 0 {
-			return string(raw)
-		}
-		return "{}"
+		return marshal()
 	}
 	rules := rulesMgr.Get()
 	if rules == nil {
-		if raw, err := json.Marshal(merged); err == nil && len(raw) > 0 {
-			return string(raw)
-		}
-		return "{}"
+		return marshal()
 	}
 
 	merged["allowEditRules"] = rules.AllowEditRules
@@ -6039,12 +6256,7 @@ func buildRuntimeRulesRaw(wld *world.World, mapPath string) string {
 	if modeName := strings.TrimSpace(rules.ModeName); modeName != "" {
 		merged["modeName"] = modeName
 	}
-
-	raw, err := json.Marshal(merged)
-	if err != nil || len(raw) == 0 {
-		return "{}"
-	}
-	return string(raw)
+	return marshal()
 }
 
 func syncRulesToConn(conn *netserver.Conn, wld *world.World, mapPath string) {
@@ -6452,21 +6664,21 @@ func resolveWorldSelection(arg string) (string, error) {
 	}
 	if strings.HasSuffix(lower, ".msav") || strings.HasSuffix(lower, ".msav.msav") {
 		if exists(trimmed) {
-			return trimmed, nil
+			return canonicalRuntimePath(trimmed), nil
 		}
 		if strings.HasSuffix(lower, ".msav") || strings.HasSuffix(lower, ".msav.msav") {
 			base := worldstream.TrimMapName(filepath.Base(trimmed))
 			if p, ok, err := findWorldByBaseName(base); err != nil {
 				return "", err
 			} else if ok {
-				return p, nil
+				return canonicalRuntimePath(p), nil
 			}
 			for _, candidate := range []string{
 				filepath.Join("..", "core", "assets", "maps", "default", base+".msav"),
 				filepath.Join("..", "..", "core", "assets", "maps", "default", base+".msav"),
 			} {
 				if exists(candidate) {
-					return candidate, nil
+					return canonicalRuntimePath(candidate), nil
 				}
 			}
 		}
@@ -6476,7 +6688,7 @@ func resolveWorldSelection(arg string) (string, error) {
 	if p, ok, err := findWorldByBaseName(trimmed); err != nil {
 		return "", err
 	} else if ok {
-		return p, nil
+		return canonicalRuntimePath(p), nil
 	}
 
 	for _, candidate := range []string{
@@ -6484,7 +6696,7 @@ func resolveWorldSelection(arg string) (string, error) {
 		filepath.Join("..", "..", "core", "assets", "maps", "default", trimmed+".msav"),
 	} {
 		if exists(candidate) {
-			return candidate, nil
+			return canonicalRuntimePath(candidate), nil
 		}
 	}
 
@@ -6497,7 +6709,7 @@ func resolveWorldSelection(arg string) (string, error) {
 func pickRandomWorld() (string, error) {
 	localFiles, err := listWorldFilesRecursive(localWorldRoots())
 	if err == nil && len(localFiles) > 0 {
-		return localFiles[mathrand.New(mathrand.NewSource(time.Now().UnixNano())).Intn(len(localFiles))], nil
+		return canonicalRuntimePath(localFiles[mathrand.New(mathrand.NewSource(time.Now().UnixNano())).Intn(len(localFiles))]), nil
 	}
 	coreCandidates := []string{
 		filepath.Join("..", "core", "assets", "maps", "default", "*.msav"),
@@ -6506,7 +6718,7 @@ func pickRandomWorld() (string, error) {
 	for _, g := range coreCandidates {
 		files, err := filepath.Glob(g)
 		if err == nil && len(files) > 0 {
-			return files[mathrand.New(mathrand.NewSource(time.Now().UnixNano())).Intn(len(files))], nil
+			return canonicalRuntimePath(files[mathrand.New(mathrand.NewSource(time.Now().UnixNano())).Intn(len(files))]), nil
 		}
 	}
 	return "", errors.New("未找到地图文件（需要 assets/worlds/*.msav 或 core/assets/maps/default/*.msav）")
@@ -6654,12 +6866,12 @@ func printSelfCheck(listenAddr string, build int, worldPath string, cfg config.C
 	fmt.Println("自检（无网络探测模式）:")
 	fmt.Printf("  监听地址: %s\n", listenAddr)
 	fmt.Printf("  目标版本: %d\n", build)
-	fmt.Printf("  当前地图: %s\n", worldPath)
+	fmt.Printf("  当前地图: %s\n", canonicalRuntimePath(worldPath))
 	fmt.Printf("  API: enabled=%v bind=%s auth=%v keys=%d\n", cfg.API.Enabled, cfg.API.Bind, len(cfg.API.Keys) > 0, len(cfg.API.Keys))
-	fmt.Printf("  Storage: mode=%s db=%v dir=%s\n", cfg.Storage.Mode, cfg.Storage.DatabaseEnabled, cfg.Storage.Directory)
+	fmt.Printf("  Storage: mode=%s db=%v dir=%s\n", cfg.Storage.Mode, cfg.Storage.DatabaseEnabled, canonicalRuntimePath(cfg.Storage.Directory))
 	fmt.Printf("  Mods: enabled=%v dir=%s\n", cfg.Mods.Enabled, cfg.Mods.Directory)
-	fmt.Printf("  Persist: enabled=%v dir=%s file=%s interval=%ds\n", cfg.Persist.Enabled, cfg.Persist.Directory, cfg.Persist.File, cfg.Persist.IntervalSec)
-	fmt.Printf("  MSAV snapshot: enabled=%v dir=%s file=%s\n", cfg.Persist.SaveMSAV, cfg.Persist.MSAVDir, cfg.Persist.MSAVFile)
+	fmt.Printf("  Persist: enabled=%v dir=%s file=%s interval=%ds\n", cfg.Persist.Enabled, canonicalRuntimePath(cfg.Persist.Directory), cfg.Persist.File, cfg.Persist.IntervalSec)
+	fmt.Printf("  MSAV snapshot: enabled=%v dir=%s file=%s\n", cfg.Persist.SaveMSAV, canonicalRuntimePath(cfg.Persist.MSAVDir), cfg.Persist.MSAVFile)
 	host, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
 		fmt.Printf("  端口解析失败: %v\n", err)
@@ -7076,8 +7288,8 @@ func (c *worldCache) get(path string) ([]byte, error) {
 		if res, err := c.backend.GetWorldCache(path); err == nil {
 			if _, inspectErr := worldstream.InspectWorldStreamPayload(res.Data); inspectErr == nil {
 				c.mu.Lock()
-				c.path = path
-				if info, statErr := os.Stat(path); statErr == nil {
+				c.path = canonicalRuntimePath(path)
+				if info, statErr := os.Stat(resolveRuntimePath(path)); statErr == nil {
 					c.modTime = info.ModTime()
 				}
 				c.data = append([]byte(nil), res.Data...)
@@ -7091,32 +7303,34 @@ func (c *worldCache) get(path string) ([]byte, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	canonicalPath := canonicalRuntimePath(path)
+	actualPath := resolveRuntimePath(canonicalPath)
 
-	info, err := os.Stat(path)
+	info, err := os.Stat(actualPath)
 	if err != nil {
 		return nil, err
 	}
-	if c.path == path && c.modTime.Equal(info.ModTime()) && len(c.data) > 0 {
+	if c.path == canonicalPath && c.modTime.Equal(info.ModTime()) && len(c.data) > 0 {
 		return c.data, nil
 	}
 
-	data, err := loadWorldStream(path, c.content)
+	data, err := loadWorldStream(canonicalPath, c.content)
 	if err != nil {
 		return nil, err
 	}
 	if _, inspectErr := worldstream.InspectWorldStreamPayload(data); inspectErr != nil {
 		return nil, fmt.Errorf("inspect local worldstream payload: %w", inspectErr)
 	}
-	c.path = path
+	c.path = canonicalPath
 	c.modTime = info.ModTime()
 	c.data = data
 	c.baseModel = nil
 	c.corePosOK = false
-	if isMSAVPath(path) {
-		if model, merr := worldstream.LoadWorldModelFromMSAV(path, c.content); merr == nil {
+	if isMSAVPath(canonicalPath) {
+		if model, merr := worldstream.LoadWorldModelFromMSAV(actualPath, c.content); merr == nil {
 			c.baseModel = model
 		}
-		if pos, ok, err := worldstream.FindCoreTileFromMSAV(path); err == nil {
+		if pos, ok, err := worldstream.FindCoreTileFromMSAV(actualPath); err == nil {
 			c.corePos = pos
 			c.corePosOK = ok
 		}
@@ -7169,24 +7383,33 @@ func buildInitialWorldDataPayload(conn *netserver.Conn, wld *world.World, cache 
 				payload = patched
 			}
 		}
+		if patched, perr := worldstream.RewriteRulesInWorldStream(payload, buildRuntimeRulesRaw(wld, path)); perr == nil {
+			payload = patched
+		}
 		return payload, nil
 	}
 
 	if wld != nil {
 		snap := wld.Snapshot()
-		if baseModel := wld.Model(); baseModel != nil {
-			if payload, lerr := worldstream.BuildWorldStreamFromModelSnapshot(baseModel.Clone(), playerID, snap); lerr == nil && len(payload) > 0 {
-				if _, inspectErr := worldstream.InspectWorldStreamPayload(payload); inspectErr == nil {
-					return payload, nil
-				}
-			}
-		}
 		if liveModel := wld.CloneModelForWorldStream(); liveModel != nil {
 			if payload, lerr := worldstream.BuildWorldStreamFromModelSnapshot(liveModel, playerID, snap); lerr == nil && len(payload) > 0 {
+				if patched, perr := worldstream.RewriteRulesInWorldStream(payload, buildRuntimeRulesRaw(wld, path)); perr == nil {
+					payload = patched
+				}
 				if _, inspectErr := worldstream.InspectWorldStreamPayload(payload); inspectErr == nil {
 					if conn != nil {
 						conn.SetLiveWorldStream(true)
 					}
+					return payload, nil
+				}
+			}
+		}
+		if baseModel := wld.Model(); baseModel != nil {
+			if payload, lerr := worldstream.BuildWorldStreamFromModelSnapshot(baseModel.Clone(), playerID, snap); lerr == nil && len(payload) > 0 {
+				if patched, perr := worldstream.RewriteRulesInWorldStream(payload, buildRuntimeRulesRaw(wld, path)); perr == nil {
+					payload = patched
+				}
+				if _, inspectErr := worldstream.InspectWorldStreamPayload(payload); inspectErr == nil {
 					return payload, nil
 				}
 			}
@@ -7197,20 +7420,36 @@ func buildInitialWorldDataPayload(conn *netserver.Conn, wld *world.World, cache 
 }
 
 func loadWorldStream(path string, content *protocol.ContentRegistry) ([]byte, error) {
+	actualPath := resolveRuntimePath(path)
 	lower := strings.ToLower(path)
 	if strings.HasSuffix(lower, ".msav") || strings.HasSuffix(lower, ".msav.msav") {
-		if model, err := worldstream.LoadWorldModelFromMSAV(path, content); err == nil && model != nil {
+		if payload, err := worldstream.BuildWorldStreamFromMSAV(actualPath); err == nil && len(payload) > 0 {
+			return payload, nil
+		}
+		if model, err := worldstream.LoadWorldModelFromMSAV(actualPath, content); err == nil && model != nil {
 			if payload, berr := worldstream.BuildWorldStreamFromModel(model, 1); berr == nil && len(payload) > 0 {
 				return payload, nil
 			}
 		}
-		return worldstream.BuildWorldStreamFromMSAV(path)
+		return worldstream.BuildWorldStreamFromMSAV(actualPath)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(actualPath)
 	if err != nil {
 		return nil, err
 	}
 	return data, nil
+}
+
+func warmWorldCache(cache *worldCache, path string) error {
+	if cache == nil {
+		return nil
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	_, err := cache.get(path)
+	return err
 }
 
 func loadBootstrapWorldFallback() ([]byte, error) {

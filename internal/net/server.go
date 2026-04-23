@@ -200,6 +200,9 @@ type Server struct {
 	// Optional hook: called once after initial connect/spawn sequence starts.
 	OnPostConnect     func(*Conn)
 	OnHotReloadConnFn func(*Conn)
+	// Optional hook: called after connect packet validation/identity assignment
+	// and before the first display-name refresh / connect_packet event emission.
+	OnConnectAccepted func(*Conn, *protocol.ConnectPacket)
 	// Optional network hooks for external core scheduling.
 	OnConnOpen      func(*Conn)
 	OnConnClose     func(*Conn)
@@ -548,9 +551,9 @@ func (s *Server) playerDisplayName(c *Conn) string {
 			return name
 		}
 	}
-	name := strings.TrimSpace(c.name)
+	name := strings.TrimSpace(c.rawName)
 	if name == "" {
-		name = strings.TrimSpace(c.rawName)
+		name = strings.TrimSpace(c.name)
 	}
 	if name == "" {
 		return "未知玩家"
@@ -1216,6 +1219,32 @@ func isConnReadClosed(err error) bool {
 	return false
 }
 
+func isConnWriteClosed(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "use of closed network connection") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		(strings.Contains(msg, "wsasend") && (strings.Contains(msg, "aborted") || strings.Contains(msg, "forcibly closed")))
+}
+
+func clientSnapshotIDAfter(current, last int32) bool {
+	diff := uint32(current) - uint32(last)
+	return diff != 0 && diff < 1<<31
+}
+
+func shouldAcceptClientSnapshotID(current, last int32) bool {
+	if current == last {
+		return true
+	}
+	return clientSnapshotIDAfter(current, last)
+}
+
 func isListenerClosed(err error) bool {
 	if err == nil {
 		return false
@@ -1316,11 +1345,13 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 			s.emitEvent(c, "client_snapshot_ignored_pre_confirm", fmt.Sprintf("%T", v), "waiting_for_connect_confirm")
 			return
 		}
-		// Drop out-of-order snapshots.
-		if last := c.lastClientSnapshot.Load(); last >= 0 && v.SnapshotID < last {
+		// Drop out-of-order snapshots. Snapshot IDs are signed int32 values on
+		// the wire and can wrap; compare in uint32 modulo sequence space.
+		if last := c.lastClientSnapshot.Load(); c.lastClientSnapshotSet.Load() && !shouldAcceptClientSnapshotID(v.SnapshotID, last) {
 			return
 		}
 		c.lastClientSnapshot.Store(v.SnapshotID)
+		c.lastClientSnapshotSet.Store(true)
 
 		nowMs := time.Now().UnixMilli()
 		elapsed := int64(16)
@@ -2694,6 +2725,7 @@ type Conn struct {
 	viewWidth             float32
 	viewHeight            float32
 	lastClientSnapshot    atomic.Int32
+	lastClientSnapshotSet atomic.Bool
 	lastClientTimeMs      atomic.Int64
 	syncTime              atomic.Int64
 	snapshotsSent         atomic.Int32
@@ -3005,6 +3037,13 @@ func (c *Conn) Name() string {
 		return c.rawName
 	}
 	return c.name
+}
+
+func (c *Conn) BaseName() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.rawName)
 }
 
 func (c *Conn) VersionType() string {
@@ -3360,11 +3399,12 @@ func isIgnorableUDPPacketReadError(c *Conn, err error) bool {
 
 func (s *Server) handleUDPRegister(addr *net.UDPAddr, connectionID int32) {
 	var tc *Conn
+	var rejected *Conn
+	rejectReason := ""
 	s.mu.Lock()
 	c := s.pending[connectionID]
-	if c != nil {
-		delete(s.pending, c.id)
-	} else {
+	pending := c != nil
+	if c == nil {
 		// Client may retry UDP registration if ACK is lost.
 		// In that case connection has already moved out of pending.
 		for live := range s.conns {
@@ -3375,23 +3415,54 @@ func (s *Server) handleUDPRegister(addr *net.UDPAddr, connectionID int32) {
 		}
 	}
 	if c != nil {
-		if old := c.UDPAddr(); old != nil {
-			delete(s.byUDP, old.String())
+		if !udpRegisterMatchesTCP(c, addr) {
+			rejected = c
+			rejectReason = fmt.Sprintf("ip_mismatch udp=%s tcp_ip=%s", safeUDPRegisterAddr(addr), c.remoteIP())
+		} else {
+			if pending {
+				delete(s.pending, c.id)
+			}
+			if old := c.UDPAddr(); old != nil {
+				delete(s.byUDP, old.String())
+			}
+			c.setUDPAddr(addr)
+			s.byUDP[addr.String()] = c
+			tc = c
+			fmt.Printf("[net] udp registered remote=%s id=%d\n", addr.String(), c.id)
+			if err := s.sendUDPRegisterAck(addr, connectionID); err != nil {
+				fmt.Printf("[net] udp register ack failed remote=%s id=%d err=%v\n", addr.String(), c.id, err)
+			}
+			s.verbosef("[net] udp registered remote=%s id=%d\n", addr.String(), c.id)
 		}
-		c.setUDPAddr(addr)
-		s.byUDP[addr.String()] = c
-		tc = c
-		fmt.Printf("[net] udp registered remote=%s id=%d\n", addr.String(), c.id)
-		if err := s.sendUDPRegisterAck(addr, connectionID); err != nil {
-			fmt.Printf("[net] udp register ack failed remote=%s id=%d err=%v\n", addr.String(), c.id, err)
-		}
-		s.verbosef("[net] udp registered remote=%s id=%d\n", addr.String(), c.id)
 	}
 	s.mu.Unlock()
+	if rejected != nil {
+		key := fmt.Sprintf("udp-register-reject:%s:%d", safeUDPRegisterAddr(addr), connectionID)
+		if s.shouldLogRepeatingNetEvent(key, 2*time.Second) {
+			fmt.Printf("[net] udp register rejected remote=%s id=%d reason=%s\n", safeUDPRegisterAddr(addr), connectionID, rejectReason)
+		}
+		s.emitEvent(rejected, "udp_register_rejected", "", rejectReason)
+		return
+	}
 	// ArcNet clients treat this TCP framework message as UDP registration completion.
 	if tc != nil {
 		_ = tc.SendAsync(&protocol.RegisterUDP{ConnectionID: connectionID})
 	}
+}
+
+func safeUDPRegisterAddr(addr *net.UDPAddr) string {
+	if addr == nil {
+		return ""
+	}
+	return addr.String()
+}
+
+func udpRegisterMatchesTCP(c *Conn, addr *net.UDPAddr) bool {
+	if c == nil || addr == nil || addr.IP == nil {
+		return false
+	}
+	tcpIP := net.ParseIP(c.remoteIP())
+	return tcpIP != nil && tcpIP.Equal(addr.IP)
 }
 
 func parseRegisterUDPRaw(b []byte) (*protocol.RegisterUDP, bool) {
@@ -3687,9 +3758,17 @@ func (s *Server) handleConnectPacket(c *Conn, packet *protocol.ConnectPacket) {
 	s.assignConnTeam(c, true)
 	c.hasBegunConnecting = true
 	s.ensurePlayerEntity(c)
-	s.emitEvent(c, "connect_packet", fmt.Sprintf("%T", packet), fmt.Sprintf("version=%d type=%s mods=%d", packet.Version, packet.VersionType, len(packet.Mods)))
+	if s.OnConnectAccepted != nil {
+		s.OnConnectAccepted(c, packet)
+	}
 	s.refreshPlayerDisplayName(c)
+	s.emitEvent(c, "connect_packet", fmt.Sprintf("%T", packet), fmt.Sprintf("version=%d type=%s mods=%d", packet.Version, packet.VersionType, len(packet.Mods)))
 	if err := s.sendWorldHandshake(c, packet); err != nil {
+		if isConnWriteClosed(err) {
+			fmt.Printf("[net] world handshake aborted id=%d err=%v\n", c.id, err)
+			s.emitEvent(c, "world_handshake_aborted", "", err.Error())
+			return
+		}
 		kickText("world data unavailable")
 		fmt.Printf("[net] world handshake failed id=%d err=%v\n", c.id, err)
 		return

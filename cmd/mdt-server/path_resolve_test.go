@@ -32,6 +32,34 @@ func TestResolvePathFromBasesPrefersFirstExistingBase(t *testing.T) {
 	}
 }
 
+func TestResolvePathFromBasesFallsBackToFirstBaseWhenMissing(t *testing.T) {
+	rootA := filepath.Join(t.TempDir(), "exe-root")
+	rootB := filepath.Join(t.TempDir(), "cwd-root")
+
+	got := resolvePathFromBases("configs/config.toml", []string{rootA, rootB})
+	want, _ := filepath.Abs(filepath.Join(rootA, "configs", "config.toml"))
+	if got != want {
+		t.Fatalf("expected missing config to fall back to first preferred base %q, got %q", want, got)
+	}
+}
+
+func TestResolvePathFromBasesKeepsBinWorkspaceEvenWhenParentHasConfig(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
+		t.Fatalf("mkdir parent configs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "configs", "config.toml"), []byte("parent"), 0o644); err != nil {
+		t.Fatalf("write parent config: %v", err)
+	}
+
+	got := resolvePathFromBases("configs/config.toml", []string{binDir})
+	want, _ := filepath.Abs(filepath.Join(binDir, "configs", "config.toml"))
+	if got != want {
+		t.Fatalf("expected bin-local config path %q, got %q", want, got)
+	}
+}
+
 func TestNormalizeRelativePathUsesPlatformSeparators(t *testing.T) {
 	got := normalizeRelativePath("configs/config.toml")
 	want := filepath.Clean(filepath.FromSlash("configs/config.toml"))

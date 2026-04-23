@@ -17,9 +17,14 @@ type Event struct {
 }
 
 type Logger struct {
-	mu      sync.Mutex
-	enabled bool
-	file    *os.File
+	mu       sync.RWMutex
+	enabled  bool
+	file     *os.File
+	lines    chan []byte
+	done     sync.WaitGroup
+	closed   bool
+	close    sync.Once
+	closeErr error
 }
 
 func New(path string, enabled bool) (*Logger, error) {
@@ -38,11 +43,19 @@ func New(path string, enabled bool) (*Logger, error) {
 		return nil, err
 	}
 	l.file = f
+	l.lines = make(chan []byte, 8192)
+	l.done.Add(1)
+	go l.writer(l.lines)
 	return l, nil
 }
 
 func (l *Logger) Enabled() bool {
-	return l != nil && l.enabled && l.file != nil
+	if l == nil {
+		return false
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.enabled && !l.closed && l.lines != nil
 }
 
 func (l *Logger) Log(category, point string, fields map[string]any) {
@@ -60,26 +73,52 @@ func (l *Logger) Log(category, point string, fields map[string]any) {
 		line = []byte(fmt.Sprintf(`{"ts":%q,"category":%q,"point":%q,"fields":{"marshal_error":%q}}`,
 			entry.Timestamp.Format(time.RFC3339Nano), category, point, err.Error()))
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.file == nil {
+	line = append(line, '\n')
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.closed || l.lines == nil {
 		return
 	}
-	_, _ = l.file.Write(append(line, '\n'))
+	select {
+	case l.lines <- line:
+	default:
+		// Tracepoints must never block gameplay/connection handling.
+	}
+}
+
+func (l *Logger) writer(lines <-chan []byte) {
+	defer l.done.Done()
+	for line := range lines {
+		if l.file == nil {
+			continue
+		}
+		_, _ = l.file.Write(line)
+	}
+	if l.file != nil {
+		l.closeErr = l.file.Close()
+		l.file = nil
+	}
 }
 
 func (l *Logger) Close() error {
 	if l == nil {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.file == nil {
-		return nil
-	}
-	err := l.file.Close()
-	l.file = nil
-	return err
+	l.close.Do(func() {
+		l.mu.Lock()
+		l.closed = true
+		lines := l.lines
+		l.lines = nil
+		l.mu.Unlock()
+		if lines != nil {
+			close(lines)
+			l.done.Wait()
+		} else if l.file != nil {
+			l.closeErr = l.file.Close()
+			l.file = nil
+		}
+	})
+	return l.closeErr
 }
 
 func PacketFields(direction string, obj any, packetID, frameworkID, size int, extra map[string]any) map[string]any {

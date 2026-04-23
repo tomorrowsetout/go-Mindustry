@@ -65,6 +65,27 @@ func buildMSAVContentChunk(t *testing.T) []byte {
 	return content.Bytes()
 }
 
+func buildMSAVContentChunkWithBlocks(t *testing.T, blocks []string) []byte {
+	t.Helper()
+	var content bytes.Buffer
+	w := &javaWriter{buf: &content}
+	if err := w.WriteByte(1); err != nil {
+		t.Fatalf("write mapped count: %v", err)
+	}
+	if err := w.WriteByte(1); err != nil {
+		t.Fatalf("write block content type: %v", err)
+	}
+	if err := w.WriteInt16(int16(len(blocks))); err != nil {
+		t.Fatalf("write block total: %v", err)
+	}
+	for _, name := range blocks {
+		if err := w.WriteUTF(name); err != nil {
+			t.Fatalf("write block name %q: %v", name, err)
+		}
+	}
+	return content.Bytes()
+}
+
 func buildMSAVMapChunk(t *testing.T, version int32) []byte {
 	t.Helper()
 	var out bytes.Buffer
@@ -100,6 +121,72 @@ func buildMSAVMapChunk(t *testing.T, version int32) []byte {
 		t.Fatalf("write block run: %v", err)
 	}
 	return out.Bytes()
+}
+
+func buildSingleTileMSAVMapChunk(t *testing.T, floor, overlay, block int16) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	w := &javaWriter{buf: &out}
+	if err := w.WriteInt16(1); err != nil {
+		t.Fatalf("write width: %v", err)
+	}
+	if err := w.WriteInt16(1); err != nil {
+		t.Fatalf("write height: %v", err)
+	}
+	if err := w.WriteInt16(floor); err != nil {
+		t.Fatalf("write floor: %v", err)
+	}
+	if err := w.WriteInt16(overlay); err != nil {
+		t.Fatalf("write overlay: %v", err)
+	}
+	if err := w.WriteByte(0); err != nil {
+		t.Fatalf("write floor run: %v", err)
+	}
+	if err := w.WriteInt16(block); err != nil {
+		t.Fatalf("write block id: %v", err)
+	}
+	if err := w.WriteByte(0); err != nil {
+		t.Fatalf("write packed flags: %v", err)
+	}
+	if err := w.WriteByte(0); err != nil {
+		t.Fatalf("write block run: %v", err)
+	}
+	return out.Bytes()
+}
+
+func buildMSAVWithContentAndMap(t *testing.T, contentChunk, mapChunk []byte) []byte {
+	t.Helper()
+	var raw bytes.Buffer
+	if _, err := raw.WriteString("MSAV"); err != nil {
+		t.Fatalf("write magic: %v", err)
+	}
+	if err := binary.Write(&raw, binary.BigEndian, int32(11)); err != nil {
+		t.Fatalf("write version: %v", err)
+	}
+	writeMSAVChunk(t, &raw, buildMSAVMetaChunk(t, map[string]string{
+		"name":     "content-mapping",
+		"rules":    "{}",
+		"locales":  "{}",
+		"wave":     "1",
+		"wavetime": "0",
+		"tick":     "0",
+	}))
+	writeMSAVChunk(t, &raw, contentChunk)
+	writeMSAVChunk(t, &raw, buildMSAVPatchesChunk(t))
+	writeMSAVChunk(t, &raw, mapChunk)
+	writeMSAVChunk(t, &raw, buildEntitiesChunkForVersion(t, 11))
+	writeMSAVChunk(t, &raw, buildMSAVMarkersChunk(t))
+	writeMSAVChunk(t, &raw, buildMSAVCustomChunk(t))
+
+	var compressed bytes.Buffer
+	zw := zlib.NewWriter(&compressed)
+	if _, err := zw.Write(raw.Bytes()); err != nil {
+		t.Fatalf("compress msav: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close compressor: %v", err)
+	}
+	return compressed.Bytes()
 }
 
 func buildEntityPayload(t *testing.T) []byte {
@@ -451,6 +538,65 @@ func TestLegacyMSAVVersionsBuildWorldStreamAndModel(t *testing.T) {
 				t.Fatalf("expected world stream payload for version %d", version)
 			}
 		})
+	}
+}
+
+type testContent struct {
+	typ  protocol.ContentType
+	id   int16
+	name string
+}
+
+func (c testContent) ContentType() protocol.ContentType { return c.typ }
+func (c testContent) ID() int16                         { return c.id }
+func (c testContent) Name() string                      { return c.name }
+
+func TestLoadWorldModelFromMSAVPreservesMapContentHeaderOverRegistry(t *testing.T) {
+	contentChunk := buildMSAVContentChunkWithBlocks(t, []string{
+		"air",
+		"sand-floor",
+		"copper-wall",
+	})
+	mapChunk := buildSingleTileMSAVMapChunk(t, 1, 0, 2)
+	path := filepath.Join(t.TempDir(), "content-mapping.msav")
+	if err := os.WriteFile(path, buildMSAVWithContentAndMap(t, contentChunk, mapChunk), 0o600); err != nil {
+		t.Fatalf("write test msav: %v", err)
+	}
+
+	reg := protocol.NewContentRegistry()
+	reg.RegisterBlock(testContent{typ: protocol.ContentBlock, id: 0, name: "air"})
+	reg.RegisterBlock(testContent{typ: protocol.ContentBlock, id: 1, name: "duo"})
+	reg.RegisterBlock(testContent{typ: protocol.ContentBlock, id: 2, name: "copper-wall"})
+
+	model, err := LoadWorldModelFromMSAV(path, reg)
+	if err != nil {
+		t.Fatalf("LoadWorldModelFromMSAV: %v", err)
+	}
+	if got := model.BlockNames[1]; got != "sand-floor" {
+		t.Fatalf("expected map content header to keep block id 1 as sand-floor, got %q", got)
+	}
+	if !bytes.Equal(model.Content, contentChunk) {
+		t.Fatal("expected model content header to remain the map-local header")
+	}
+
+	payload, err := BuildWorldStreamFromModel(model, 1)
+	if err != nil {
+		t.Fatalf("BuildWorldStreamFromModel: %v", err)
+	}
+	streamContent, _, streamMap, _, _, _ := readWorldStreamCoreSections(t, payload, -1, -1, -1)
+	if !bytes.Equal(streamContent, contentChunk) {
+		t.Fatal("expected world stream to preserve map-local content header")
+	}
+	decoded, err := decodeMapChunk(streamMap)
+	if err != nil {
+		t.Fatalf("decode stream map chunk: %v", err)
+	}
+	tile, err := decoded.TileAt(0, 0)
+	if err != nil || tile == nil {
+		t.Fatalf("lookup decoded tile: %v", err)
+	}
+	if tile.Floor != 1 {
+		t.Fatalf("expected decoded floor id 1, got %d", tile.Floor)
 	}
 }
 

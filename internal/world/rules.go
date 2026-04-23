@@ -508,6 +508,37 @@ func isCoreBlockForModel(m *WorldModel, block BlockID) bool {
 	return strings.HasPrefix(name, "core-")
 }
 
+type RuleModeSummary struct {
+	Mode              string
+	ModeName          string
+	Waves             bool
+	WaveTimer         bool
+	Pvp               bool
+	AttackMode        bool
+	Editor            bool
+	InfiniteResources bool
+	InfiniteAmmo      bool
+}
+
+func DescribeRuleMode(model *WorldModel, rules *Rules) RuleModeSummary {
+	summary := RuleModeSummary{Mode: "survival"}
+	if rules == nil {
+		return summary
+	}
+	if mode := inferGamemodeFromModel(model, rules); mode != "" {
+		summary.Mode = mode
+	}
+	summary.ModeName = strings.TrimSpace(rules.ModeName)
+	summary.Waves = rules.Waves
+	summary.WaveTimer = rules.WaveTimer
+	summary.Pvp = rules.Pvp
+	summary.AttackMode = rules.AttackMode
+	summary.Editor = rules.Editor
+	summary.InfiniteResources = rules.InfiniteResources
+	summary.InfiniteAmmo = rules.InfiniteAmmo
+	return summary
+}
+
 // DefaultRules 默认规则（原版等价）
 func DefaultRules() *Rules {
 	return &Rules{

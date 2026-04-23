@@ -18,7 +18,7 @@ func LoadWorldModelFromMSAV(path string, content *protocol.ContentRegistry) (*wo
 		return nil, err
 	}
 	blockNames, _ := readContentBlockNames(data.Content, nil)
-	if content != nil {
+	if len(blockNames) == 0 && content != nil {
 		if names := readContentNamesFromRegistry(1, content); len(names) > 0 {
 			blockNames = names
 		}
@@ -30,11 +30,6 @@ func LoadWorldModelFromMSAV(path string, content *protocol.ContentRegistry) (*wo
 	model.MSAVVersion = data.Version
 	model.Tags = data.Tags
 	model.Content = data.Content
-	if content != nil {
-		if rebuilt, herr := buildContentHeaderFromRegistry(content); herr == nil && len(rebuilt) > 0 {
-			model.Content = rebuilt
-		}
-	}
 	model.Patches = data.Patches
 	model.RawMap = data.Map
 	model.EntityMapping = append([]byte(nil), data.EntityMapping...)
@@ -46,12 +41,12 @@ func LoadWorldModelFromMSAV(path string, content *protocol.ContentRegistry) (*wo
 		model.BlockNames = blockNames
 		hydrateInlineBuildingConfigs(model)
 	}
-	if content != nil {
+	if unitNames, err := readContentUnitNames(data.Content, nil); err == nil && len(unitNames) > 0 {
+		model.UnitNames = unitNames
+	} else if content != nil {
 		if names := readContentNamesFromRegistry(6, content); len(names) > 0 {
 			model.UnitNames = names
 		}
-	} else if unitNames, err := readContentUnitNames(data.Content, nil); err == nil {
-		model.UnitNames = unitNames
 	}
 	_ = decodeEntitiesData(data, model)
 	return model, nil

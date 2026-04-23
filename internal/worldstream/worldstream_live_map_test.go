@@ -316,3 +316,85 @@ func TestHiddenMapRulesTagPreservesCriticalRules(t *testing.T) {
 		t.Fatal("expected hidden/0 teams[2].infiniteResources=true")
 	}
 }
+
+func checkWorldStreamMatchesOriginalModel(t *testing.T, label string, original *world.WorldModel, payload []byte) {
+	t.Helper()
+	_, _, mapChunk, _, _, _ := readWorldStreamCoreSections(t, payload, -1, -1, -1)
+	decoded, err := decodeMapChunk(mapChunk)
+	if err != nil {
+		t.Fatalf("%s: decode worldstream map chunk: %v", label, err)
+	}
+	decoded.BlockNames = original.BlockNames
+
+	if decoded.Width != original.Width || decoded.Height != original.Height {
+		t.Fatalf("%s: expected map size %dx%d, got %dx%d", label, original.Width, original.Height, decoded.Width, decoded.Height)
+	}
+	if len(decoded.Tiles) != len(original.Tiles) {
+		t.Fatalf("%s: expected %d tiles, got %d", label, len(original.Tiles), len(decoded.Tiles))
+	}
+
+	for i := range original.Tiles {
+		want := original.Tiles[i]
+		got := decoded.Tiles[i]
+		if want.Floor != got.Floor || want.Overlay != got.Overlay || want.Block != got.Block || want.Team != got.Team || want.Rotation != got.Rotation {
+			x := i % original.Width
+			y := i / original.Width
+			t.Fatalf("%s: tile mismatch at (%d,%d): want floor=%d overlay=%d block=%d team=%d rot=%d got floor=%d overlay=%d block=%d team=%d rot=%d",
+				label, x, y, want.Floor, want.Overlay, want.Block, want.Team, want.Rotation,
+				got.Floor, got.Overlay, got.Block, got.Team, got.Rotation)
+		}
+		wantBuild := want.Build != nil
+		gotBuild := got.Build != nil
+		if wantBuild != gotBuild {
+			x := i % original.Width
+			y := i / original.Width
+			t.Fatalf("%s: build presence mismatch at (%d,%d): want=%v got=%v", label, x, y, wantBuild, gotBuild)
+		}
+		if wantBuild && gotBuild {
+			if want.Build.X != got.Build.X || want.Build.Y != got.Build.Y || want.Build.Team != got.Build.Team || want.Build.Rotation != got.Build.Rotation {
+				x := i % original.Width
+				y := i / original.Width
+				t.Fatalf("%s: build mismatch at (%d,%d): want center=(%d,%d) team=%d rot=%d got center=(%d,%d) team=%d rot=%d",
+					label, x, y,
+					want.Build.X, want.Build.Y, want.Build.Team, want.Build.Rotation,
+					got.Build.X, got.Build.Y, got.Build.Team, got.Build.Rotation)
+			}
+		}
+	}
+}
+
+func loadWeatheredChannelsModel(t *testing.T) *world.WorldModel {
+	t.Helper()
+	path := filepath.Join("..", "..", "assets", "worlds", "maps", "serpulo", "weatheredChannels.msav")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("weatheredChannels.msav not present in workspace")
+		}
+		t.Fatalf("stat weatheredChannels map: %v", err)
+	}
+
+	original, err := LoadWorldModelFromMSAV(path, nil)
+	if err != nil {
+		t.Fatalf("load original model: %v", err)
+	}
+	return original
+}
+
+func TestBuildWorldStreamFromWeatheredChannelsPreservesMapTiles(t *testing.T) {
+	original := loadWeatheredChannelsModel(t)
+	path := filepath.Join("..", "..", "assets", "worlds", "maps", "serpulo", "weatheredChannels.msav")
+	rawPayload, err := BuildWorldStreamFromMSAV(path)
+	if err != nil {
+		t.Fatalf("build raw world stream: %v", err)
+	}
+	checkWorldStreamMatchesOriginalModel(t, "raw-msav", original, rawPayload)
+}
+
+func TestBuildWorldStreamFromWeatheredChannelsModelPreservesMapTiles(t *testing.T) {
+	original := loadWeatheredChannelsModel(t)
+	modelPayload, err := BuildWorldStreamFromModel(original, 1)
+	if err != nil {
+		t.Fatalf("build model world stream: %v", err)
+	}
+	checkWorldStreamMatchesOriginalModel(t, "model", original, modelPayload)
+}

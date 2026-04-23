@@ -1,8 +1,10 @@
 package net
 
 import (
+	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,6 +89,112 @@ func TestHandleConnectPacketSendsInitialWorldStreamWithoutWorldDataBegin(t *test
 	<-done
 }
 
+func TestHandleConnectPacketRunsAcceptedHookBeforeDisplayRefreshAndEvent(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.WorldDataFn = func(_ *Conn, _ *protocol.ConnectPacket) ([]byte, error) {
+		return []byte("initial-world"), nil
+	}
+
+	var accepted atomic.Bool
+	srv.OnConnectAccepted = func(c *Conn, pkt *protocol.ConnectPacket) {
+		if c == nil || pkt == nil {
+			t.Fatal("expected accepted hook inputs")
+		}
+		accepted.Store(true)
+	}
+	srv.SetPlayerDisplayFormatter(func(c *Conn) string {
+		if !accepted.Load() {
+			t.Fatal("display formatter ran before OnConnectAccepted")
+		}
+		base := strings.TrimSpace(c.BaseName())
+		if base == "" {
+			base = "未知玩家"
+		}
+		return fmt.Sprintf("[accent]%s[]", base)
+	})
+
+	var sawConnectEvent atomic.Bool
+	srv.OnEvent = func(ev NetEvent) {
+		if ev.Kind != "connect_packet" {
+			return
+		}
+		if !accepted.Load() {
+			t.Fatal("connect_packet event emitted before OnConnectAccepted")
+		}
+		if ev.Name != "[accent]alpha[]" {
+			t.Fatalf("expected refreshed display name in connect_packet event, got %q", ev.Name)
+		}
+		sawConnectEvent.Store(true)
+	}
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handlePacket(conn, &protocol.ConnectPacket{
+		Version:     157,
+		VersionType: "official",
+		Name:        "alpha",
+		Locale:      "en",
+		UUID:        "uuid-1",
+		USID:        "usid-1",
+	}, true)
+
+	if !accepted.Load() {
+		t.Fatal("expected OnConnectAccepted hook to run")
+	}
+	if !sawConnectEvent.Load() {
+		t.Fatal("expected connect_packet event to be emitted")
+	}
+	if conn.name != "[accent]alpha[]" {
+		t.Fatalf("expected refreshed connection display name, got %q", conn.name)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestRefreshPlayerDisplayNameWithBaseNameFormatterIsIdempotent(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+	srv.SetPlayerDisplayFormatter(func(c *Conn) string {
+		base := strings.TrimSpace(c.BaseName())
+		if base == "" {
+			base = "未知玩家"
+		}
+		return fmt.Sprintf("[scarlet]（未绑定）[]%s[gray]%d[]", base, c.id)
+	})
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.id = 77
+
+	srv.refreshPlayerDisplayName(conn)
+	first := conn.name
+	srv.refreshPlayerDisplayName(conn)
+	second := conn.name
+
+	if first != second {
+		t.Fatalf("expected repeated refresh to be idempotent, first=%q second=%q", first, second)
+	}
+	if strings.Count(second, "（未绑定）") != 1 {
+		t.Fatalf("expected single unbound prefix, got %q", second)
+	}
+	if strings.Count(second, "[gray]77[]") != 1 {
+		t.Fatalf("expected single conn id suffix, got %q", second)
+	}
+}
+
 func TestClientSnapshotDoesNotConfirmConnectionByDefault(t *testing.T) {
 	srv := NewServer("127.0.0.1:0", 157)
 
@@ -115,6 +223,78 @@ func TestClientSnapshotDoesNotConfirmConnectionByDefault(t *testing.T) {
 	}
 	if got := conn.lastClientSnapshot.Load(); got != -1 {
 		t.Fatalf("expected pre-confirm clientSnapshot to be ignored, got last=%d", got)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestClientSnapshotIDWraparoundAcceptsNewerWrappedValue(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 41
+	conn.hasBegunConnecting = true
+	conn.hasConnected = true
+	const maxSnapshotID int32 = 1<<31 - 1
+	const minSnapshotID int32 = -1 << 31
+	conn.lastClientSnapshot.Store(maxSnapshotID)
+	conn.lastClientSnapshotSet.Store(true)
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handlePacket(conn, &protocol.Remote_NetServer_clientSnapshot_48{
+		SnapshotID: minSnapshotID,
+		ViewWidth:  16,
+		ViewHeight: 16,
+	}, true)
+
+	if got := conn.lastClientSnapshot.Load(); got != minSnapshotID {
+		t.Fatalf("expected wrapped snapshot id %d to be accepted after %d, got %d", minSnapshotID, maxSnapshotID, got)
+	}
+
+	_ = conn.Close()
+	<-done
+}
+
+func TestClientSnapshotIDWraparoundRejectsOlderWrappedValue(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+
+	conn := NewConn(serverSide, srv.Serial)
+	defer conn.Close()
+	conn.playerID = 42
+	conn.hasBegunConnecting = true
+	conn.hasConnected = true
+	const maxSnapshotID int32 = 1<<31 - 1
+	const minSnapshotID int32 = -1 << 31
+	conn.lastClientSnapshot.Store(minSnapshotID)
+	conn.lastClientSnapshotSet.Store(true)
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, clientSide)
+		close(done)
+	}()
+
+	srv.handlePacket(conn, &protocol.Remote_NetServer_clientSnapshot_48{
+		SnapshotID: maxSnapshotID,
+		ViewWidth:  16,
+		ViewHeight: 16,
+	}, true)
+
+	if got := conn.lastClientSnapshot.Load(); got != minSnapshotID {
+		t.Fatalf("expected older wrapped snapshot id %d to be rejected after %d, got %d", maxSnapshotID, minSnapshotID, got)
 	}
 
 	_ = conn.Close()

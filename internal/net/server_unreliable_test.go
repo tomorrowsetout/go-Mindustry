@@ -128,7 +128,7 @@ func TestHandleUDPDatagramRegistersMultipleConnections(t *testing.T) {
 	tcpA, peerA := net.Pipe()
 	defer tcpA.Close()
 	defer peerA.Close()
-	connA := NewConn(tcpA, srv.Serial)
+	connA := NewConn(&admissionWrappedConn{Conn: tcpA, remote: admissionAddr("127.0.0.1:10001")}, srv.Serial)
 	defer connA.Close()
 	connA.id = 101
 	srv.addConn(connA)
@@ -137,7 +137,7 @@ func TestHandleUDPDatagramRegistersMultipleConnections(t *testing.T) {
 	tcpB, peerB := net.Pipe()
 	defer tcpB.Close()
 	defer peerB.Close()
-	connB := NewConn(tcpB, srv.Serial)
+	connB := NewConn(&admissionWrappedConn{Conn: tcpB, remote: admissionAddr("127.0.0.1:10002")}, srv.Serial)
 	defer connB.Close()
 	connB.id = 202
 	srv.addConn(connB)
@@ -190,5 +190,57 @@ func TestHandleUDPDatagramRegistersMultipleConnections(t *testing.T) {
 	}
 	if got := len(srv.byUDP); got != 2 {
 		t.Fatalf("expected 2 udp registrations, got=%d", got)
+	}
+}
+
+func TestHandleUDPDatagramRejectsRegisterWhenTCPIPDoesNotMatch(t *testing.T) {
+	srv := NewServer("127.0.0.1:0", 157)
+
+	udpServer, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("listen udp server: %v", err)
+	}
+	defer udpServer.Close()
+	srv.udpConn = udpServer
+
+	udpClient, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("listen udp client: %v", err)
+	}
+	defer udpClient.Close()
+
+	tcpConn, peer := net.Pipe()
+	defer tcpConn.Close()
+	defer peer.Close()
+
+	conn := NewConn(&admissionWrappedConn{Conn: tcpConn, remote: admissionAddr("203.0.113.10:12000")}, srv.Serial)
+	defer conn.Close()
+	conn.id = 303
+	srv.addConn(conn)
+	srv.addPending(conn)
+
+	buf := make([]byte, 6)
+	buf[0] = 0xFE
+	buf[1] = protocol.FrameworkRegisterUD
+	binary.BigEndian.PutUint32(buf[2:], uint32(conn.id))
+
+	srv.handleUDPDatagram(udpServer, udpClient.LocalAddr().(*net.UDPAddr), buf)
+
+	ack := make([]byte, 32)
+	_ = udpClient.SetReadDeadline(time.Now().Add(150 * time.Millisecond))
+	if _, _, err := udpClient.ReadFromUDP(ack); err == nil {
+		t.Fatal("expected mismatched udp register to be rejected without ack")
+	} else if ne, ok := err.(net.Error); !ok || !ne.Timeout() {
+		t.Fatalf("expected udp ack timeout, got %v", err)
+	}
+
+	if got := conn.UDPAddr(); got != nil {
+		t.Fatalf("expected udp addr to remain unset after ip mismatch, got=%v", got)
+	}
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if _, ok := srv.pending[conn.id]; !ok {
+		t.Fatalf("expected pending registration to remain after ip mismatch")
 	}
 }

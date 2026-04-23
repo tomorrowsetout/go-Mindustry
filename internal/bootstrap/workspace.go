@@ -155,8 +155,8 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 		_ = writeIfMissing(filepath.Join(cfg.Persist.Directory, cfg.Persist.File), b, 0o644)
 	}
 	if strings.TrimSpace(cfg.Runtime.VanillaProfiles) != "" {
-		_ = seedVanillaDataIfMissing(cfg.Runtime.VanillaProfiles, rootDir)
-		_ = seedVanillaDataIfMissing(filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json"), rootDir)
+		_ = writeBundledRuntimeFileIfMissing(rootDir, cfg.Runtime.VanillaProfiles)
+		_ = writeBundledRuntimeFileIfMissing(rootDir, filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json"))
 	}
 
 	_ = writeIfMissing(filepath.Join(cfg.Mods.JSDir, "hello.js"), []byte("console.log('hello from mods/js/hello.js');\n"), 0o644)
@@ -172,7 +172,7 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 	_ = writeIfMissing(filepath.Join(configDir, "core.toml"), []byte("# 核心配置\n# tps 为服务端逻辑帧率上限，默认 60，最高 120。\n\n[core]\ndual_core_enabled = true\ntps = 60\n\n[memory]\nlimit_mb = 0\nstartup_max_mb = 0\ngc_trigger_mb = 0\ncheck_interval_sec = 5\nfree_os_memory = false\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(configDir, "server.toml"), []byte("# 服务器基础配置\n# 包含服务器名称、简介和虚拟在线人数显示。\n\n[server]\nname = \"mdt-server\"\ndesc = \"\"\nvirtual_players = 0\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(configDir, "sync.toml"), []byte("# 同步配置\n# entity_ms 与 state_ms 默认按原版思路统一为 200ms。\n\n[sync]\nentity_ms = 200\nstate_ms = 200\nudp_retry_count = 2\nudp_retry_delay_ms = 5\nudp_fallback_tcp = true\nuse_map_sync_data_fallback = false\nblock_sync_logs_enabled = false\n"), 0o644)
-	_ = writeIfMissing(filepath.Join(configDir, "misc.toml"), []byte("# 杂项配置\n# 包含数据目录、mods、持久化、脚本与管理文件路径。\n\n[data]\nmode = \"file\"\ndirectory = \"data/events\"\ndatabase_enabled = false\ndsn = \"\"\n\n[paths]\nassets_dir = \"assets\"\nworlds_dir = \"assets/worlds\"\nlogs_dir = \"logs\"\n\n[mods]\nenabled = false\ndirectory = \"mods\"\njava_home = \"\"\njs_dir = \"mods/js\"\ngo_dir = \"mods/go\"\nnode_dir = \"mods/node\"\n\n[persist]\nenabled = true\ndirectory = \"data/state\"\nfile = \"server-state.json\"\ninterval_sec = 30\nsave_msav = true\nmsav_dir = \"data/snapshots\"\nmsav_file = \"\"\n\n[script]\nfile = \"data/state/scripts.json\"\ndaily_gc_time = \"\"\n\n[admin]\nops_file = \"json/ops.json\"\n"), 0o644)
+	_ = writeIfMissing(filepath.Join(configDir, "misc.toml"), []byte("# 杂项配置\n# 包含数据目录、mods、持久化、脚本与管理文件路径。\n\n[data]\nmode = \"file\"\ndirectory = \"data/events\"\ndatabase_enabled = false\ndsn = \"\"\n\n[paths]\nassets_dir = \"assets\"\nworlds_dir = \"assets/worlds\"\nlogs_dir = \"logs\"\n\n[mods]\nenabled = false\ndirectory = \"mods\"\njava_home = \"\"\njs_dir = \"mods/js\"\ngo_dir = \"mods/go\"\nnode_dir = \"mods/node\"\n\n[persist]\nenabled = true\ndirectory = \"data/state\"\nfile = \"server-state.json\"\ninterval_sec = 30\nsave_msav = true\nmsav_dir = \"data/snapshots\"\nmsav_file = \"\"\n\n[script]\nfile = \"data/state/scripts.json\"\ndaily_gc_time = \"\"\n\n[admin]\nops_file = \"configs/json/ops.json\"\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(configDir, "sundries.toml"), []byte("# 附加日志配置\n# 控制文件日志大小、数量和若干运行日志输出。\n\n[sundries]\ndetailed_log_max_mb = 2\ndetailed_log_max_files = 100\nnet_event_logs_enabled = true\nchat_logs_enabled = true\nrespawn_core_logs_enabled = true\nrespawn_unit_logs_enabled = true\nbuild_place_logs_enabled = true\nbuild_finish_logs_enabled = true\nbuild_break_start_logs_enabled = true\nbuild_break_done_logs_enabled = true\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(configDir, "development.toml"), []byte("# 开发调试配置\n# 主要控制控制台调试输出与开发期日志开关。\n\n[development]\npacket_events_enabled = false\npacket_recv_events_enabled = false\npacket_send_events_enabled = false\nterminal_player_logs_enabled = true\nterminal_player_uuid_enabled = false\nrespawn_core_logs_enabled = true\nrespawn_unit_logs_enabled = true\nrespawn_packet_logs_enabled = true\nbuild_snapshot_logs_enabled = true\nbuild_place_logs_enabled = true\nbuild_finish_logs_enabled = true\nbuild_break_start_logs_enabled = true\nbuild_break_done_logs_enabled = true\n"), 0o644)
 	_ = writeIfMissing(filepath.Join(configDir, "personalization.toml"), []byte("# 个性化显示配置\n# 控制启动报告、控制台展示、玩家名前后缀与控制台标题等显示行为。\n\n[personalization]\nstartup_report_enabled = true\nmap_load_details_enabled = true\nunit_id_list_enabled = true\nstartup_current_map_line_enabled = true\nconsole_intro_enabled = true\nconsole_intro_server_name_enabled = true\nconsole_intro_current_map_enabled = true\nconsole_intro_listen_addr_enabled = true\nconsole_intro_local_ip_enabled = true\nconsole_intro_api_enabled = true\nconsole_intro_help_hint_enabled = true\nstartup_help_enabled = true\njoin_leave_chat_enabled = true\nplayer_name_color_enabled = true\nplayer_name_prefix = \"\"\nplayer_name_suffix = \"\"\nplayer_bind_prefix_enabled = true\nplayer_bound_prefix = \"[green]（已绑定）[]\"\nplayer_unbound_prefix = \"[scarlet]（未绑定）[]\"\nplayer_title_enabled = true\nplayer_identity_file = \"json/player_identity.json\"\nplayer_bind_source = \"internal\"\nplayer_bind_api_url = \"\"\nplayer_bind_api_timeout_ms = 1500\nplayer_bind_api_cache_sec = 30\nplayer_conn_id_suffix_enabled = true\nplayer_conn_id_suffix_format = \" [gray]{id}[]\"\nmain_console_title = \"mdt-server | 主进程 | {server_name}\"\ncore2_console_title = \"mdt-server | Core2 | IO\"\ncore3_console_title = \"mdt-server | Core3 | Snapshot\"\ncore4_console_title = \"mdt-server | Core4 | Policy\"\n"), 0o644)
@@ -187,10 +187,6 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 		_ = writeBundledConfigIfMissing(configDir, filepath.Join("json", "player_identity.json"))
 	}
 
-	if err := seedMapIfMissing(cfg.Runtime.WorldsDir); err != nil {
-		return out, err
-	}
-
 	if shouldReleaseEmbedded(policy) {
 		if err := releaseEmbeddedConfigs(configDir); err != nil {
 			return out, err
@@ -202,6 +198,9 @@ func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
 		if err := markEmbeddedReleasedAt(configDir, policy); err != nil {
 			return out, err
 		}
+	}
+	if err := seedMapIfMissing(toRoot(cfg.Runtime.WorldsDir)); err != nil {
+		return out, err
 	}
 
 	return out, nil
@@ -266,6 +265,45 @@ func seedVanillaDataIfMissing(dstPath, rootDir string) error {
 		}
 	}
 	return nil
+}
+
+func writeBundledRuntimeFileIfMissing(rootDir, rel string) error {
+	rootDir = strings.TrimSpace(rootDir)
+	rel = filepath.Clean(strings.TrimSpace(rel))
+	if rel == "" || rel == "." {
+		return nil
+	}
+	target := rel
+	if rootDir != "" && rootDir != "." && !filepath.IsAbs(target) {
+		target = filepath.Join(rootDir, rel)
+	}
+	if st, err := os.Stat(target); err == nil && !st.IsDir() {
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	bundledRel := rel
+	if filepath.IsAbs(bundledRel) {
+		if rootDir != "" {
+			if rootAbs, err := filepath.Abs(rootDir); err == nil {
+				if targetAbs, terr := filepath.Abs(bundledRel); terr == nil {
+					if r, rerr := filepath.Rel(rootAbs, targetAbs); rerr == nil &&
+						r != "." && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+						bundledRel = r
+					}
+				}
+			}
+		}
+	}
+	bundledPath := filepath.ToSlash(filepath.Clean(bundledRel))
+	data, err := fs.ReadFile(mdtserver.BundledFiles, bundledPath)
+	if err != nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, data, 0o644)
 }
 
 func writeBundledConfigIfMissing(configDir, rel string) error {

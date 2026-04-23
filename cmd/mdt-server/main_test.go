@@ -19,6 +19,7 @@ import (
 
 	"mdt-server/internal/config"
 	netserver "mdt-server/internal/net"
+	"mdt-server/internal/persist"
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/world"
 	"mdt-server/internal/worldstream"
@@ -48,11 +49,106 @@ func TestBindStatusResolverReturnsFalseWithoutIdentityStore(t *testing.T) {
 	}
 }
 
+func TestRuntimePathHelpersKeepWorkspaceRelativeWorldPath(t *testing.T) {
+	prevBase := runtimeBaseDir
+	base := t.TempDir()
+	runtimeBaseDir = base
+	t.Cleanup(func() {
+		runtimeBaseDir = prevBase
+	})
+
+	rel := filepath.Join("assets", "worlds", "maps", "erekir", "origin.msav")
+	abs := filepath.Join(base, rel)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatalf("mkdir world dir: %v", err)
+	}
+	if err := os.WriteFile(abs, []byte("msav"), 0o600); err != nil {
+		t.Fatalf("write world file: %v", err)
+	}
+
+	if got := canonicalRuntimePath(abs); got != rel {
+		t.Fatalf("expected workspace-relative path %q, got %q", rel, got)
+	}
+	if got := resolveRuntimePath(rel); filepath.Clean(got) != filepath.Clean(abs) {
+		t.Fatalf("expected resolved path %q, got %q", abs, got)
+	}
+}
+
+func TestEnsureConnIdentityRecordsCreatesPublicConnUUIDAndIdentityRecord(t *testing.T) {
+	prevPublicConnUUIDEnabled := runtimePublicConnUUIDEnabled.Load()
+	runtimePublicConnUUIDEnabled.Store(true)
+	t.Cleanup(func() {
+		runtimePublicConnUUIDEnabled.Store(prevPublicConnUUIDEnabled)
+	})
+
+	publicStore, err := persist.NewPublicConnUUIDStore(filepath.Join(t.TempDir(), "conn_uuid.json"), true)
+	if err != nil {
+		t.Fatalf("new public conn uuid store: %v", err)
+	}
+	identityStore, err := persist.NewPlayerIdentityStore(filepath.Join(t.TempDir(), "player_identity.json"), true)
+	if err != nil {
+		t.Fatalf("new player identity store: %v", err)
+	}
+
+	connUUID, identityReady := ensureConnIdentityRecords(publicStore, identityStore, "uuid-1", "alpha", "127.0.0.1")
+	if strings.TrimSpace(connUUID) == "" {
+		t.Fatal("expected non-empty conn_uuid")
+	}
+	if !identityReady {
+		t.Fatal("expected identity record to be ready on first ensure")
+	}
+	if got := publicConnUUIDValue(publicStore, "uuid-1"); got != connUUID {
+		t.Fatalf("expected public conn_uuid lookup %q, got %q", connUUID, got)
+	}
+	if _, ok := identityStore.Lookup(connUUID); !ok {
+		t.Fatalf("expected identity store to contain conn_uuid %q", connUUID)
+	}
+}
+
+func TestAppendConnectionCheckpointDetailIncludesConnUUIDIdentityAndDisplayState(t *testing.T) {
+	prevPublicConnUUIDEnabled := runtimePublicConnUUIDEnabled.Load()
+	runtimePublicConnUUIDEnabled.Store(true)
+	t.Cleanup(func() {
+		runtimePublicConnUUIDEnabled.Store(prevPublicConnUUIDEnabled)
+	})
+
+	publicStore, err := persist.NewPublicConnUUIDStore(filepath.Join(t.TempDir(), "conn_uuid.json"), true)
+	if err != nil {
+		t.Fatalf("new public conn uuid store: %v", err)
+	}
+	identityStore, err := persist.NewPlayerIdentityStore(filepath.Join(t.TempDir(), "player_identity.json"), true)
+	if err != nil {
+		t.Fatalf("new player identity store: %v", err)
+	}
+	connUUID, identityReady := ensureConnIdentityRecords(publicStore, identityStore, "uuid-1", "alpha", "127.0.0.1")
+	if strings.TrimSpace(connUUID) == "" || !identityReady {
+		t.Fatalf("expected conn_uuid and identity record, got conn_uuid=%q identityReady=%v", connUUID, identityReady)
+	}
+
+	detail := appendConnectionCheckpointDetail("version=157", netserver.NetEvent{
+		Kind: "connect_packet",
+		UUID: "uuid-1",
+		Name: "[scarlet]alpha[]",
+	}, publicStore, identityStore)
+	if !strings.Contains(detail, `conn_uuid_ready=true`) {
+		t.Fatalf("expected conn_uuid_ready=true in detail, got %q", detail)
+	}
+	if !strings.Contains(detail, `identity_ready=true`) {
+		t.Fatalf("expected identity_ready=true in detail, got %q", detail)
+	}
+	if !strings.Contains(detail, `display_name_ready=true`) {
+		t.Fatalf("expected display_name_ready=true in detail, got %q", detail)
+	}
+	if !strings.Contains(detail, connUUID) {
+		t.Fatalf("expected detail to include conn_uuid %q, got %q", connUUID, detail)
+	}
+}
+
 func TestBuildRuntimeRulesRawAvoidsInjectingComplexRuleObjects(t *testing.T) {
 	w := world.New(world.Config{TPS: 60})
 	model := world.NewWorldModel(8, 8)
 	model.Tags = map[string]string{
-		"rules": `{"waves":true,"defaultTeam":"sharded","waveTeam":"crux","planet":"erekir","teams":{"1":{"infiniteResources":true}}}`,
+		"rules": `{"waves":true,"fog":true,"staticFog":true,"defaultTeam":"sharded","waveTeam":"crux","planet":"erekir","teams":{"1":{"infiniteResources":true}}}`,
 	}
 	w.SetModel(model)
 
@@ -69,6 +165,12 @@ func TestBuildRuntimeRulesRawAvoidsInjectingComplexRuleObjects(t *testing.T) {
 	}
 	if got, _ := decoded["planet"].(string); got != "erekir" {
 		t.Fatalf("expected planet to remain untouched, got %#v", decoded["planet"])
+	}
+	if got, _ := decoded["fog"].(bool); got {
+		t.Fatal("expected runtime rules to disable unsupported fog sync")
+	}
+	if got, _ := decoded["staticFog"].(bool); got {
+		t.Fatal("expected runtime rules to disable unsupported static fog sync")
 	}
 }
 

@@ -1,22 +1,12 @@
 # 地图投票配置
-# 控制投票时长、状态刷新频率与弹窗位置。
 
 [map_vote]
-# 地图投票持续时间，单位秒。
-duration_sec = 15
-# 投票状态刷新间隔，单位毫秒。
-status_refresh_ms = 1500
-# 投票弹窗持续时间，单位毫秒。
-popup_duration_ms = 1800
-# 投票页中的主页或说明链接。
-home_link_url = "https://example.com/votemap"
-# 投票弹窗锚点位置，例如 top_left。
 align = "top_left"
-# 投票弹窗距上边界偏移。
-top = 220
-# 投票弹窗距左边界偏移。
-left = 0
-# 投票弹窗距下边界偏移。
 bottom = 0
-# 投票弹窗距右边界偏移。
+duration_sec = 15
+home_link_url = "https://example.com/votemap"
+left = 0
+popup_duration_ms = 1800
 right = 0
+status_refresh_ms = 1500
+top = 220

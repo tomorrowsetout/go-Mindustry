@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-04-22T07:20:03Z",
+  "updated_at": "2026-04-23T05:03:57Z",
   "by_uuid": {
     "AAAAAAAAAAAAAAAAAAAAAA==": {
       "conn_uuid": "45503",
@@ -14,7 +14,14 @@
       "name": "[#F285D1]月[#8982edff]子[#87ceebff]芳",
       "ip": "127.0.0.1",
       "first_seen": "2026-04-08T08:43:51Z",
-      "last_seen": "2026-04-22T07:20:03Z"
+      "last_seen": "2026-04-23T05:03:57Z"
+    },
+    "iP8N5P0wKpkAAAAAoN+11Q==": {
+      "conn_uuid": "62511",
+      "name": "git",
+      "ip": "144.12.74.175",
+      "first_seen": "2026-04-22T15:44:01Z",
+      "last_seen": "2026-04-22T15:44:01Z"
     }
   }
 }

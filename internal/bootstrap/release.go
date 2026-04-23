@@ -165,6 +165,9 @@ func releaseEmbeddedConfigs(configDir string) error {
 			rel, _ := filepath.Rel("configs", path)
 			return os.MkdirAll(filepath.Join(configDir, rel), 0o755)
 		}
+		if strings.EqualFold(filepath.ToSlash(path), "configs/release.toml") {
+			return nil
+		}
 		ext := strings.ToLower(filepath.Ext(path))
 		isJSONConfig := strings.HasPrefix(filepath.ToSlash(path), "configs/json/")
 		isConfigDoc := strings.HasPrefix(filepath.ToSlash(path), "configs/")

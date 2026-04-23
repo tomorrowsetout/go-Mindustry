@@ -2163,7 +2163,7 @@ func Default() Config {
 			DailyGCTime:  "",
 		},
 		Admin: AdminConfig{
-			OpsFile:            filepath.Join("json", "ops.json"),
+			OpsFile:            filepath.Join("configs", "json", "ops.json"),
 			PlayerLimit:        0,
 			StrictIdentity:     true,
 			AllowCustomClients: false,
@@ -2256,11 +2256,92 @@ func ApplyBaseDir(cfg *Config, baseDir string) {
 	cfg.Tracepoints.File = resolve(cfg.Tracepoints.File)
 }
 
+func relativizeConfigPath(baseDir, p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	clean := filepath.Clean(p)
+	if !filepath.IsAbs(clean) {
+		return clean
+	}
+	baseDir = strings.TrimSpace(baseDir)
+	if baseDir == "" {
+		return clean
+	}
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return clean
+	}
+	pathAbs, err := filepath.Abs(clean)
+	if err != nil {
+		return clean
+	}
+	rel, err := filepath.Rel(baseAbs, pathAbs)
+	if err != nil {
+		return clean
+	}
+	rel = filepath.Clean(rel)
+	if rel == "." || rel == "" {
+		return rel
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return clean
+	}
+	return rel
+}
+
+func configRootDir(cfgPath string) string {
+	dir := filepath.Dir(strings.TrimSpace(cfgPath))
+	if strings.TrimSpace(dir) == "" || dir == "." {
+		return "."
+	}
+	root := filepath.Dir(dir)
+	if strings.TrimSpace(root) == "" || root == dir {
+		return "."
+	}
+	return root
+}
+
+func relativizeForSave(cfgPath string, cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	configDir := filepath.Dir(strings.TrimSpace(cfgPath))
+	if strings.TrimSpace(configDir) == "" {
+		configDir = "."
+	}
+	rootDir := configRootDir(cfgPath)
+	rootRel := func(p string) string { return relativizeConfigPath(rootDir, p) }
+	configRel := func(p string) string { return relativizeConfigPath(configDir, p) }
+
+	cfg.Runtime.AssetsDir = rootRel(cfg.Runtime.AssetsDir)
+	cfg.Runtime.WorldsDir = rootRel(cfg.Runtime.WorldsDir)
+	cfg.Runtime.LogsDir = rootRel(cfg.Runtime.LogsDir)
+	cfg.Runtime.VanillaProfiles = rootRel(cfg.Runtime.VanillaProfiles)
+	cfg.Storage.Directory = rootRel(cfg.Storage.Directory)
+	cfg.Persist.Directory = rootRel(cfg.Persist.Directory)
+	cfg.Persist.MSAVDir = rootRel(cfg.Persist.MSAVDir)
+	cfg.Mods.Directory = rootRel(cfg.Mods.Directory)
+	cfg.Mods.JSDir = rootRel(cfg.Mods.JSDir)
+	cfg.Mods.GoDir = rootRel(cfg.Mods.GoDir)
+	cfg.Mods.NodeDir = rootRel(cfg.Mods.NodeDir)
+	cfg.Script.File = rootRel(cfg.Script.File)
+	cfg.Admin.OpsFile = rootRel(cfg.Admin.OpsFile)
+	cfg.Admin.WhitelistFile = rootRel(cfg.Admin.WhitelistFile)
+	cfg.Tracepoints.File = rootRel(cfg.Tracepoints.File)
+
+	cfg.Control.PublicConnUUIDFile = configRel(cfg.Control.PublicConnUUIDFile)
+	cfg.Personalization.PlayerIdentityFile = configRel(cfg.Personalization.PlayerIdentityFile)
+	cfg.API.ConfigFile = configRel(cfg.API.ConfigFile)
+}
+
 func Save(path string, cfg Config) error {
 	if strings.TrimSpace(path) == "" {
 		return os.ErrInvalid
 	}
 	normalize(&cfg)
+	relativizeForSave(path, &cfg)
 	d := makeINI(cfg)
 
 	if err := saveMainConfig(path, d); err != nil {
@@ -2274,6 +2355,7 @@ func SaveSidecars(path string, cfg Config) error {
 		return os.ErrInvalid
 	}
 	normalize(&cfg)
+	relativizeForSave(path, &cfg)
 	return saveSidecars(path, cfg, makeINI(cfg))
 }
 

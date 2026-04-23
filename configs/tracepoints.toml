@@ -1,18 +1,10 @@
 # 断点追踪配置
-# 用于把客户端请求、服务端发包、地图运行状态、状态包构建、世界流构建写入独立 JSONL 日志。
 
 [tracepoints]
-# 是否启用断点追踪日志。
-enabled = true
-# 日志文件路径。
-file = "logs/tracepoints.jsonl"
-# 是否记录客户端请求/收包断点。
 client_requests_enabled = true
-# 是否记录服务端发包断点。
+enabled = true
+file = "logs/tracepoints.jsonl"
 server_sends_enabled = true
-# 是否记录地图运行状态断点。
-world_runtime_enabled = true
-# 是否记录 stateSnapshot 构建断点。
 state_build_enabled = true
-# 是否记录 world stream 构建断点。
+world_runtime_enabled = true
 world_stream_enabled = true

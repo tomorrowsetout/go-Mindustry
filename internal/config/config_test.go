@@ -220,6 +220,65 @@ func TestSaveSidecarsSeparatesDevelopmentAndSundriesLogs(t *testing.T) {
 	}
 }
 
+func TestSaveSidecarsRelativizesWorkspaceAbsolutePaths(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "configs")
+	path := filepath.Join(configDir, "config.toml")
+	cfg := Default()
+	cfg.Source = path
+	cfg.Runtime.AssetsDir = filepath.Join(root, "assets")
+	cfg.Runtime.WorldsDir = filepath.Join(root, "assets", "worlds")
+	cfg.Runtime.LogsDir = filepath.Join(root, "logs")
+	cfg.Runtime.VanillaProfiles = filepath.Join(root, "data", "vanilla", "profiles.json")
+	cfg.Storage.Directory = filepath.Join(root, "data", "events")
+	cfg.Mods.Directory = filepath.Join(root, "mods")
+	cfg.Mods.JSDir = filepath.Join(root, "mods", "js")
+	cfg.Mods.GoDir = filepath.Join(root, "mods", "go")
+	cfg.Mods.NodeDir = filepath.Join(root, "mods", "node")
+	cfg.Persist.Directory = filepath.Join(root, "data", "state")
+	cfg.Persist.MSAVDir = filepath.Join(root, "data", "snapshots")
+	cfg.Script.File = filepath.Join(root, "data", "state", "scripts.json")
+	cfg.Admin.OpsFile = filepath.Join(configDir, "json", "ops.json")
+	cfg.Admin.WhitelistFile = filepath.Join(root, "data", "state", "whitelist.json")
+	cfg.Control.PublicConnUUIDFile = filepath.Join(configDir, "json", "conn_uuid.json")
+	cfg.Personalization.PlayerIdentityFile = filepath.Join(configDir, "json", "player_identity.json")
+	cfg.Tracepoints.File = filepath.Join(root, "logs", "tracepoints.jsonl")
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	miscRaw, err := os.ReadFile(filepath.Join(configDir, "misc.toml"))
+	if err != nil {
+		t.Fatalf("read misc toml: %v", err)
+	}
+	miscText := string(miscRaw)
+	for _, want := range []string{
+		`assets_dir = "assets"`,
+		`worlds_dir = "assets\worlds"`,
+		`logs_dir = "logs"`,
+		`directory = "data\events"`,
+		`ops_file = "configs\json\ops.json"`,
+		`whitelist_file = "data\state\whitelist.json"`,
+	} {
+		if !strings.Contains(miscText, want) {
+			t.Fatalf("expected %q in misc.toml, got:\n%s", want, miscText)
+		}
+	}
+	if strings.Contains(miscText, root) {
+		t.Fatalf("expected misc.toml to avoid absolute workspace paths, got:\n%s", miscText)
+	}
+
+	mainRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read main config: %v", err)
+	}
+	mainText := string(mainRaw)
+	if !strings.Contains(mainText, `public_conn_uuid_file = "json\conn_uuid.json"`) {
+		t.Fatalf("expected relative public conn uuid file, got:\n%s", mainText)
+	}
+}
+
 func TestLoadConfigTOMLSidecarsWithoutMainConfig(t *testing.T) {
 	dir := t.TempDir()
 	mainPath := filepath.Join(dir, "config.toml")

@@ -171,3 +171,28 @@ func TestRulesManagerFromTagsSupportsMindustryJsonIOStyleRules(t *testing.T) {
 		t.Fatal("expected teams[2].infiniteResources=true")
 	}
 }
+
+func TestDescribeRuleModePrefersInferredModeAndFlags(t *testing.T) {
+	model := NewWorldModel(8, 8)
+	model.Tags = map[string]string{"mode": "sandbox"}
+	rules := DefaultRules()
+	rules.ModeName = "custom-sandbox"
+	rules.Waves = true
+	rules.WaveTimer = false
+	rules.InfiniteResources = true
+	rules.InfiniteAmmo = true
+
+	summary := DescribeRuleMode(model, rules)
+	if summary.Mode != "sandbox" {
+		t.Fatalf("expected inferred mode sandbox, got %q", summary.Mode)
+	}
+	if summary.ModeName != "custom-sandbox" {
+		t.Fatalf("expected modeName custom-sandbox, got %q", summary.ModeName)
+	}
+	if !summary.InfiniteResources || !summary.InfiniteAmmo {
+		t.Fatal("expected summary to expose infinite resource/ammo flags")
+	}
+	if summary.WaveTimer {
+		t.Fatal("expected summary waveTimer=false")
+	}
+}

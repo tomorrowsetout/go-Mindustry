@@ -1,62 +1,32 @@
 # 状态栏配置
-# 控制定时弹出的服务器状态栏内容与布局。
 
 [status_bar]
-# 是否启用状态栏弹窗。
-enabled = true
-# 状态栏刷新间隔，单位秒。
-refresh_interval_sec = 2
-# 单次弹窗持续时间，单位毫秒。
-popup_duration_ms = 2200
-# 弹窗锚点位置，例如 top_left。
 align = "top_left"
-# 距上边界偏移。
-top = 155
-# 距左边界偏移。
-left = 0
-# 距下边界偏移。
 bottom = 0
-# 距右边界偏移。
-right = 0
-# 弹窗唯一 ID，用于复用/覆盖同类弹窗。
-popup_id = "server-status-bar"
-# 是否显示标题行。
-header_enabled = true
-# 标题文本内容。
-header_text = "[accent]服务器状态[]"
-# 是否显示服务器名行。
-server_name_enabled = true
-# 服务器名行格式。
-server_name_format = "[green]服务器: [white]{server_name}[]"
-# 是否显示性能信息。
-performance_enabled = true
-# 性能信息格式。
-performance_format = "[green]性能: [white]CPU {cpu_percent}%[] [white]进程内存 {memory_mb} MB[]"
-# 是否显示当前地图。
 current_map_enabled = true
-# 当前地图格式。
 current_map_format = "[green]当前地图: [white]{current_map}[]"
-# 是否显示本局时间。
-game_time_enabled = true
-# 本局时间格式。
-game_time_format = "[green]本局时间: [white]{game_time}[]"
-# 是否显示在线人数。
-player_count_enabled = true
-# 在线人数格式。
-player_count_format = "[green]在线人数: [white]{players}[]"
-# 是否显示欢迎语。
-welcome_enabled = true
-# 欢迎语格式。
-welcome_format = "[gold]欢迎玩家 {player_name} 来到镜像物语[]"
-# 是否显示 QQ 群信息。
-qq_group_enabled = true
-# QQ 群文本内容。
-qq_group_text = "333641130"
-# QQ 群显示格式。
-qq_group_format = "[green]QQ群: [white]{qq_group}[]"
-# 是否显示自定义公告。
 custom_message_enabled = true
-# 自定义公告文本。
-custom_message_text = "这是一个重构项目，欢迎加入测试！"
-# 自定义公告格式。
 custom_message_format = "[gold]{message}[]"
+custom_message_text = "这是一个重构项目，欢迎加入测试！"
+enabled = true
+game_time_enabled = true
+game_time_format = "[green]本局时间: [white]{game_time}[]"
+header_enabled = true
+header_text = "[accent]服务器状态[]"
+left = 0
+performance_enabled = true
+performance_format = "[green]性能: [white]CPU {cpu_percent}%[] [white]进程内存 {memory_mb} MB[]"
+player_count_enabled = true
+player_count_format = "[green]在线人数: [white]{players}[]"
+popup_duration_ms = 2200
+popup_id = "server-status-bar"
+qq_group_enabled = true
+qq_group_format = "[green]QQ群: [white]{qq_group}[]"
+qq_group_text = "333641130"
+refresh_interval_sec = 2
+right = 0
+server_name_enabled = true
+server_name_format = "[green]服务器: [white]{server_name}[]"
+top = 155
+welcome_enabled = true
+welcome_format = "[gold]欢迎玩家 {player_name} 来到镜像物语[]"
