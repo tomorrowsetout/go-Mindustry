@@ -2093,10 +2093,33 @@ func (w *World) BuildingInfoPacked(pos int32) (BuildingInfo, bool) {
 	defer w.mu.RUnlock()
 
 	index, ok := w.buildingIndexFromPackedPosLocked(pos)
-	if !ok || w.model == nil || index < 0 || int(index) >= len(w.model.Tiles) {
+	if !ok {
 		return BuildingInfo{}, false
 	}
-	tile := &w.model.Tiles[index]
+	return w.buildingInfoForTileIndexLocked(index)
+}
+
+func (w *World) BuildingInfoTileIndex(pos int32) (BuildingInfo, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.buildingInfoForTileIndexLocked(pos)
+}
+
+func (w *World) TileIndexFromPackedPos(pos int32) (int32, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.tileIndexFromPackedPosLocked(pos)
+}
+
+func (w *World) buildingInfoForTileIndexLocked(index int32) (BuildingInfo, bool) {
+	if w.model == nil || index < 0 || int(index) >= len(w.model.Tiles) {
+		return BuildingInfo{}, false
+	}
+	center, ok := w.centerBuildingIndexLocked(index)
+	if !ok || center < 0 || int(center) >= len(w.model.Tiles) {
+		return BuildingInfo{}, false
+	}
+	tile := &w.model.Tiles[center]
 	if tile.Block == 0 || tile.Build == nil {
 		return BuildingInfo{}, false
 	}

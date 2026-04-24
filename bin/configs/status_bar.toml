@@ -1,0 +1,32 @@
+# 状态栏配置
+
+[status_bar]
+align = "top_left"
+bottom = 0
+current_map_enabled = true
+current_map_format = "[green]当前地图: [white]{current_map}[]"
+custom_message_enabled = true
+custom_message_format = "[gold]{message}[]"
+custom_message_text = "这是一个重构项目，欢迎加入测试！"
+enabled = true
+game_time_enabled = true
+game_time_format = "[green]本局时间: [white]{game_time}[]"
+header_enabled = true
+header_text = "[accent]服务器状态[]"
+left = 0
+performance_enabled = true
+performance_format = "[green]性能: [white]CPU {cpu_percent}%[] [white]进程内存 {memory_mb} MB[]"
+player_count_enabled = true
+player_count_format = "[green]在线人数: [white]{players}[]"
+popup_duration_ms = 2200
+popup_id = "server-status-bar"
+qq_group_enabled = true
+qq_group_format = "[green]QQ群: [white]{qq_group}[]"
+qq_group_text = "333641130"
+refresh_interval_sec = 2
+right = 0
+server_name_enabled = true
+server_name_format = "[green]服务器: [white]{server_name}[]"
+top = 155
+welcome_enabled = true
+welcome_format = "[gold]欢迎玩家 {player_name} 来到镜像物语[]"

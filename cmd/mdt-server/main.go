@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -717,6 +718,7 @@ var (
 	runtimeAssetsDir  = "assets"
 	runtimeConfigDir  = "configs"
 	runtimeBaseDir    = "."
+	runtimeWorldPath  atomic.Value
 )
 
 type startupStatus int
@@ -1273,7 +1275,11 @@ func main() {
 		if wld == nil {
 			return nil
 		}
-		if wld.CanControlBuildingPacked(pos) {
+		info, ok := wld.BuildingInfoTileIndex(pos)
+		if !ok {
+			return nil
+		}
+		if wld.CanControlBuildingPacked(info.Pos) {
 			return protocol.ControlBuildingRef{
 				PosValue: pos,
 				UnitRef: protocol.BlockUnitRef{
@@ -1281,10 +1287,7 @@ func main() {
 				},
 			}
 		}
-		if _, ok := wld.BuildingInfoPacked(pos); ok {
-			return protocol.BuildingBox{PosValue: pos}
-		}
-		return nil
+		return protocol.BuildingBox{PosValue: pos}
 	}
 	buildInfoToControlled := func(info world.BuildingInfo) netserver.ControlledBuildInfo {
 		return netserver.ControlledBuildInfo{
@@ -1578,6 +1581,7 @@ func main() {
 	}
 	loadWorldModel := func(path string) {
 		path = canonicalRuntimePath(path)
+		runtimeWorldPath.Store(path)
 		actualPath := resolveRuntimePath(path)
 		buildService.Reset()
 		lower := strings.ToLower(path)
@@ -1877,17 +1881,11 @@ func main() {
 		if conn == nil {
 			return
 		}
-		if conn.UsesLiveWorldStream() {
-			showJoinPopupForConn(srv, conn)
-			return
-		}
-		// Wait until client applies world stream, then reconcile against the
-		// template map and finally overwrite with the current authoritative live state.
+		// Let the client finish applying the world stream, then only push lightweight
+		// overlays. Full world reload remains on explicit /sync.
 		time.Sleep(350 * time.Millisecond)
 		syncRulesToConn(conn, wld, state.get())
-		syncAuthoritativeWorldToConn(srv, conn, wld, cache.model(state.get()), cfg.Sync.Strategy)
 		showJoinPopupForConn(srv, conn)
-		conn.SetWorldReloadGrace(750 * time.Millisecond)
 	}
 	srv.OnMenuChoose = func(c *netserver.Conn, menuID, option int32) {
 		handleJoinPopupMenuChoice(srv, c, menuID, option)
@@ -1896,14 +1894,8 @@ func main() {
 		if conn == nil {
 			return
 		}
-		if conn.UsesLiveWorldStream() {
-			srv.RefreshPlayerDisplayNames()
-			return
-		}
 		syncRulesToConn(conn, wld, state.get())
-		syncAuthoritativeWorldToConn(srv, conn, wld, cache.model(state.get()), cfg.Sync.Strategy)
 		srv.RefreshPlayerDisplayNames()
-		conn.SetWorldReloadGrace(750 * time.Millisecond)
 	}
 	srv.SpawnTileFn = func() (protocol.Point2, bool) {
 		if pos, ok := resolveTeamCoreTile(wld, resolveDefaultPlayerTeam(wld), protocol.Point2{}); ok {
@@ -2037,28 +2029,35 @@ func main() {
 		if c == nil || wld == nil {
 			return
 		}
-		if info, ok := wld.BuildingInfoPacked(pos); ok {
-			if info.Team != resolveConnTeam(c, wld) {
-				return
-			}
+		info, ok := wld.BuildingInfoTileIndex(pos)
+		if !ok || info.Team != resolveConnTeam(c, wld) {
+			return
 		}
-		sendRequestedBlockSnapshotToConn(c, wld, pos)
+		sendRequestedBlockSnapshotToConn(c, wld, info.Pos)
 	}
 	srv.OnBuildingControlSelect = func(c *netserver.Conn, pos int32) {
 		if wld == nil || c == nil {
 			return
 		}
-		if !wld.CanControlSelectBuildingPacked(pos) {
-			return
-		}
-		info, ok := wld.BuildingInfoPacked(pos)
+		info, ok := wld.BuildingInfoTileIndex(pos)
 		if !ok {
 			return
 		}
 		switch {
 		case strings.HasPrefix(info.Name, "core-"):
+			if !wld.CanControlSelectBuildingPacked(info.Pos) {
+				return
+			}
 			handleCoreBuildingControlSelect(c, info)
+		case wld.CanControlBuildingPacked(info.Pos):
+			if info.Team != resolveConnTeam(c, wld) {
+				return
+			}
+			_ = srv.HandleBuildingControlSelect(c, info.Pos)
 		default:
+			if !wld.CanControlSelectBuildingPacked(info.Pos) {
+				return
+			}
 			handlePlayerPayloadBuildingControlSelect(c, info)
 		}
 	}
@@ -2066,11 +2065,11 @@ func main() {
 		if wld == nil || unitID == 0 {
 			return
 		}
-		if !wld.CanControlSelectBuildingPacked(pos) {
+		info, ok := wld.BuildingInfoTileIndex(pos)
+		if !ok || !wld.CanControlSelectBuildingPacked(info.Pos) {
 			return
 		}
-		info, ok := wld.BuildingInfoPacked(pos)
-		if !ok || strings.HasPrefix(info.Name, "core-") {
+		if strings.HasPrefix(info.Name, "core-") {
 			return
 		}
 		handleUnitPayloadBuildingControlSelect(c, info, unitID)
@@ -2249,7 +2248,11 @@ func main() {
 		for range t.C {
 			now := time.Now()
 			if !now.Before(nextPlanPreviewSync) {
-				srv.BroadcastStoredClientPlanPreviewsAt(now)
+				// Vanilla relays teammate build-preview plans, but our current
+				// clientPlanSnapshotReceived writer is not byte-perfect yet and can
+				// crash 157 clients while decoding preview blocks. Keep receiving
+				// client previews server-side, but stop re-broadcasting them until the
+				// packet format is fully aligned with the original implementation.
 				nextPlanPreviewSync = now.Add(500 * time.Millisecond)
 			}
 			evs := wld.DrainEntityEvents()
@@ -2457,10 +2460,11 @@ func main() {
 			if c == nil {
 				return true
 			}
-			syncRulesToConn(c, wld, state.get())
-			syncCurrentWorldToConn(c, wld)
-			_ = srv.SyncEntitySnapshotsToConn(c)
-			srv.SendChat(c, "[accent]已同步当前运行状态[]")
+			if err := srv.SyncWorldToConn(c); err != nil {
+				srv.SendChat(c, fmt.Sprintf("[scarlet]同步失败: %s[]", err.Error()))
+				return true
+			}
+			srv.SendChat(c, "[accent]正在重新加载地图并同步当前运行状态[]")
 			return true
 		}
 		lowerTrimmed := strings.ToLower(trimmed)
@@ -5477,16 +5481,117 @@ func buildBlockSnapshotPackets(snaps []world.BlockSyncSnapshot) []*protocol.Remo
 	return packets
 }
 
+func buildBlockSnapshotPacketsForWorld(wld *world.World, snaps []world.BlockSyncSnapshot) []*protocol.Remote_NetClient_blockSnapshot_34 {
+	if len(snaps) == 0 {
+		return nil
+	}
+	packets := make([]*protocol.Remote_NetClient_blockSnapshot_34, 0, len(snaps))
+	for _, snap := range snaps {
+		if snap.BlockID <= 0 || len(snap.Data) == 0 {
+			continue
+		}
+		wirePos := snap.Pos
+		if wld != nil {
+			linearPos, ok := wld.TileIndexFromPackedPos(snap.Pos)
+			if !ok {
+				continue
+			}
+			wirePos = linearPos
+		}
+		writer := protocol.NewWriter()
+		_ = writer.WriteInt32(wirePos)
+		_ = writer.WriteInt16(snap.BlockID)
+		_ = writer.WriteBytes(snap.Data)
+		packets = append(packets, &protocol.Remote_NetClient_blockSnapshot_34{
+			Amount: 1,
+			Data:   append([]byte(nil), writer.Bytes()...),
+		})
+	}
+	return packets
+}
+
+func currentWorldPathLooksHidden(path string) bool {
+	path = strings.ToLower(strings.TrimSpace(filepath.ToSlash(path)))
+	return strings.Contains(path, "/hidden/")
+}
+
+func currentRuntimeWorldPath() string {
+	if v := runtimeWorldPath.Load(); v != nil {
+		if path, ok := v.(string); ok {
+			return path
+		}
+	}
+	return ""
+}
+
+func filterBlockSnapshotsForViewerTeam(wld *world.World, snaps []world.BlockSyncSnapshot, viewerTeam byte) []world.BlockSyncSnapshot {
+	if wld == nil || len(snaps) == 0 || viewerTeam == 0 {
+		return snaps
+	}
+	out := make([]world.BlockSyncSnapshot, 0, len(snaps))
+	for _, snap := range snaps {
+		info, ok := wld.BuildingInfoPacked(snap.Pos)
+		if !ok {
+			continue
+		}
+		if byte(info.Team) != viewerTeam {
+			continue
+		}
+		out = append(out, snap)
+	}
+	return out
+}
+
+func broadcastBlockSnapshotsForHiddenMap(srv *netserver.Server, wld *world.World, snaps []world.BlockSyncSnapshot) {
+	if srv == nil || wld == nil || len(snaps) == 0 {
+		return
+	}
+	for _, conn := range srv.ListConnectedConns() {
+		if conn == nil || conn.InWorldReloadGrace() {
+			continue
+		}
+		filtered := filterBlockSnapshotsForViewerTeam(wld, snaps, conn.TeamID())
+		for _, packet := range buildBlockSnapshotPacketsForWorld(wld, filtered) {
+			_ = conn.SendAsync(packet)
+		}
+	}
+}
+
+func sendBlockSnapshotsToConnFiltered(conn *netserver.Conn, wld *world.World, snaps []world.BlockSyncSnapshot) {
+	if conn == nil || wld == nil || len(snaps) == 0 {
+		return
+	}
+	if currentWorldPathLooksHidden(currentRuntimeWorldPath()) {
+		snaps = filterBlockSnapshotsForViewerTeam(wld, snaps, conn.TeamID())
+	}
+	for _, packet := range buildBlockSnapshotPacketsForWorld(wld, snaps) {
+		_ = conn.SendAsync(packet)
+	}
+}
+
+func broadcastBlockSnapshotsFiltered(srv *netserver.Server, wld *world.World, snaps []world.BlockSyncSnapshot, unreliable bool) {
+	if srv == nil || wld == nil || len(snaps) == 0 {
+		return
+	}
+	if currentWorldPathLooksHidden(currentRuntimeWorldPath()) {
+		broadcastBlockSnapshotsForHiddenMap(srv, wld, snaps)
+		return
+	}
+	for _, packet := range buildBlockSnapshotPacketsForWorld(wld, snaps) {
+		if unreliable {
+			srv.BroadcastUnreliable(packet)
+		} else {
+			srv.Broadcast(packet)
+		}
+	}
+}
+
 func sendBlockSnapshotsToConn(conn *netserver.Conn, wld *world.World) {
 	if conn == nil || wld == nil {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsLiveOnly()) {
-		_ = conn.SendAsync(packet)
-	}
-	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsLiveOnly()) {
-		_ = conn.SendAsync(packet)
-	}
+	sendBlockSnapshotsToConnFiltered(conn, wld, wld.BlockSyncSnapshotsLiveOnly())
+	sendBlockSnapshotsToConnFiltered(conn, wld, wld.ItemTurretBlockSyncSnapshotsLiveOnly())
 }
 
 func newTileConfigPacket(pos int32, value any) (*protocol.Remote_InputHandler_tileConfig_90, bool) {
@@ -5557,12 +5662,8 @@ func sendBlockSnapshotsForPackedToConn(conn *netserver.Conn, wld *world.World, p
 	if conn == nil || wld == nil || len(packedPositions) == 0 {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
-		_ = conn.SendAsync(packet)
-	}
-	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
-		_ = conn.SendAsync(packet)
-	}
+	sendBlockSnapshotsToConnFiltered(conn, wld, wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions))
+	sendBlockSnapshotsToConnFiltered(conn, wld, wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly(packedPositions))
 }
 
 func expandRelatedBlockSyncPackedPositions(wld *world.World, packedPositions []int32) []int32 {
@@ -5689,10 +5790,10 @@ func authoritativeTileStatePacketsForPacked(wld *world.World, pos int32) []any {
 			packets = append(packets, packet)
 		}
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly([]int32{pos})) {
+	for _, packet := range buildBlockSnapshotPacketsForWorld(wld, wld.BlockSyncSnapshotsForPackedLiveOnly([]int32{pos})) {
 		packets = append(packets, packet)
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly([]int32{pos})) {
+	for _, packet := range buildBlockSnapshotPacketsForWorld(wld, wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly([]int32{pos})) {
 		packets = append(packets, packet)
 	}
 	return packets
@@ -5733,27 +5834,21 @@ func broadcastBlockSnapshots(srv *netserver.Server, wld *world.World) {
 	// The world stream already delivered msav inline sync bytes on load/connect.
 	// Periodic overlays must be generated from current runtime state only, or they
 	// can replay stale map bytes back onto active clients.
-	for _, packet := range buildBlockSnapshotPackets(wld.PeriodicBlockSyncSnapshotsLiveOnly()) {
-		srv.BroadcastUnreliable(packet)
-	}
+	broadcastBlockSnapshotsFiltered(srv, wld, wld.PeriodicBlockSyncSnapshotsLiveOnly(), true)
 }
 
 func broadcastBlockSnapshotsForPacked(srv *netserver.Server, wld *world.World, packedPositions []int32) {
 	if srv == nil || wld == nil || len(packedPositions) == 0 {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
-		srv.Broadcast(packet)
-	}
+	broadcastBlockSnapshotsFiltered(srv, wld, wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions), false)
 }
 
 func broadcastItemBlockSnapshotsForPacked(srv *netserver.Server, wld *world.World, packedPositions []int32) {
 	if srv == nil || wld == nil || len(packedPositions) == 0 {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
-		srv.Broadcast(packet)
-	}
+	broadcastBlockSnapshotsFiltered(srv, wld, wld.BlockSyncSnapshotsForPackedLiveOnly(packedPositions), false)
 }
 
 func broadcastItemTurretAmmoSnapshotsForPacked(srv *netserver.Server, wld *world.World, packedPositions []int32) {
@@ -5765,9 +5860,7 @@ func broadcastItemTurretAmmoSnapshotsForPacked(srv *netserver.Server, wld *world
 			stdlog.Printf("[turret-ammo] broadcast %s", wld.DebugItemTurretAmmoPacked(packed))
 		}
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly(packedPositions)) {
-		srv.Broadcast(packet)
-	}
+	broadcastBlockSnapshotsFiltered(srv, wld, wld.ItemTurretBlockSyncSnapshotsForPackedLiveOnly(packedPositions), false)
 }
 
 func broadcastRelatedBlockSnapshots(srv *netserver.Server, wld *world.World, packedPos int32) {
@@ -5783,18 +5876,14 @@ func broadcastUnitFactorySnapshots(srv *netserver.Server, wld *world.World) {
 	if srv == nil || wld == nil {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.UnitFactoryBlockSyncSnapshotsLiveOnly()) {
-		srv.BroadcastUnreliable(packet)
-	}
+	broadcastBlockSnapshotsFiltered(srv, wld, wld.UnitFactoryBlockSyncSnapshotsLiveOnly(), true)
 }
 
 func broadcastPayloadProcessorSnapshots(srv *netserver.Server, wld *world.World) {
 	if srv == nil || wld == nil {
 		return
 	}
-	for _, packet := range buildBlockSnapshotPackets(wld.PayloadProcessorBlockSyncSnapshotsLiveOnly()) {
-		srv.BroadcastUnreliable(packet)
-	}
+	broadcastBlockSnapshotsFiltered(srv, wld, wld.PayloadProcessorBlockSyncSnapshotsLiveOnly(), true)
 }
 
 func syncCurrentWorldToConn(conn *netserver.Conn, wld *world.World) {
@@ -5932,11 +6021,11 @@ func syncAuthoritativeWorldToConn(srv *netserver.Server, conn *netserver.Conn, w
 		}
 		return
 	}
-	liveModel := wld.CloneModel()
-	if liveModel == nil {
+	currentModel := wld.Model()
+	if currentModel == nil {
 		return
 	}
-	if baseModel == nil || baseModel.Width != liveModel.Width || baseModel.Height != liveModel.Height {
+	if baseModel == nil || baseModel.Width != currentModel.Width || baseModel.Height != currentModel.Height {
 		syncCurrentWorldToConn(conn, wld)
 		if srv != nil {
 			_ = srv.SyncEntitySnapshotsToConn(conn)
@@ -5967,17 +6056,17 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 	if conn == nil || wld == nil {
 		return
 	}
-	liveModel := wld.CloneModel()
-	if liveModel == nil {
+	currentModel := wld.Model()
+	if currentModel == nil {
 		return
 	}
-	if baseModel == nil || baseModel.Width != liveModel.Width || baseModel.Height != liveModel.Height {
+	if baseModel == nil || baseModel.Width != currentModel.Width || baseModel.Height != currentModel.Height {
 		syncCurrentWorldToConn(conn, wld)
 		return
 	}
 
 	baseStates := buildSyncSnapshotFromModel(baseModel)
-	liveStates := buildSyncSnapshotFromModel(liveModel)
+	liveStates := wld.BuildSyncSnapshot()
 	baseByPos := make(map[int32]world.BuildSyncState, len(baseStates))
 	liveByPos := make(map[int32]world.BuildSyncState, len(liveStates))
 	posSet := make(map[int32]struct{}, len(baseStates)+len(liveStates))
@@ -6010,7 +6099,7 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 			baseState.Team == liveState.Team &&
 			baseState.Rotation == liveState.Rotation &&
 			sameBuildHealth(baseState.Health, liveState.Health) &&
-			sameTileConfigAtPos(baseModel, liveModel, pos) {
+			sameTileConfigAtPosLive(baseModel, wld, pos) {
 			continue
 		}
 
@@ -6041,8 +6130,8 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 
 		var cfgValue any
 		cfgOK := false
-		if tile, ok := tileAtPacked(liveModel, pos); ok && tile != nil {
-			cfgValue, cfgOK = decodeTileConfigValue(tile)
+		if value, ok := wld.BuildingConfigPacked(pos); ok {
+			cfgValue, cfgOK = value, true
 		}
 		if modelTileIsConstructLike(baseModel, pos) {
 			_ = conn.SendAsync(&protocol.Remote_ConstructBlock_constructFinish_146{
@@ -6061,22 +6150,17 @@ func syncWorldDiffToConn(conn *netserver.Conn, wld *world.World, baseModel *worl
 			Rotation: int32(liveState.Rotation) & 0x3,
 		})
 
-		if tile, ok := tileAtPacked(liveModel, pos); ok && tile.Build != nil {
-			hp := tile.Build.Health
-			if hp <= 0 {
-				hp = tile.Build.MaxHealth
-			}
-			if hp <= 0 {
-				hp = 1000
-			}
-			health = append(health, pos, int32(math.Float32bits(hp)))
-			if (cfgOK || !sameTileConfigAtPos(baseModel, liveModel, pos)) && shouldSendTileConfigForPacked(wld, pos, cfgValue) {
-				if packet, ok := newTileConfigPacket(pos, cfgValue); ok {
-					_ = conn.SendAsync(packet)
-				}
-			}
-			changedPacked = append(changedPacked, pos)
+		hp := liveState.Health
+		if hp <= 0 {
+			hp = 1000
 		}
+		health = append(health, pos, int32(math.Float32bits(hp)))
+		if (cfgOK || !sameTileConfigAtPosLive(baseModel, wld, pos)) && shouldSendTileConfigForPacked(wld, pos, cfgValue) {
+			if packet, ok := newTileConfigPacket(pos, cfgValue); ok {
+				_ = conn.SendAsync(packet)
+			}
+		}
+		changedPacked = append(changedPacked, pos)
 		if len(health) >= 256 {
 			_ = conn.SendAsync(&protocol.Remote_Tile_buildHealthUpdate_144{
 				Buildings: protocol.IntSeq{Items: append([]int32(nil), health...)},
@@ -6196,6 +6280,24 @@ func sameTileConfigAtPos(baseModel, liveModel *world.WorldModel, pos int32) bool
 		liveCfg = liveTile.Build.Config
 	}
 	return bytes.Equal(baseCfg, liveCfg)
+}
+
+func sameTileConfigAtPosLive(baseModel *world.WorldModel, wld *world.World, pos int32) bool {
+	baseTile, baseOK := tileAtPacked(baseModel, pos)
+	var baseCfg any
+	var liveCfg any
+	var baseHasCfg bool
+	var liveHasCfg bool
+	if baseOK && baseTile != nil {
+		baseCfg, baseHasCfg = decodeTileConfigValue(baseTile)
+	}
+	if wld != nil {
+		liveCfg, liveHasCfg = wld.BuildingConfigPacked(pos)
+	}
+	if !baseHasCfg && !liveHasCfg {
+		return true
+	}
+	return reflect.DeepEqual(baseCfg, liveCfg)
 }
 
 func sameBuildHealth(a, b float32) bool {

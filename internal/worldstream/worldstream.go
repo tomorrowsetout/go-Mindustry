@@ -42,33 +42,60 @@ type MSAVData struct {
 }
 
 func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
-	if model, err := LoadWorldModelFromMSAV(path, nil); err == nil && model != nil {
+	model, modelErr := LoadWorldModelFromMSAV(path, nil)
+	var modelPayload []byte
+	if modelErr == nil && model != nil {
 		if payload, berr := BuildWorldStreamFromModel(model, 1); berr == nil && len(payload) > 0 {
 			if _, inspectErr := InspectWorldStreamPayload(payload); inspectErr == nil {
-				return payload, nil
+				modelPayload = payload
 			}
 		}
 	}
 
 	data, err := readMSAV(path)
 	if err != nil {
+		if len(modelPayload) > 0 {
+			return modelPayload, nil
+		}
 		return nil, err
 	}
-	mapChunk := data.Map
-	if err := skipMapData(newJavaReader(mapChunk)); err != nil {
-		model, merr := LoadWorldModelFromMSAV(path, nil)
-		if merr == nil {
-			clearInlineBuildingSyncData(model)
-			normalized, nerr := encodeMapChunkMinimal(model)
-			if nerr == nil {
-				mapChunk = normalized
+	rawPayload, err := buildRawWorldStreamFromMSAVData(path, data, model)
+	if err == nil && len(rawPayload) > 0 {
+		if model != nil {
+			if ok, matchErr := worldStreamPayloadMatchesModel(rawPayload, model); matchErr == nil && ok {
+				return rawPayload, nil
 			}
+		} else {
+			return rawPayload, nil
 		}
 	}
-	// NetworkIO.writeWorld sends current runtime team plans, not the raw team-block
-	// section preserved inside an arbitrary save file. Old saves can carry plan config
-	// objects that deserialize differently clientside, so keep join-world payloads on
-	// the safest legal representation until runtime-owned team plans are tracked.
+	if len(modelPayload) > 0 && model != nil {
+		if ok, matchErr := worldStreamPayloadMatchesModel(modelPayload, model); matchErr == nil && ok {
+			return modelPayload, nil
+		}
+	}
+	if len(modelPayload) > 0 {
+		return modelPayload, nil
+	}
+	return rawPayload, err
+}
+
+func buildRawWorldStreamFromMSAVData(path string, data MSAVData, model *world.WorldModel) ([]byte, error) {
+	mapChunk := data.Map
+	if err := skipMapData(newJavaReader(mapChunk)); err != nil {
+		if model == nil {
+			var loadErr error
+			model, loadErr = LoadWorldModelFromMSAV(path, nil)
+			if loadErr != nil {
+				return nil, loadErr
+			}
+		}
+		clearInlineBuildingSyncData(model)
+		normalized, nerr := encodeMapChunkMinimal(model)
+		if nerr == nil {
+			mapChunk = normalized
+		}
+	}
 	var teamBlocks bytes.Buffer
 	if err := writeMinimalTeamBlocks(&javaWriter{buf: &teamBlocks}); err != nil {
 		return nil, err
@@ -91,7 +118,6 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	if err := w.WriteUTF(locales); err != nil {
 		return nil, err
 	}
-
 	if err := w.WriteStringMap(data.Tags); err != nil {
 		return nil, err
 	}
@@ -126,15 +152,12 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	// rand seeds
 	if err := w.WriteInt64(0); err != nil {
 		return nil, err
 	}
 	if err := w.WriteInt64(0); err != nil {
 		return nil, err
 	}
-
-	// player id
 	if err := w.WriteInt32(1); err != nil {
 		return nil, err
 	}
@@ -160,7 +183,6 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 	}
 	markers := data.Markers
 	if len(markers) == 0 {
-		// UBJSON empty object - decodes as an empty IntMap for markers.
 		markers = []byte{0x7B, 0x7D}
 	}
 	if err := w.WriteBytes(markers); err != nil {
@@ -184,6 +206,69 @@ func BuildWorldStreamFromMSAV(path string) ([]byte, error) {
 		return nil, err
 	}
 	return compressed.Bytes(), nil
+}
+
+func worldStreamPayloadMatchesModel(payload []byte, model *world.WorldModel) (bool, error) {
+	if model == nil || len(payload) == 0 {
+		return false, ErrInvalidMSAV
+	}
+	mapChunk, err := extractMapChunkFromWorldStreamPayload(payload)
+	if err != nil {
+		return false, err
+	}
+	decoded, err := decodeMapChunkModern(mapChunk, model.BlockNames)
+	if err != nil {
+		return false, err
+	}
+	if decoded.Width != model.Width || decoded.Height != model.Height || len(decoded.Tiles) != len(model.Tiles) {
+		return false, nil
+	}
+	for i := range model.Tiles {
+		want := model.Tiles[i]
+		got := decoded.Tiles[i]
+		if want.Floor != got.Floor || want.Overlay != got.Overlay || want.Block != got.Block || want.Team != got.Team || want.Rotation != got.Rotation {
+			return false, nil
+		}
+		if (want.Build != nil) != (got.Build != nil) {
+			return false, nil
+		}
+		if want.Build != nil && got.Build != nil {
+			if want.Build.X != got.Build.X || want.Build.Y != got.Build.Y || want.Build.Team != got.Build.Team || want.Build.Rotation != got.Build.Rotation {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+func extractMapChunkFromWorldStreamPayload(payload []byte) ([]byte, error) {
+	zr, err := zlib.NewReader(bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(zr)
+	_ = zr.Close()
+	if err != nil {
+		return nil, err
+	}
+	playerStart, err := locatePlayerStart(raw)
+	if err != nil {
+		return nil, err
+	}
+	r := newJavaReader(raw[playerStart:])
+	playerRev, err := r.ReadInt16()
+	if err != nil {
+		return nil, err
+	}
+	if err := skipPlayerPayload(r, playerRev); err != nil {
+		return nil, err
+	}
+	contentStart := playerStart + r.Offset()
+	_, patchesEnd, mapEnd, _, _, _, _, err := inspectWorldSections(raw, contentStart)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), raw[patchesEnd:mapEnd]...), nil
 }
 
 func clearInlineBuildingSyncData(model *world.WorldModel) {

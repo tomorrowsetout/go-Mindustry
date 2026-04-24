@@ -1,0 +1,12 @@
+# 核心配置
+
+[core]
+dual_core_enabled = true
+tps = 120
+
+[memory]
+check_interval_sec = 5
+free_os_memory = false
+gc_trigger_mb = 0
+limit_mb = 0
+startup_max_mb = 0

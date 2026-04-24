@@ -8,8 +8,8 @@ import (
 	"mdt-server/internal/protocol"
 )
 
-// BlockSyncSnapshot mirrors the payload written by vanilla NetServer.writeBlockSnapshots():
-// packed tile position, block ID, then build.writeSync(...) bytes.
+// BlockSyncSnapshot holds internal block-sync state before cmd/mdt-server converts
+// the packed tile position to vanilla's linear tile index on the wire.
 type BlockSyncSnapshot struct {
 	Pos     int32
 	BlockID int16

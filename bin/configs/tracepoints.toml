@@ -1,0 +1,10 @@
+# 断点追踪配置
+
+[tracepoints]
+client_requests_enabled = true
+enabled = true
+file = "logs/tracepoints.jsonl"
+server_sends_enabled = true
+state_build_enabled = true
+world_runtime_enabled = true
+world_stream_enabled = true

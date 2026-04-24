@@ -91,6 +91,8 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 		return readClientPingWithoutPlayer(payload)
 	case 81:
 		return readRequestBlockSnapshotWithoutPlayer(payload)
+	case 24:
+		return readClientPlanSnapshotLenient(payload, s.Ctx)
 	case 142:
 		return &protocol.Remote_InputHandler_unitClear_95{}, nil
 	default:
@@ -205,6 +207,27 @@ func readRequestBlockSnapshotWithoutPlayer(payload []byte) (*protocol.Remote_Net
 		return nil, fmt.Errorf("unexpected requestBlockSnapshot payload length: %d", len(payload))
 	}
 	return &protocol.Remote_NetServer_requestBlockSnapshot_45{Player: nil, Pos: pos}, nil
+}
+
+func readClientPlanSnapshotLenient(payload []byte, ctx *protocol.TypeIOContext) (*protocol.Remote_NetServer_clientPlanSnapshot_46, error) {
+	r := protocol.NewReaderWithContext(payload, ctx)
+	groupID, err := r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+	plans, err := protocol.ReadClientPlans(r, ctx)
+	if err != nil {
+		return &protocol.Remote_NetServer_clientPlanSnapshot_46{
+			Player:  nil,
+			GroupId: groupID,
+			Plans:   nil,
+		}, nil
+	}
+	return &protocol.Remote_NetServer_clientPlanSnapshot_46{
+		Player:  nil,
+		GroupId: groupID,
+		Plans:   plans,
+	}, nil
 }
 
 func readFramework(buf *bytes.Reader) (protocol.FrameworkMessage, error) {

@@ -596,6 +596,124 @@ func TestUnitCommandServiceRepairCommandHoldPositionDoesNotMove(t *testing.T) {
 	}
 }
 
+func TestUnitCommandServiceRepairCommandUsesUnitAttackRange(t *testing.T) {
+	wld := world.New(world.Config{TPS: 60})
+	model := world.NewWorldModel(32, 32)
+	model.BlockNames = map[int16]string{
+		0:   "air",
+		339: "core-shard",
+	}
+	model.UnitNames = map[int16]string{
+		22: "mega",
+	}
+	buildPos := 1*model.Width + 16
+	model.Tiles[buildPos].Block = 339
+	model.Tiles[buildPos].Team = 1
+	model.Tiles[buildPos].Build = &world.Building{
+		Block:     339,
+		Team:      1,
+		X:         16,
+		Y:         1,
+		Health:    400,
+		MaxHealth: 1000,
+	}
+	wld.SetModel(model)
+
+	entity := wld.Model().AddEntity(world.RawEntity{
+		TypeID:       22,
+		X:            8,
+		Y:            8,
+		Team:         1,
+		Health:       100,
+		MaxHealth:    100,
+		SlowMul:      1,
+		MineTilePos:  -1,
+		MoveSpeed:    24,
+		AttackRange:  220,
+		BuildSpeed:   2.6,
+		ItemCapacity: 70,
+		Flying:       true,
+	})
+
+	service := newUnitCommandService()
+	service.step(wld)
+
+	got, ok := wld.GetEntity(entity.ID)
+	if !ok {
+		t.Fatalf("expected entity to remain in world")
+	}
+	if got.Behavior == "move" {
+		t.Fatalf("expected repair command to idle once target is within unit attack range, got move toward (%v,%v)", got.PatrolAX, got.PatrolAY)
+	}
+}
+
+func TestUnitCommandServiceRepairCommandIgnoresConstructBuildTargets(t *testing.T) {
+	wld := world.New(world.Config{TPS: 60})
+	model := world.NewWorldModel(32, 32)
+	model.BlockNames = map[int16]string{
+		0:   "air",
+		339: "core-shard",
+		998: "build3",
+	}
+	model.UnitNames = map[int16]string{
+		22: "mega",
+	}
+
+	constructPos := 10*model.Width + 10
+	model.Tiles[constructPos].Block = 998
+	model.Tiles[constructPos].Team = 1
+	model.Tiles[constructPos].Build = &world.Building{
+		Block:     998,
+		Team:      1,
+		X:         10,
+		Y:         10,
+		Health:    2,
+		MaxHealth: 10,
+	}
+
+	buildPos := 20*model.Width + 20
+	model.Tiles[buildPos].Block = 339
+	model.Tiles[buildPos].Team = 1
+	model.Tiles[buildPos].Build = &world.Building{
+		Block:     339,
+		Team:      1,
+		X:         20,
+		Y:         20,
+		Health:    400,
+		MaxHealth: 1000,
+	}
+	wld.SetModel(model)
+
+	entity := wld.Model().AddEntity(world.RawEntity{
+		TypeID:       22,
+		X:            8,
+		Y:            8,
+		Team:         1,
+		Health:       100,
+		MaxHealth:    100,
+		SlowMul:      1,
+		MineTilePos:  -1,
+		MoveSpeed:    24,
+		BuildSpeed:   2.6,
+		ItemCapacity: 70,
+		Flying:       true,
+	})
+
+	service := newUnitCommandService()
+	service.step(wld)
+
+	got, ok := wld.GetEntity(entity.ID)
+	if !ok {
+		t.Fatalf("expected entity to remain in world")
+	}
+	if got.Behavior != "move" {
+		t.Fatalf("expected repair command to move toward real damaged building, got %q", got.Behavior)
+	}
+	if got.PatrolAX != float32(20*8+4) || got.PatrolAY != float32(20*8+4) {
+		t.Fatalf("expected construct build target to be ignored in favor of real building at (164,164), got (%v,%v)", got.PatrolAX, got.PatrolAY)
+	}
+}
+
 func TestUnitCommandServiceRebuildCommandConsumesBrokenBlockQueue(t *testing.T) {
 	wld := world.New(world.Config{TPS: 60})
 	model := world.NewWorldModel(32, 32)
@@ -651,6 +769,82 @@ func TestUnitCommandServiceRebuildCommandConsumesBrokenBlockQueue(t *testing.T) 
 	tile := gotModel.Tiles[20*gotModel.Width+20]
 	if tile.Block != 257 || tile.Build == nil || tile.Team != 1 {
 		t.Fatalf("expected rebuild command to restore destroyed duo, got block=%d build=%v team=%d", tile.Block, tile.Build != nil, tile.Team)
+	}
+}
+
+func TestUnitCommandServiceRebuildCommandFollowsNearbyConstructBuilderBeforeQueue(t *testing.T) {
+	wld := world.New(world.Config{TPS: 60})
+	model := world.NewWorldModel(32, 32)
+	model.BlockNames = map[int16]string{
+		0:   "air",
+		257: "duo",
+	}
+	model.UnitNames = map[int16]string{
+		21: "poly",
+		35: "alpha",
+	}
+	wld.SetModel(model)
+	rules := wld.GetRulesManager().Get()
+	rules.InfiniteResources = true
+	rebuildPos := 5*model.Width + 5
+	model.Tiles[rebuildPos].Block = 257
+	model.Tiles[rebuildPos].Team = 1
+	model.Tiles[rebuildPos].Build = &world.Building{
+		Block:     257,
+		Team:      1,
+		X:         5,
+		Y:         5,
+		Health:    1000,
+		MaxHealth: 1000,
+	}
+
+	leader := wld.Model().AddEntity(world.RawEntity{
+		TypeID:       35,
+		X:            8 * 8,
+		Y:            8 * 8,
+		Team:         1,
+		Health:       100,
+		MaxHealth:    100,
+		SlowMul:      1,
+		MineTilePos:  -1,
+		MoveSpeed:    24,
+		BuildSpeed:   0.5,
+		ItemCapacity: 30,
+		Flying:       true,
+	})
+	follower := wld.Model().AddEntity(world.RawEntity{
+		TypeID:       21,
+		X:            9 * 8,
+		Y:            9 * 8,
+		Team:         1,
+		Health:       100,
+		MaxHealth:    100,
+		SlowMul:      1,
+		MineTilePos:  -1,
+		MoveSpeed:    24,
+		BuildSpeed:   0.5,
+		ItemCapacity: 40,
+		Flying:       true,
+	})
+
+	if !wld.DamageBuildingPacked(protocol.PackPoint2(5, 5), 2000) {
+		t.Fatalf("expected broken rebuild plan to queue")
+	}
+
+	primeAssistConstructLeader(t, wld, leader, world.BuildPlanOp{X: 18, Y: 18, Rotation: 0, BlockID: 257})
+
+	service := newUnitCommandService()
+	service.step(wld)
+
+	got, ok := wld.GetEntity(follower.ID)
+	if !ok {
+		t.Fatalf("expected follower to remain in world")
+	}
+	if len(got.Plans) == 0 {
+		t.Fatal("expected rebuild command to copy nearby construct leader plan before rebuild queue")
+	}
+	if got.Plans[0].Pos != protocol.PackPoint2(18, 18) {
+		t.Fatalf("expected follower to mirror leader plan at (18,18), got %+v", got.Plans[0])
 	}
 }
 

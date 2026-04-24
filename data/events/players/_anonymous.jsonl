@@ -73,3 +73,9 @@
 {"timestamp":"2026-04-23T04:44:54.8310197Z","kind":"tcp_accept","conn_id":89342271,"ip":"127.0.0.1"}
 {"timestamp":"2026-04-23T05:03:53.4205865Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:10348 udp=","conn_id":1680309439,"ip":"127.0.0.1:10348"}
 {"timestamp":"2026-04-23T05:03:53.421197Z","kind":"tcp_accept","conn_id":1680309439,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-24T12:06:33.4113645Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:8178 udp=","conn_id":1776568265,"ip":"127.0.0.1:8178"}
+{"timestamp":"2026-04-24T12:06:33.4119712Z","kind":"tcp_accept","conn_id":1776568265,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-24T12:06:33.4143936Z","kind":"tcp_closed","detail":"read tcp 127.0.0.1:6567-\u003e127.0.0.1:8178: wsarecv: An existing connection was forcibly closed by the remote host.","conn_id":1776568265,"ip":"127.0.0.1"}
+{"timestamp":"2026-04-24T12:06:33.4204026Z","kind":"connection_close","trigger":13,"conn_id":1776568265,"ip":"127.0.0.1:8178"}
+{"timestamp":"2026-04-24T12:06:44.620182Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:11244 udp=","conn_id":1775260315,"ip":"127.0.0.1:11244"}
+{"timestamp":"2026-04-24T12:06:44.621678Z","kind":"tcp_accept","conn_id":1775260315,"ip":"127.0.0.1"}

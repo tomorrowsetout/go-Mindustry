@@ -1,0 +1,45 @@
+# 杂项配置
+
+[data]
+database_enabled = false
+directory = "data/events"
+dsn = ""
+mode = "file"
+
+[paths]
+assets_dir = "assets"
+logs_dir = "logs"
+worlds_dir = "assets/worlds"
+
+[mods]
+directory = "mods"
+enabled = false
+expected_client_mods = []
+go_dir = "mods/go"
+java_home = ""
+js_dir = "mods/js"
+node_dir = "mods/node"
+
+[persist]
+directory = "data/state"
+enabled = true
+file = "server-state.json"
+interval_sec = 30
+msav_dir = "data/snapshots"
+msav_file = ""
+save_msav = true
+
+[script]
+daily_gc_time = ""
+file = "data/state/scripts.json"
+
+[admin]
+allow_custom_clients = false
+banned_names = []
+banned_subnets = []
+ops_file = "configs/json/ops.json"
+player_limit = 0
+recent_kick_seconds = 30
+strict_identity = true
+whitelist_enabled = false
+whitelist_file = "data/state/whitelist.json"

@@ -110,7 +110,23 @@ func (w *World) FindNearestDamagedFriendlyBuilding(team TeamID, fromX, fromY flo
 			continue
 		}
 		tile := &w.model.Tiles[pos]
-		if tile.Build == nil || tile.Block == 0 || tile.Team != team {
+		if tile.Build == nil || tile.Block == 0 {
+			continue
+		}
+		if _, ok := w.pendingBuilds[pos]; ok {
+			continue
+		}
+		if _, ok := w.pendingBreaks[pos]; ok {
+			continue
+		}
+		if isConstructBuildBlockName(normalizeBlockLookupName(w.blockNameByID(int16(tile.Block)))) {
+			continue
+		}
+		buildTeam := tile.Team
+		if tile.Build.Team != 0 {
+			buildTeam = tile.Build.Team
+		}
+		if buildTeam != team {
 			continue
 		}
 		if tile.Build.Health <= 0 || tile.Build.MaxHealth <= 0 || tile.Build.Health >= tile.Build.MaxHealth-0.001 {
@@ -130,6 +146,15 @@ func (w *World) FindNearestDamagedFriendlyBuilding(team TeamID, fromX, fromY flo
 	}
 
 	return best, bestD2 >= 0
+}
+
+func isConstructBuildBlockName(name string) bool {
+	switch normalizeBlockLookupName(name) {
+	case "build1", "build2", "build3", "build4", "build5", "build6", "build7", "build8":
+		return true
+	default:
+		return false
+	}
 }
 
 func (w *World) FindNearestAssistConstructBuilder(team TeamID, followerID int32, fromX, fromY, buildRange, speed, radius float32) (RawEntity, bool) {

@@ -1,0 +1,13 @@
+# 附加日志配置
+
+[sundries]
+build_break_done_logs_enabled = true
+build_break_start_logs_enabled = true
+build_finish_logs_enabled = true
+build_place_logs_enabled = true
+chat_logs_enabled = true
+detailed_log_max_files = 100
+detailed_log_max_mb = 2
+net_event_logs_enabled = true
+respawn_core_logs_enabled = true
+respawn_unit_logs_enabled = true

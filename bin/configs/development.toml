@@ -1,0 +1,16 @@
+# 开发调试配置
+
+[development]
+build_break_done_logs_enabled = false
+build_break_start_logs_enabled = false
+build_finish_logs_enabled = false
+build_place_logs_enabled = false
+build_snapshot_logs_enabled = false
+packet_events_enabled = false
+packet_recv_events_enabled = false
+packet_send_events_enabled = false
+respawn_core_logs_enabled = false
+respawn_packet_logs_enabled = false
+respawn_unit_logs_enabled = false
+terminal_player_logs_enabled = true
+terminal_player_uuid_enabled = false

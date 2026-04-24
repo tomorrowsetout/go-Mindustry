@@ -4277,6 +4277,10 @@ func (s *Server) controlBlockUnit(c *Conn, buildPos int32) bool {
 	return true
 }
 
+func (s *Server) HandleBuildingControlSelect(c *Conn, buildPos int32) bool {
+	return s.controlBlockUnit(c, buildPos)
+}
+
 func (s *Server) currentPlayerUnitState(c *Conn) (*protocol.UnitEntitySync, bool) {
 	if s == nil || c == nil || c.playerID == 0 || c.unitID == 0 || c.controlBuildActive {
 		return nil, false

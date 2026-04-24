@@ -1,0 +1,8 @@
+# API 配置
+
+[api]
+bind = "0.0.0.0:8090"
+config_file = "api.toml"
+enabled = true
+key = ""
+keys = []

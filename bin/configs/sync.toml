@@ -1,0 +1,10 @@
+# 同步配置
+
+[sync]
+block_sync_logs_enabled = false
+entity_ms = 200
+state_ms = 200
+udp_fallback_tcp = true
+udp_retry_count = 2
+udp_retry_delay_ms = 5
+use_map_sync_data_fallback = false

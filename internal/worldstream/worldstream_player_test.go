@@ -355,13 +355,13 @@ func TestBuildWorldStreamFromMSAVPreservesWorldSections(t *testing.T) {
 	if !bytes.Equal(patches, expectedPatches) {
 		t.Fatal("expected world stream content patches bytes to match msav patches chunk")
 	}
-	decoded, err := decodeMapChunk(mapChunk)
-	if err != nil {
-		t.Fatalf("decode built world stream map chunk: %v", err)
-	}
 	original, err := LoadWorldModelFromMSAV(path, nil)
 	if err != nil {
 		t.Fatalf("load original model: %v", err)
+	}
+	decoded, err := decodeMapChunkForVersion(mapChunk, original.MSAVVersion, original.BlockNames)
+	if err != nil {
+		t.Fatalf("decode built world stream map chunk: %v", err)
 	}
 	if decoded.Width != original.Width || decoded.Height != original.Height {
 		t.Fatalf("expected normalized world stream map size %dx%d, got %dx%d", original.Width, original.Height, decoded.Width, decoded.Height)

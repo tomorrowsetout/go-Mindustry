@@ -1,0 +1,7422 @@
+{
+  "blocks": [
+    {
+      "id": 0,
+      "name": "air"
+    },
+    {
+      "id": 1,
+      "name": "spawn"
+    },
+    {
+      "id": 2,
+      "name": "remove-wall"
+    },
+    {
+      "id": 3,
+      "name": "remove-ore"
+    },
+    {
+      "id": 4,
+      "name": "cliff"
+    },
+    {
+      "id": 5,
+      "name": "deep-water"
+    },
+    {
+      "id": 6,
+      "name": "shallow-water"
+    },
+    {
+      "id": 7,
+      "name": "tainted-water"
+    },
+    {
+      "id": 8,
+      "name": "deep-tainted-water"
+    },
+    {
+      "id": 9,
+      "name": "darksand-tainted-water"
+    },
+    {
+      "id": 10,
+      "name": "sand-water"
+    },
+    {
+      "id": 11,
+      "name": "darksand-water"
+    },
+    {
+      "id": 12,
+      "name": "tar"
+    },
+    {
+      "id": 13,
+      "name": "pooled-cryofluid"
+    },
+    {
+      "id": 14,
+      "name": "molten-slag"
+    },
+    {
+      "id": 15,
+      "name": "space"
+    },
+    {
+      "id": 16,
+      "name": "empty"
+    },
+    {
+      "id": 17,
+      "name": "stone"
+    },
+    {
+      "id": 18,
+      "name": "crater-stone"
+    },
+    {
+      "id": 19,
+      "name": "char"
+    },
+    {
+      "id": 20,
+      "name": "basalt"
+    },
+    {
+      "id": 21,
+      "name": "hotrock"
+    },
+    {
+      "id": 22,
+      "name": "magmarock"
+    },
+    {
+      "id": 23,
+      "name": "sand-floor"
+    },
+    {
+      "id": 24,
+      "name": "darksand"
+    },
+    {
+      "id": 25,
+      "name": "dirt"
+    },
+    {
+      "id": 26,
+      "name": "mud"
+    },
+    {
+      "id": 27,
+      "name": "dacite"
+    },
+    {
+      "id": 28,
+      "name": "rhyolite"
+    },
+    {
+      "id": 29,
+      "name": "rhyolite-crater"
+    },
+    {
+      "id": 30,
+      "name": "rough-rhyolite"
+    },
+    {
+      "id": 31,
+      "name": "regolith"
+    },
+    {
+      "id": 32,
+      "name": "yellow-stone"
+    },
+    {
+      "id": 33,
+      "name": "carbon-stone"
+    },
+    {
+      "id": 34,
+      "name": "ferric-stone"
+    },
+    {
+      "id": 35,
+      "name": "ferric-craters"
+    },
+    {
+      "id": 36,
+      "name": "beryllic-stone"
+    },
+    {
+      "id": 37,
+      "name": "crystalline-stone"
+    },
+    {
+      "id": 38,
+      "name": "crystal-floor"
+    },
+    {
+      "id": 39,
+      "name": "yellow-stone-plates"
+    },
+    {
+      "id": 40,
+      "name": "red-stone"
+    },
+    {
+      "id": 41,
+      "name": "dense-red-stone"
+    },
+    {
+      "id": 42,
+      "name": "red-ice"
+    },
+    {
+      "id": 43,
+      "name": "arkycite-floor"
+    },
+    {
+      "id": 44,
+      "name": "arkyic-stone"
+    },
+    {
+      "id": 45,
+      "name": "rhyolite-vent"
+    },
+    {
+      "id": 46,
+      "name": "carbon-vent"
+    },
+    {
+      "id": 47,
+      "name": "arkyic-vent"
+    },
+    {
+      "id": 48,
+      "name": "yellow-stone-vent"
+    },
+    {
+      "id": 49,
+      "name": "red-stone-vent"
+    },
+    {
+      "id": 50,
+      "name": "crystalline-vent"
+    },
+    {
+      "id": 51,
+      "name": "stone-vent"
+    },
+    {
+      "id": 52,
+      "name": "basalt-vent"
+    },
+    {
+      "id": 53,
+      "name": "redmat"
+    },
+    {
+      "id": 54,
+      "name": "bluemat"
+    },
+    {
+      "id": 55,
+      "name": "grass"
+    },
+    {
+      "id": 56,
+      "name": "salt"
+    },
+    {
+      "id": 57,
+      "name": "snow"
+    },
+    {
+      "id": 58,
+      "name": "ice"
+    },
+    {
+      "id": 59,
+      "name": "ice-snow"
+    },
+    {
+      "id": 60,
+      "name": "shale"
+    },
+    {
+      "id": 61,
+      "name": "moss"
+    },
+    {
+      "id": 62,
+      "name": "core-zone"
+    },
+    {
+      "id": 63,
+      "name": "spore-moss"
+    },
+    {
+      "id": 64,
+      "name": "stone-wall"
+    },
+    {
+      "id": 65,
+      "name": "spore-wall"
+    },
+    {
+      "id": 66,
+      "name": "dirt-wall"
+    },
+    {
+      "id": 67,
+      "name": "dacite-wall"
+    },
+    {
+      "id": 68,
+      "name": "ice-wall"
+    },
+    {
+      "id": 69,
+      "name": "snow-wall"
+    },
+    {
+      "id": 70,
+      "name": "dune-wall"
+    },
+    {
+      "id": 71,
+      "name": "regolith-wall"
+    },
+    {
+      "id": 72,
+      "name": "yellow-stone-wall"
+    },
+    {
+      "id": 73,
+      "name": "rhyolite-wall"
+    },
+    {
+      "id": 74,
+      "name": "carbon-wall"
+    },
+    {
+      "id": 75,
+      "name": "ferric-stone-wall"
+    },
+    {
+      "id": 76,
+      "name": "beryllic-stone-wall"
+    },
+    {
+      "id": 77,
+      "name": "arkyic-wall"
+    },
+    {
+      "id": 78,
+      "name": "crystalline-stone-wall"
+    },
+    {
+      "id": 79,
+      "name": "red-ice-wall"
+    },
+    {
+      "id": 80,
+      "name": "red-stone-wall"
+    },
+    {
+      "id": 81,
+      "name": "red-diamond-wall"
+    },
+    {
+      "id": 82,
+      "name": "sand-wall"
+    },
+    {
+      "id": 83,
+      "name": "salt-wall"
+    },
+    {
+      "id": 84,
+      "name": "shrubs"
+    },
+    {
+      "id": 85,
+      "name": "shale-wall"
+    },
+    {
+      "id": 86,
+      "name": "spore-pine"
+    },
+    {
+      "id": 87,
+      "name": "snow-pine"
+    },
+    {
+      "id": 88,
+      "name": "pine"
+    },
+    {
+      "id": 89,
+      "name": "white-tree-dead"
+    },
+    {
+      "id": 90,
+      "name": "white-tree"
+    },
+    {
+      "id": 91,
+      "name": "spore-cluster"
+    },
+    {
+      "id": 92,
+      "name": "redweed"
+    },
+    {
+      "id": 93,
+      "name": "pur-bush"
+    },
+    {
+      "id": 94,
+      "name": "yellowcoral"
+    },
+    {
+      "id": 95,
+      "name": "boulder"
+    },
+    {
+      "id": 96,
+      "name": "snow-boulder"
+    },
+    {
+      "id": 97,
+      "name": "shale-boulder"
+    },
+    {
+      "id": 98,
+      "name": "sand-boulder"
+    },
+    {
+      "id": 99,
+      "name": "dacite-boulder"
+    },
+    {
+      "id": 100,
+      "name": "basalt-boulder"
+    },
+    {
+      "id": 101,
+      "name": "carbon-boulder"
+    },
+    {
+      "id": 102,
+      "name": "ferric-boulder"
+    },
+    {
+      "id": 103,
+      "name": "beryllic-boulder"
+    },
+    {
+      "id": 104,
+      "name": "yellow-stone-boulder"
+    },
+    {
+      "id": 105,
+      "name": "arkyic-boulder"
+    },
+    {
+      "id": 106,
+      "name": "crystal-cluster"
+    },
+    {
+      "id": 107,
+      "name": "vibrant-crystal-cluster"
+    },
+    {
+      "id": 108,
+      "name": "crystal-blocks"
+    },
+    {
+      "id": 109,
+      "name": "crystal-orbs"
+    },
+    {
+      "id": 110,
+      "name": "crystalline-boulder"
+    },
+    {
+      "id": 111,
+      "name": "red-ice-boulder"
+    },
+    {
+      "id": 112,
+      "name": "rhyolite-boulder"
+    },
+    {
+      "id": 113,
+      "name": "red-stone-boulder"
+    },
+    {
+      "id": 114,
+      "name": "metal-floor"
+    },
+    {
+      "id": 115,
+      "name": "metal-floor-damaged"
+    },
+    {
+      "id": 116,
+      "name": "metal-floor-2"
+    },
+    {
+      "id": 117,
+      "name": "metal-floor-3"
+    },
+    {
+      "id": 118,
+      "name": "metal-floor-4"
+    },
+    {
+      "id": 119,
+      "name": "metal-floor-5"
+    },
+    {
+      "id": 120,
+      "name": "dark-panel-1"
+    },
+    {
+      "id": 121,
+      "name": "dark-panel-2"
+    },
+    {
+      "id": 122,
+      "name": "dark-panel-3"
+    },
+    {
+      "id": 123,
+      "name": "dark-panel-4"
+    },
+    {
+      "id": 124,
+      "name": "dark-panel-5"
+    },
+    {
+      "id": 125,
+      "name": "dark-panel-6"
+    },
+    {
+      "id": 126,
+      "name": "dark-metal"
+    },
+    {
+      "id": 127,
+      "name": "metal-tiles-1"
+    },
+    {
+      "id": 128,
+      "name": "metal-tiles-2"
+    },
+    {
+      "id": 129,
+      "name": "metal-tiles-3"
+    },
+    {
+      "id": 130,
+      "name": "metal-tiles-4"
+    },
+    {
+      "id": 131,
+      "name": "metal-tiles-5"
+    },
+    {
+      "id": 132,
+      "name": "metal-tiles-6"
+    },
+    {
+      "id": 133,
+      "name": "metal-tiles-7"
+    },
+    {
+      "id": 134,
+      "name": "metal-tiles-8"
+    },
+    {
+      "id": 135,
+      "name": "metal-tiles-9"
+    },
+    {
+      "id": 136,
+      "name": "metal-tiles-10"
+    },
+    {
+      "id": 137,
+      "name": "metal-tiles-11"
+    },
+    {
+      "id": 138,
+      "name": "metal-tiles-12"
+    },
+    {
+      "id": 139,
+      "name": "metal-tiles-13"
+    },
+    {
+      "id": 140,
+      "name": "metal-wall-1"
+    },
+    {
+      "id": 141,
+      "name": "metal-wall-2"
+    },
+    {
+      "id": 142,
+      "name": "metal-wall-3"
+    },
+    {
+      "id": 143,
+      "name": "colored-floor"
+    },
+    {
+      "id": 144,
+      "name": "colored-wall"
+    },
+    {
+      "id": 145,
+      "name": "character-overlay"
+    },
+    {
+      "id": 146,
+      "name": "character-overlay-white"
+    },
+    {
+      "id": 147,
+      "name": "rune-overlay"
+    },
+    {
+      "id": 148,
+      "name": "rune-overlay-crux"
+    },
+    {
+      "id": 149,
+      "name": "pebbles"
+    },
+    {
+      "id": 150,
+      "name": "tendrils"
+    },
+    {
+      "id": 151,
+      "name": "ore-crystal-thorium"
+    },
+    {
+      "id": 152,
+      "name": "ore-wall-thorium"
+    },
+    {
+      "id": 153,
+      "name": "ore-wall-beryllium"
+    },
+    {
+      "id": 154,
+      "name": "graphitic-wall"
+    },
+    {
+      "id": 155,
+      "name": "ore-wall-graphite"
+    },
+    {
+      "id": 156,
+      "name": "ore-wall-tungsten"
+    },
+    {
+      "id": 157,
+      "name": "graphite-press"
+    },
+    {
+      "id": 158,
+      "name": "multi-press"
+    },
+    {
+      "id": 159,
+      "name": "silicon-smelter"
+    },
+    {
+      "id": 160,
+      "name": "silicon-crucible"
+    },
+    {
+      "id": 161,
+      "name": "kiln"
+    },
+    {
+      "id": 162,
+      "name": "plastanium-compressor"
+    },
+    {
+      "id": 163,
+      "name": "phase-weaver"
+    },
+    {
+      "id": 164,
+      "name": "surge-smelter"
+    },
+    {
+      "id": 165,
+      "name": "cryofluid-mixer"
+    },
+    {
+      "id": 166,
+      "name": "pyratite-mixer"
+    },
+    {
+      "id": 167,
+      "name": "blast-mixer"
+    },
+    {
+      "id": 168,
+      "name": "melter"
+    },
+    {
+      "id": 169,
+      "name": "separator"
+    },
+    {
+      "id": 170,
+      "name": "disassembler"
+    },
+    {
+      "id": 171,
+      "name": "spore-press"
+    },
+    {
+      "id": 172,
+      "name": "pulverizer"
+    },
+    {
+      "id": 173,
+      "name": "coal-centrifuge"
+    },
+    {
+      "id": 174,
+      "name": "incinerator"
+    },
+    {
+      "id": 175,
+      "name": "silicon-arc-furnace"
+    },
+    {
+      "id": 176,
+      "name": "electrolyzer"
+    },
+    {
+      "id": 177,
+      "name": "atmospheric-concentrator"
+    },
+    {
+      "id": 178,
+      "name": "oxidation-chamber"
+    },
+    {
+      "id": 179,
+      "name": "electric-heater"
+    },
+    {
+      "id": 180,
+      "name": "slag-heater"
+    },
+    {
+      "id": 181,
+      "name": "phase-heater"
+    },
+    {
+      "id": 182,
+      "name": "heat-redirector"
+    },
+    {
+      "id": 183,
+      "name": "small-heat-redirector"
+    },
+    {
+      "id": 184,
+      "name": "heat-router"
+    },
+    {
+      "id": 185,
+      "name": "slag-incinerator"
+    },
+    {
+      "id": 186,
+      "name": "carbide-crucible"
+    },
+    {
+      "id": 187,
+      "name": "slag-centrifuge"
+    },
+    {
+      "id": 188,
+      "name": "surge-crucible"
+    },
+    {
+      "id": 189,
+      "name": "cyanogen-synthesizer"
+    },
+    {
+      "id": 190,
+      "name": "phase-synthesizer"
+    },
+    {
+      "id": 191,
+      "name": "heat-reactor"
+    },
+    {
+      "id": 192,
+      "name": "copper-wall"
+    },
+    {
+      "id": 193,
+      "name": "copper-wall-large"
+    },
+    {
+      "id": 194,
+      "name": "titanium-wall"
+    },
+    {
+      "id": 195,
+      "name": "titanium-wall-large"
+    },
+    {
+      "id": 196,
+      "name": "plastanium-wall"
+    },
+    {
+      "id": 197,
+      "name": "plastanium-wall-large"
+    },
+    {
+      "id": 198,
+      "name": "thorium-wall"
+    },
+    {
+      "id": 199,
+      "name": "thorium-wall-large"
+    },
+    {
+      "id": 200,
+      "name": "phase-wall"
+    },
+    {
+      "id": 201,
+      "name": "phase-wall-large"
+    },
+    {
+      "id": 202,
+      "name": "surge-wall"
+    },
+    {
+      "id": 203,
+      "name": "surge-wall-large"
+    },
+    {
+      "id": 204,
+      "name": "door"
+    },
+    {
+      "id": 205,
+      "name": "door-large"
+    },
+    {
+      "id": 206,
+      "name": "scrap-wall"
+    },
+    {
+      "id": 207,
+      "name": "scrap-wall-large"
+    },
+    {
+      "id": 208,
+      "name": "scrap-wall-huge"
+    },
+    {
+      "id": 209,
+      "name": "scrap-wall-gigantic"
+    },
+    {
+      "id": 210,
+      "name": "thruster"
+    },
+    {
+      "id": 211,
+      "name": "beryllium-wall"
+    },
+    {
+      "id": 212,
+      "name": "beryllium-wall-large"
+    },
+    {
+      "id": 213,
+      "name": "tungsten-wall"
+    },
+    {
+      "id": 214,
+      "name": "tungsten-wall-large"
+    },
+    {
+      "id": 215,
+      "name": "blast-door"
+    },
+    {
+      "id": 216,
+      "name": "reinforced-surge-wall"
+    },
+    {
+      "id": 217,
+      "name": "reinforced-surge-wall-large"
+    },
+    {
+      "id": 218,
+      "name": "carbide-wall"
+    },
+    {
+      "id": 219,
+      "name": "carbide-wall-large"
+    },
+    {
+      "id": 220,
+      "name": "shielded-wall"
+    },
+    {
+      "id": 221,
+      "name": "mender"
+    },
+    {
+      "id": 222,
+      "name": "mend-projector"
+    },
+    {
+      "id": 223,
+      "name": "overdrive-projector"
+    },
+    {
+      "id": 224,
+      "name": "overdrive-dome"
+    },
+    {
+      "id": 225,
+      "name": "force-projector"
+    },
+    {
+      "id": 226,
+      "name": "shock-mine"
+    },
+    {
+      "id": 227,
+      "name": "radar"
+    },
+    {
+      "id": 228,
+      "name": "build-tower"
+    },
+    {
+      "id": 229,
+      "name": "regen-projector"
+    },
+    {
+      "id": 230,
+      "name": "barrier-projector"
+    },
+    {
+      "id": 231,
+      "name": "shockwave-tower"
+    },
+    {
+      "id": 232,
+      "name": "shield-projector"
+    },
+    {
+      "id": 233,
+      "name": "large-shield-projector"
+    },
+    {
+      "id": 234,
+      "name": "conveyor"
+    },
+    {
+      "id": 235,
+      "name": "titanium-conveyor"
+    },
+    {
+      "id": 236,
+      "name": "plastanium-conveyor"
+    },
+    {
+      "id": 237,
+      "name": "armored-conveyor"
+    },
+    {
+      "id": 238,
+      "name": "junction"
+    },
+    {
+      "id": 239,
+      "name": "bridge-conveyor"
+    },
+    {
+      "id": 240,
+      "name": "phase-conveyor"
+    },
+    {
+      "id": 241,
+      "name": "sorter"
+    },
+    {
+      "id": 242,
+      "name": "inverted-sorter"
+    },
+    {
+      "id": 243,
+      "name": "router"
+    },
+    {
+      "id": 244,
+      "name": "distributor"
+    },
+    {
+      "id": 245,
+      "name": "overflow-gate"
+    },
+    {
+      "id": 246,
+      "name": "underflow-gate"
+    },
+    {
+      "id": 247,
+      "name": "unloader"
+    },
+    {
+      "id": 248,
+      "name": "mass-driver"
+    },
+    {
+      "id": 249,
+      "name": "duct"
+    },
+    {
+      "id": 250,
+      "name": "armored-duct"
+    },
+    {
+      "id": 251,
+      "name": "duct-router"
+    },
+    {
+      "id": 252,
+      "name": "overflow-duct"
+    },
+    {
+      "id": 253,
+      "name": "underflow-duct"
+    },
+    {
+      "id": 254,
+      "name": "duct-bridge"
+    },
+    {
+      "id": 255,
+      "name": "duct-unloader"
+    },
+    {
+      "id": 256,
+      "name": "surge-conveyor"
+    },
+    {
+      "id": 257,
+      "name": "surge-router"
+    },
+    {
+      "id": 258,
+      "name": "unit-cargo-loader"
+    },
+    {
+      "id": 259,
+      "name": "unit-cargo-unload-point"
+    },
+    {
+      "id": 260,
+      "name": "mechanical-pump"
+    },
+    {
+      "id": 261,
+      "name": "rotary-pump"
+    },
+    {
+      "id": 262,
+      "name": "impulse-pump"
+    },
+    {
+      "id": 263,
+      "name": "conduit"
+    },
+    {
+      "id": 264,
+      "name": "pulse-conduit"
+    },
+    {
+      "id": 265,
+      "name": "plated-conduit"
+    },
+    {
+      "id": 266,
+      "name": "liquid-router"
+    },
+    {
+      "id": 267,
+      "name": "liquid-container"
+    },
+    {
+      "id": 268,
+      "name": "liquid-tank"
+    },
+    {
+      "id": 269,
+      "name": "liquid-junction"
+    },
+    {
+      "id": 270,
+      "name": "bridge-conduit"
+    },
+    {
+      "id": 271,
+      "name": "phase-conduit"
+    },
+    {
+      "id": 272,
+      "name": "reinforced-pump"
+    },
+    {
+      "id": 273,
+      "name": "reinforced-conduit"
+    },
+    {
+      "id": 274,
+      "name": "reinforced-liquid-junction"
+    },
+    {
+      "id": 275,
+      "name": "reinforced-bridge-conduit"
+    },
+    {
+      "id": 276,
+      "name": "reinforced-liquid-router"
+    },
+    {
+      "id": 277,
+      "name": "reinforced-liquid-container"
+    },
+    {
+      "id": 278,
+      "name": "reinforced-liquid-tank"
+    },
+    {
+      "id": 279,
+      "name": "power-node"
+    },
+    {
+      "id": 280,
+      "name": "power-node-large"
+    },
+    {
+      "id": 281,
+      "name": "surge-tower"
+    },
+    {
+      "id": 282,
+      "name": "diode"
+    },
+    {
+      "id": 283,
+      "name": "battery"
+    },
+    {
+      "id": 284,
+      "name": "battery-large"
+    },
+    {
+      "id": 285,
+      "name": "combustion-generator"
+    },
+    {
+      "id": 286,
+      "name": "thermal-generator"
+    },
+    {
+      "id": 287,
+      "name": "steam-generator"
+    },
+    {
+      "id": 288,
+      "name": "differential-generator"
+    },
+    {
+      "id": 289,
+      "name": "rtg-generator"
+    },
+    {
+      "id": 290,
+      "name": "solar-panel"
+    },
+    {
+      "id": 291,
+      "name": "solar-panel-large"
+    },
+    {
+      "id": 292,
+      "name": "thorium-reactor"
+    },
+    {
+      "id": 293,
+      "name": "impact-reactor"
+    },
+    {
+      "id": 294,
+      "name": "beam-node"
+    },
+    {
+      "id": 295,
+      "name": "beam-tower"
+    },
+    {
+      "id": 296,
+      "name": "beam-link"
+    },
+    {
+      "id": 297,
+      "name": "turbine-condenser"
+    },
+    {
+      "id": 298,
+      "name": "chemical-combustion-chamber"
+    },
+    {
+      "id": 299,
+      "name": "pyrolysis-generator"
+    },
+    {
+      "id": 300,
+      "name": "flux-reactor"
+    },
+    {
+      "id": 301,
+      "name": "neoplasia-reactor"
+    },
+    {
+      "id": 302,
+      "name": "mechanical-drill"
+    },
+    {
+      "id": 303,
+      "name": "pneumatic-drill"
+    },
+    {
+      "id": 304,
+      "name": "laser-drill"
+    },
+    {
+      "id": 305,
+      "name": "blast-drill"
+    },
+    {
+      "id": 306,
+      "name": "water-extractor"
+    },
+    {
+      "id": 307,
+      "name": "cultivator"
+    },
+    {
+      "id": 308,
+      "name": "oil-extractor"
+    },
+    {
+      "id": 309,
+      "name": "vent-condenser"
+    },
+    {
+      "id": 310,
+      "name": "cliff-crusher"
+    },
+    {
+      "id": 311,
+      "name": "large-cliff-crusher"
+    },
+    {
+      "id": 312,
+      "name": "plasma-bore"
+    },
+    {
+      "id": 313,
+      "name": "large-plasma-bore"
+    },
+    {
+      "id": 314,
+      "name": "impact-drill"
+    },
+    {
+      "id": 315,
+      "name": "eruption-drill"
+    },
+    {
+      "id": 316,
+      "name": "core-shard"
+    },
+    {
+      "id": 317,
+      "name": "core-foundation"
+    },
+    {
+      "id": 318,
+      "name": "core-nucleus"
+    },
+    {
+      "id": 319,
+      "name": "core-bastion"
+    },
+    {
+      "id": 320,
+      "name": "core-citadel"
+    },
+    {
+      "id": 321,
+      "name": "core-acropolis"
+    },
+    {
+      "id": 322,
+      "name": "container"
+    },
+    {
+      "id": 323,
+      "name": "vault"
+    },
+    {
+      "id": 324,
+      "name": "reinforced-container"
+    },
+    {
+      "id": 325,
+      "name": "reinforced-vault"
+    },
+    {
+      "id": 326,
+      "name": "duo"
+    },
+    {
+      "id": 327,
+      "name": "scatter"
+    },
+    {
+      "id": 328,
+      "name": "scorch"
+    },
+    {
+      "id": 329,
+      "name": "hail"
+    },
+    {
+      "id": 330,
+      "name": "wave"
+    },
+    {
+      "id": 331,
+      "name": "lancer"
+    },
+    {
+      "id": 332,
+      "name": "arc"
+    },
+    {
+      "id": 333,
+      "name": "parallax"
+    },
+    {
+      "id": 334,
+      "name": "swarmer"
+    },
+    {
+      "id": 335,
+      "name": "salvo"
+    },
+    {
+      "id": 336,
+      "name": "segment"
+    },
+    {
+      "id": 337,
+      "name": "tsunami"
+    },
+    {
+      "id": 338,
+      "name": "fuse"
+    },
+    {
+      "id": 339,
+      "name": "ripple"
+    },
+    {
+      "id": 340,
+      "name": "cyclone"
+    },
+    {
+      "id": 341,
+      "name": "foreshadow"
+    },
+    {
+      "id": 342,
+      "name": "spectre"
+    },
+    {
+      "id": 343,
+      "name": "meltdown"
+    },
+    {
+      "id": 344,
+      "name": "breach"
+    },
+    {
+      "id": 345,
+      "name": "reinforced-"
+    },
+    {
+      "id": 346,
+      "name": "diffuse"
+    },
+    {
+      "id": 347,
+      "name": "sublimate"
+    },
+    {
+      "id": 348,
+      "name": "titan"
+    },
+    {
+      "id": 349,
+      "name": "disperse"
+    },
+    {
+      "id": 350,
+      "name": "afflict"
+    },
+    {
+      "id": 351,
+      "name": "lustre"
+    },
+    {
+      "id": 352,
+      "name": "scathe"
+    },
+    {
+      "id": 353,
+      "name": "scathe-missile"
+    },
+    {
+      "id": 354,
+      "name": "scathe-missile-phase"
+    },
+    {
+      "id": 355,
+      "name": "scathe-missile-surge"
+    },
+    {
+      "id": 356,
+      "name": "scathe-missile-surge-split"
+    },
+    {
+      "id": 357,
+      "name": "smite"
+    },
+    {
+      "id": 358,
+      "name": "malign"
+    },
+    {
+      "id": 359,
+      "name": "ground-factory"
+    },
+    {
+      "id": 360,
+      "name": "air-factory"
+    },
+    {
+      "id": 361,
+      "name": "naval-factory"
+    },
+    {
+      "id": 362,
+      "name": "additive-reconstructor"
+    },
+    {
+      "id": 363,
+      "name": "multiplicative-reconstructor"
+    },
+    {
+      "id": 364,
+      "name": "exponential-reconstructor"
+    },
+    {
+      "id": 365,
+      "name": "tetrative-reconstructor"
+    },
+    {
+      "id": 366,
+      "name": "repair-point"
+    },
+    {
+      "id": 367,
+      "name": "repair-turret"
+    },
+    {
+      "id": 368,
+      "name": "tank-fabricator"
+    },
+    {
+      "id": 369,
+      "name": "ship-fabricator"
+    },
+    {
+      "id": 370,
+      "name": "mech-fabricator"
+    },
+    {
+      "id": 371,
+      "name": "tank-refabricator"
+    },
+    {
+      "id": 372,
+      "name": "ship-refabricator"
+    },
+    {
+      "id": 373,
+      "name": "mech-refabricator"
+    },
+    {
+      "id": 374,
+      "name": "prime-refabricator"
+    },
+    {
+      "id": 375,
+      "name": "tank-assembler"
+    },
+    {
+      "id": 376,
+      "name": "ship-assembler"
+    },
+    {
+      "id": 377,
+      "name": "mech-assembler"
+    },
+    {
+      "id": 378,
+      "name": "basic-assembler-module"
+    },
+    {
+      "id": 379,
+      "name": "unit-repair-tower"
+    },
+    {
+      "id": 380,
+      "name": "payload-conveyor"
+    },
+    {
+      "id": 381,
+      "name": "payload-router"
+    },
+    {
+      "id": 382,
+      "name": "reinforced-payload-conveyor"
+    },
+    {
+      "id": 383,
+      "name": "reinforced-payload-router"
+    },
+    {
+      "id": 384,
+      "name": "payload-mass-driver"
+    },
+    {
+      "id": 385,
+      "name": "large-payload-mass-driver"
+    },
+    {
+      "id": 386,
+      "name": "small-deconstructor"
+    },
+    {
+      "id": 387,
+      "name": "deconstructor"
+    },
+    {
+      "id": 388,
+      "name": "constructor"
+    },
+    {
+      "id": 389,
+      "name": "large-constructor"
+    },
+    {
+      "id": 390,
+      "name": "payload-loader"
+    },
+    {
+      "id": 391,
+      "name": "payload-unloader"
+    },
+    {
+      "id": 392,
+      "name": "power-source"
+    },
+    {
+      "id": 393,
+      "name": "power-void"
+    },
+    {
+      "id": 394,
+      "name": "item-source"
+    },
+    {
+      "id": 395,
+      "name": "item-void"
+    },
+    {
+      "id": 396,
+      "name": "liquid-source"
+    },
+    {
+      "id": 397,
+      "name": "liquid-void"
+    },
+    {
+      "id": 398,
+      "name": "payload-source"
+    },
+    {
+      "id": 399,
+      "name": "payload-void"
+    },
+    {
+      "id": 400,
+      "name": "heat-source"
+    },
+    {
+      "id": 401,
+      "name": "illuminator"
+    },
+    {
+      "id": 402,
+      "name": "launch-pad"
+    },
+    {
+      "id": 403,
+      "name": "advanced-launch-pad"
+    },
+    {
+      "id": 404,
+      "name": "landing-pad"
+    },
+    {
+      "id": 405,
+      "name": "interplanetary-accelerator"
+    },
+    {
+      "id": 406,
+      "name": "message"
+    },
+    {
+      "id": 407,
+      "name": "switch"
+    },
+    {
+      "id": 408,
+      "name": "micro-processor"
+    },
+    {
+      "id": 409,
+      "name": "logic-processor"
+    },
+    {
+      "id": 410,
+      "name": "hyper-processor"
+    },
+    {
+      "id": 411,
+      "name": "memory-cell"
+    },
+    {
+      "id": 412,
+      "name": "memory-bank"
+    },
+    {
+      "id": 413,
+      "name": "logic-display"
+    },
+    {
+      "id": 414,
+      "name": "large-logic-display"
+    },
+    {
+      "id": 415,
+      "name": "tile-logic-display"
+    },
+    {
+      "id": 416,
+      "name": "canvas"
+    },
+    {
+      "id": 417,
+      "name": "large-canvas"
+    },
+    {
+      "id": 418,
+      "name": "reinforced-message"
+    },
+    {
+      "id": 419,
+      "name": "world-processor"
+    },
+    {
+      "id": 420,
+      "name": "world-cell"
+    },
+    {
+      "id": 421,
+      "name": "world-message"
+    },
+    {
+      "id": 422,
+      "name": "world-switch"
+    }
+  ],
+  "units": [
+    {
+      "id": 0,
+      "name": "dagger"
+    },
+    {
+      "id": 1,
+      "name": "mace"
+    },
+    {
+      "id": 2,
+      "name": "fortress"
+    },
+    {
+      "id": 3,
+      "name": "scepter"
+    },
+    {
+      "id": 4,
+      "name": "reign"
+    },
+    {
+      "id": 5,
+      "name": "nova"
+    },
+    {
+      "id": 6,
+      "name": "pulsar"
+    },
+    {
+      "id": 7,
+      "name": "quasar"
+    },
+    {
+      "id": 8,
+      "name": "vela"
+    },
+    {
+      "id": 9,
+      "name": "corvus"
+    },
+    {
+      "id": 10,
+      "name": "crawler"
+    },
+    {
+      "id": 11,
+      "name": "atrax"
+    },
+    {
+      "id": 12,
+      "name": "spiroct"
+    },
+    {
+      "id": 13,
+      "name": "arkyid"
+    },
+    {
+      "id": 14,
+      "name": "toxopid"
+    },
+    {
+      "id": 15,
+      "name": "flare"
+    },
+    {
+      "id": 16,
+      "name": "horizon"
+    },
+    {
+      "id": 17,
+      "name": "zenith"
+    },
+    {
+      "id": 18,
+      "name": "antumbra"
+    },
+    {
+      "id": 19,
+      "name": "eclipse"
+    },
+    {
+      "id": 20,
+      "name": "mono"
+    },
+    {
+      "id": 21,
+      "name": "poly"
+    },
+    {
+      "id": 22,
+      "name": "mega"
+    },
+    {
+      "id": 23,
+      "name": "quad"
+    },
+    {
+      "id": 24,
+      "name": "oct"
+    },
+    {
+      "id": 25,
+      "name": "risso"
+    },
+    {
+      "id": 26,
+      "name": "minke"
+    },
+    {
+      "id": 27,
+      "name": "bryde"
+    },
+    {
+      "id": 28,
+      "name": "sei"
+    },
+    {
+      "id": 29,
+      "name": "omura"
+    },
+    {
+      "id": 30,
+      "name": "retusa"
+    },
+    {
+      "id": 31,
+      "name": "oxynoe"
+    },
+    {
+      "id": 32,
+      "name": "cyerce"
+    },
+    {
+      "id": 33,
+      "name": "aegires"
+    },
+    {
+      "id": 34,
+      "name": "navanax"
+    },
+    {
+      "id": 35,
+      "name": "alpha"
+    },
+    {
+      "id": 36,
+      "name": "beta"
+    },
+    {
+      "id": 37,
+      "name": "gamma"
+    },
+    {
+      "id": 38,
+      "name": "stell"
+    },
+    {
+      "id": 39,
+      "name": "locus"
+    },
+    {
+      "id": 40,
+      "name": "precept"
+    },
+    {
+      "id": 41,
+      "name": "vanquish"
+    },
+    {
+      "id": 42,
+      "name": "conquer"
+    },
+    {
+      "id": 43,
+      "name": "merui"
+    },
+    {
+      "id": 44,
+      "name": "cleroi"
+    },
+    {
+      "id": 45,
+      "name": "anthicus"
+    },
+    {
+      "id": 46,
+      "name": "anthicus-missile"
+    },
+    {
+      "id": 47,
+      "name": "tecta"
+    },
+    {
+      "id": 48,
+      "name": "collaris"
+    },
+    {
+      "id": 49,
+      "name": "elude"
+    },
+    {
+      "id": 50,
+      "name": "avert"
+    },
+    {
+      "id": 51,
+      "name": "obviate"
+    },
+    {
+      "id": 52,
+      "name": "quell"
+    },
+    {
+      "id": 53,
+      "name": "quell-missile"
+    },
+    {
+      "id": 54,
+      "name": "disrupt"
+    },
+    {
+      "id": 55,
+      "name": "disrupt-missile"
+    },
+    {
+      "id": 56,
+      "name": "renale"
+    },
+    {
+      "id": 57,
+      "name": "latum"
+    },
+    {
+      "id": 58,
+      "name": "evoke"
+    },
+    {
+      "id": 59,
+      "name": "incite"
+    },
+    {
+      "id": 60,
+      "name": "emanate"
+    },
+    {
+      "id": 61,
+      "name": "block"
+    },
+    {
+      "id": 62,
+      "name": "manifold"
+    },
+    {
+      "id": 63,
+      "name": "assembly-drone"
+    }
+  ],
+  "items": [
+    {
+      "id": 0,
+      "name": "copper"
+    },
+    {
+      "id": 1,
+      "name": "lead"
+    },
+    {
+      "id": 2,
+      "name": "metaglass"
+    },
+    {
+      "id": 3,
+      "name": "graphite"
+    },
+    {
+      "id": 4,
+      "name": "sand"
+    },
+    {
+      "id": 5,
+      "name": "coal"
+    },
+    {
+      "id": 6,
+      "name": "titanium"
+    },
+    {
+      "id": 7,
+      "name": "thorium"
+    },
+    {
+      "id": 8,
+      "name": "scrap"
+    },
+    {
+      "id": 9,
+      "name": "silicon"
+    },
+    {
+      "id": 10,
+      "name": "plastanium"
+    },
+    {
+      "id": 11,
+      "name": "phase-fabric"
+    },
+    {
+      "id": 12,
+      "name": "surge-alloy"
+    },
+    {
+      "id": 13,
+      "name": "spore-pod"
+    },
+    {
+      "id": 14,
+      "name": "blast-compound"
+    },
+    {
+      "id": 15,
+      "name": "pyratite"
+    },
+    {
+      "id": 16,
+      "name": "beryllium"
+    },
+    {
+      "id": 17,
+      "name": "tungsten"
+    },
+    {
+      "id": 18,
+      "name": "oxide"
+    },
+    {
+      "id": 19,
+      "name": "carbide"
+    },
+    {
+      "id": 20,
+      "name": "fissile-matter"
+    },
+    {
+      "id": 21,
+      "name": "dormant-cyst"
+    }
+  ],
+  "liquids": [
+    {
+      "id": 0,
+      "name": "water"
+    },
+    {
+      "id": 1,
+      "name": "slag"
+    },
+    {
+      "id": 2,
+      "name": "oil"
+    },
+    {
+      "id": 3,
+      "name": "cryofluid"
+    },
+    {
+      "id": 4,
+      "name": "neoplasm"
+    },
+    {
+      "id": 5,
+      "name": "arkycite"
+    },
+    {
+      "id": 6,
+      "name": "gallium"
+    },
+    {
+      "id": 7,
+      "name": "ozone"
+    },
+    {
+      "id": 8,
+      "name": "hydrogen"
+    },
+    {
+      "id": 9,
+      "name": "nitrogen"
+    },
+    {
+      "id": 10,
+      "name": "cyanogen"
+    }
+  ],
+  "statuses": [
+    {
+      "id": 0,
+      "name": "none"
+    },
+    {
+      "id": 1,
+      "name": "burning"
+    },
+    {
+      "id": 2,
+      "name": "freezing"
+    },
+    {
+      "id": 3,
+      "name": "unmoving"
+    },
+    {
+      "id": 4,
+      "name": "slow"
+    },
+    {
+      "id": 5,
+      "name": "fast"
+    },
+    {
+      "id": 6,
+      "name": "wet"
+    },
+    {
+      "id": 7,
+      "name": "muddy"
+    },
+    {
+      "id": 8,
+      "name": "melting"
+    },
+    {
+      "id": 9,
+      "name": "sapped"
+    },
+    {
+      "id": 10,
+      "name": "electrified"
+    },
+    {
+      "id": 11,
+      "name": "spore-slowed"
+    },
+    {
+      "id": 12,
+      "name": "tarred"
+    },
+    {
+      "id": 13,
+      "name": "overdrive"
+    },
+    {
+      "id": 14,
+      "name": "overclock"
+    },
+    {
+      "id": 15,
+      "name": "shielded"
+    },
+    {
+      "id": 16,
+      "name": "boss"
+    },
+    {
+      "id": 17,
+      "name": "shocked"
+    },
+    {
+      "id": 18,
+      "name": "blasted"
+    },
+    {
+      "id": 19,
+      "name": "corroded"
+    },
+    {
+      "id": 20,
+      "name": "disarmed"
+    },
+    {
+      "id": 21,
+      "name": "invincible"
+    },
+    {
+      "id": 22,
+      "name": "dynamic"
+    }
+  ],
+  "weathers": [
+    {
+      "id": 0,
+      "name": "snowing"
+    },
+    {
+      "id": 1,
+      "name": "rain"
+    },
+    {
+      "id": 2,
+      "name": "sandstorm"
+    },
+    {
+      "id": 3,
+      "name": "sporestorm"
+    },
+    {
+      "id": 4,
+      "name": "fog"
+    },
+    {
+      "id": 5,
+      "name": "suspend-particles"
+    }
+  ],
+  "bullets": [
+    {
+      "id": 0,
+      "name": "bullets.java:18:0"
+    },
+    {
+      "id": 1,
+      "name": "bullets.java:26:0"
+    },
+    {
+      "id": 2,
+      "name": "bullets.java:44:0"
+    },
+    {
+      "id": 3,
+      "name": "bullets.java:48:0"
+    },
+    {
+      "id": 4,
+      "name": "unittypes.java:113:0"
+    },
+    {
+      "id": 5,
+      "name": "unittypes.java:136:0"
+    },
+    {
+      "id": 6,
+      "name": "unittypes.java:176:0"
+    },
+    {
+      "id": 7,
+      "name": "unittypes.java:211:0"
+    },
+    {
+      "id": 8,
+      "name": "unittypes.java:244:0"
+    },
+    {
+      "id": 9,
+      "name": "unittypes.java:261:0"
+    },
+    {
+      "id": 10,
+      "name": "unittypes.java:322:0"
+    },
+    {
+      "id": 11,
+      "name": "unittypes.java:340:0"
+    },
+    {
+      "id": 12,
+      "name": "unittypes.java:383:0"
+    },
+    {
+      "id": 13,
+      "name": "unittypes.java:426:0"
+    },
+    {
+      "id": 14,
+      "name": "unittypes.java:435:0"
+    },
+    {
+      "id": 15,
+      "name": "unittypes.java:482:0"
+    },
+    {
+      "id": 16,
+      "name": "unittypes.java:544:0"
+    },
+    {
+      "id": 17,
+      "name": "unittypes.java:578:0"
+    },
+    {
+      "id": 18,
+      "name": "unittypes.java:629:0"
+    },
+    {
+      "id": 19,
+      "name": "unittypes.java:684:0"
+    },
+    {
+      "id": 20,
+      "name": "unittypes.java:735:0"
+    },
+    {
+      "id": 21,
+      "name": "unittypes.java:779:0"
+    },
+    {
+      "id": 22,
+      "name": "unittypes.java:799:0"
+    },
+    {
+      "id": 23,
+      "name": "unittypes.java:845:0"
+    },
+    {
+      "id": 24,
+      "name": "unittypes.java:895:0"
+    },
+    {
+      "id": 25,
+      "name": "unittypes.java:966:0"
+    },
+    {
+      "id": 26,
+      "name": "unittypes.java:997:0"
+    },
+    {
+      "id": 27,
+      "name": "unittypes.java:1023:0"
+    },
+    {
+      "id": 28,
+      "name": "unittypes.java:1084:0"
+    },
+    {
+      "id": 29,
+      "name": "unittypes.java:1132:0"
+    },
+    {
+      "id": 30,
+      "name": "unittypes.java:1173:0"
+    },
+    {
+      "id": 31,
+      "name": "unittypes.java:1211:0"
+    },
+    {
+      "id": 32,
+      "name": "unittypes.java:1261:0"
+    },
+    {
+      "id": 33,
+      "name": "unittypes.java:1288:0"
+    },
+    {
+      "id": 34,
+      "name": "unittypes.java:1313:0"
+    },
+    {
+      "id": 35,
+      "name": "unittypes.java:1409:0"
+    },
+    {
+      "id": 36,
+      "name": "unittypes.java:1459:0"
+    },
+    {
+      "id": 37,
+      "name": "unittypes.java:1473:0"
+    },
+    {
+      "id": 38,
+      "name": "unittypes.java:1519:0"
+    },
+    {
+      "id": 39,
+      "name": "unittypes.java:1614:0"
+    },
+    {
+      "id": 40,
+      "name": "unittypes.java:1630:0"
+    },
+    {
+      "id": 41,
+      "name": "unittypes.java:1680:0"
+    },
+    {
+      "id": 42,
+      "name": "unittypes.java:1702:0"
+    },
+    {
+      "id": 43,
+      "name": "unittypes.java:1752:0"
+    },
+    {
+      "id": 44,
+      "name": "unittypes.java:1793:0"
+    },
+    {
+      "id": 45,
+      "name": "unittypes.java:1861:0"
+    },
+    {
+      "id": 46,
+      "name": "unittypes.java:1900:0"
+    },
+    {
+      "id": 47,
+      "name": "unittypes.java:1945:0"
+    },
+    {
+      "id": 48,
+      "name": "unittypes.java:1990:0"
+    },
+    {
+      "id": 49,
+      "name": "unittypes.java:2003:0"
+    },
+    {
+      "id": 50,
+      "name": "unittypes.java:2024:0"
+    },
+    {
+      "id": 51,
+      "name": "unittypes.java:2108:0"
+    },
+    {
+      "id": 52,
+      "name": "unittypes.java:2142:0"
+    },
+    {
+      "id": 53,
+      "name": "unittypes.java:2182:0"
+    },
+    {
+      "id": 54,
+      "name": "unittypes.java:2201:0"
+    },
+    {
+      "id": 55,
+      "name": "unittypes.java:2249:0"
+    },
+    {
+      "id": 56,
+      "name": "unittypes.java:2338:0"
+    },
+    {
+      "id": 57,
+      "name": "unittypes.java:2386:0"
+    },
+    {
+      "id": 58,
+      "name": "unittypes.java:2479:0"
+    },
+    {
+      "id": 59,
+      "name": "unittypes.java:2548:0"
+    },
+    {
+      "id": 60,
+      "name": "unittypes.java:2599:0"
+    },
+    {
+      "id": 61,
+      "name": "unittypes.java:2654:0"
+    },
+    {
+      "id": 62,
+      "name": "unittypes.java:2707:0"
+    },
+    {
+      "id": 63,
+      "name": "unittypes.java:2757:0"
+    },
+    {
+      "id": 64,
+      "name": "unittypes.java:2836:0"
+    },
+    {
+      "id": 65,
+      "name": "unittypes.java:2861:0"
+    },
+    {
+      "id": 66,
+      "name": "unittypes.java:2914:0"
+    },
+    {
+      "id": 67,
+      "name": "unittypes.java:2943:0"
+    },
+    {
+      "id": 68,
+      "name": "unittypes.java:2973:0"
+    },
+    {
+      "id": 69,
+      "name": "unittypes.java:3086:0"
+    },
+    {
+      "id": 70,
+      "name": "unittypes.java:3126:0"
+    },
+    {
+      "id": 71,
+      "name": "unittypes.java:3223:0"
+    },
+    {
+      "id": 72,
+      "name": "unittypes.java:3316:0"
+    },
+    {
+      "id": 73,
+      "name": "unittypes.java:3363:0"
+    },
+    {
+      "id": 74,
+      "name": "unittypes.java:3469:0"
+    },
+    {
+      "id": 75,
+      "name": "unittypes.java:3517:0"
+    },
+    {
+      "id": 76,
+      "name": "unittypes.java:3602:0"
+    },
+    {
+      "id": 77,
+      "name": "unittypes.java:3723:0"
+    },
+    {
+      "id": 78,
+      "name": "unittypes.java:3768:0"
+    },
+    {
+      "id": 79,
+      "name": "unittypes.java:3869:0"
+    },
+    {
+      "id": 80,
+      "name": "unittypes.java:3918:0"
+    },
+    {
+      "id": 81,
+      "name": "unittypes.java:3934:0"
+    },
+    {
+      "id": 82,
+      "name": "unittypes.java:3999:0"
+    },
+    {
+      "id": 83,
+      "name": "unittypes.java:4037:0"
+    },
+    {
+      "id": 84,
+      "name": "unittypes.java:4048:0"
+    },
+    {
+      "id": 85,
+      "name": "unittypes.java:4113:0"
+    },
+    {
+      "id": 86,
+      "name": "unittypes.java:4139:0"
+    },
+    {
+      "id": 87,
+      "name": "unittypes.java:4161:0"
+    },
+    {
+      "id": 88,
+      "name": "unittypes.java:4255:0"
+    },
+    {
+      "id": 89,
+      "name": "unittypes.java:4304:0"
+    },
+    {
+      "id": 90,
+      "name": "unittypes.java:4442:0"
+    },
+    {
+      "id": 91,
+      "name": "unittypes.java:4510:0"
+    },
+    {
+      "id": 92,
+      "name": "unittypes.java:4517:buildweapon"
+    },
+    {
+      "id": 93,
+      "name": "unittypes.java:4591:0"
+    },
+    {
+      "id": 94,
+      "name": "blocks.java:3273:0"
+    },
+    {
+      "id": 95,
+      "name": "blocks.java:3283:0"
+    },
+    {
+      "id": 96,
+      "name": "blocks.java:3295:0"
+    },
+    {
+      "id": 97,
+      "name": "blocks.java:3348:0"
+    },
+    {
+      "id": 98,
+      "name": "blocks.java:3363:0"
+    },
+    {
+      "id": 99,
+      "name": "blocks.java:3373:0"
+    },
+    {
+      "id": 100,
+      "name": "blocks.java:3388:0"
+    },
+    {
+      "id": 101,
+      "name": "blocks.java:3434:0"
+    },
+    {
+      "id": 102,
+      "name": "blocks.java:3448:0"
+    },
+    {
+      "id": 103,
+      "name": "blocks.java:3479:0"
+    },
+    {
+      "id": 104,
+      "name": "blocks.java:3491:0"
+    },
+    {
+      "id": 105,
+      "name": "blocks.java:3510:0"
+    },
+    {
+      "id": 106,
+      "name": "blocks.java:3545:0"
+    },
+    {
+      "id": 107,
+      "name": "blocks.java:3550:0"
+    },
+    {
+      "id": 108,
+      "name": "blocks.java:3554:0"
+    },
+    {
+      "id": 109,
+      "name": "blocks.java:3557:0"
+    },
+    {
+      "id": 110,
+      "name": "blocks.java:3597:0"
+    },
+    {
+      "id": 111,
+      "name": "blocks.java:3617:0"
+    },
+    {
+      "id": 112,
+      "name": "blocks.java:3626:0"
+    },
+    {
+      "id": 113,
+      "name": "blocks.java:3671:0"
+    },
+    {
+      "id": 114,
+      "name": "blocks.java:3686:0"
+    },
+    {
+      "id": 115,
+      "name": "blocks.java:3700:0"
+    },
+    {
+      "id": 116,
+      "name": "blocks.java:3746:0"
+    },
+    {
+      "id": 117,
+      "name": "blocks.java:3757:0"
+    },
+    {
+      "id": 118,
+      "name": "blocks.java:3770:0"
+    },
+    {
+      "id": 119,
+      "name": "blocks.java:3786:0"
+    },
+    {
+      "id": 120,
+      "name": "blocks.java:3800:0"
+    },
+    {
+      "id": 121,
+      "name": "blocks.java:3865:0"
+    },
+    {
+      "id": 122,
+      "name": "blocks.java:3877:0"
+    },
+    {
+      "id": 123,
+      "name": "blocks.java:3888:0"
+    },
+    {
+      "id": 124,
+      "name": "blocks.java:3899:0"
+    },
+    {
+      "id": 125,
+      "name": "blocks.java:3949:0"
+    },
+    {
+      "id": 126,
+      "name": "blocks.java:3956:0"
+    },
+    {
+      "id": 127,
+      "name": "blocks.java:3970:0"
+    },
+    {
+      "id": 128,
+      "name": "blocks.java:3986:0"
+    },
+    {
+      "id": 129,
+      "name": "blocks.java:4009:0"
+    },
+    {
+      "id": 130,
+      "name": "blocks.java:4029:0"
+    },
+    {
+      "id": 131,
+      "name": "blocks.java:4048:0"
+    },
+    {
+      "id": 132,
+      "name": "blocks.java:4057:0"
+    },
+    {
+      "id": 133,
+      "name": "blocks.java:4100:0"
+    },
+    {
+      "id": 134,
+      "name": "blocks.java:4109:0"
+    },
+    {
+      "id": 135,
+      "name": "blocks.java:4126:0"
+    },
+    {
+      "id": 136,
+      "name": "blocks.java:4139:0"
+    },
+    {
+      "id": 137,
+      "name": "blocks.java:4143:0"
+    },
+    {
+      "id": 138,
+      "name": "blocks.java:4161:0"
+    },
+    {
+      "id": 139,
+      "name": "blocks.java:4220:0"
+    },
+    {
+      "id": 140,
+      "name": "blocks.java:4263:0"
+    },
+    {
+      "id": 141,
+      "name": "blocks.java:4276:0"
+    },
+    {
+      "id": 142,
+      "name": "blocks.java:4288:0"
+    },
+    {
+      "id": 143,
+      "name": "blocks.java:4343:0"
+    },
+    {
+      "id": 144,
+      "name": "blocks.java:4369:0"
+    },
+    {
+      "id": 145,
+      "name": "blocks.java:4386:0"
+    },
+    {
+      "id": 146,
+      "name": "blocks.java:4405:0"
+    },
+    {
+      "id": 147,
+      "name": "blocks.java:4430:0"
+    },
+    {
+      "id": 148,
+      "name": "blocks.java:4479:0"
+    },
+    {
+      "id": 149,
+      "name": "blocks.java:4494:0"
+    },
+    {
+      "id": 150,
+      "name": "blocks.java:4509:0"
+    },
+    {
+      "id": 151,
+      "name": "blocks.java:4618:0"
+    },
+    {
+      "id": 152,
+      "name": "blocks.java:4629:0"
+    },
+    {
+      "id": 153,
+      "name": "blocks.java:4655:0"
+    },
+    {
+      "id": 154,
+      "name": "blocks.java:4687:0"
+    },
+    {
+      "id": 155,
+      "name": "blocks.java:4725:0"
+    },
+    {
+      "id": 156,
+      "name": "blocks.java:4747:0"
+    },
+    {
+      "id": 157,
+      "name": "blocks.java:4783:0"
+    },
+    {
+      "id": 158,
+      "name": "blocks.java:4788:0"
+    },
+    {
+      "id": 159,
+      "name": "blocks.java:4856:0"
+    },
+    {
+      "id": 160,
+      "name": "blocks.java:4880:0"
+    },
+    {
+      "id": 161,
+      "name": "blocks.java:4908:0"
+    },
+    {
+      "id": 162,
+      "name": "blocks.java:4934:0"
+    },
+    {
+      "id": 163,
+      "name": "blocks.java:4966:0"
+    },
+    {
+      "id": 164,
+      "name": "blocks.java:5040:0"
+    },
+    {
+      "id": 165,
+      "name": "blocks.java:5078:0"
+    },
+    {
+      "id": 166,
+      "name": "blocks.java:5162:0"
+    },
+    {
+      "id": 167,
+      "name": "blocks.java:5230:0"
+    },
+    {
+      "id": 168,
+      "name": "blocks.java:5267:0"
+    },
+    {
+      "id": 169,
+      "name": "blocks.java:5281:0"
+    },
+    {
+      "id": 170,
+      "name": "blocks.java:5317:0"
+    },
+    {
+      "id": 171,
+      "name": "blocks.java:5366:0"
+    },
+    {
+      "id": 172,
+      "name": "blocks.java:5382:0"
+    },
+    {
+      "id": 173,
+      "name": "blocks.java:5421:0"
+    },
+    {
+      "id": 174,
+      "name": "blocks.java:5461:0"
+    },
+    {
+      "id": 175,
+      "name": "blocks.java:5479:0"
+    },
+    {
+      "id": 176,
+      "name": "blocks.java:5514:0"
+    },
+    {
+      "id": 177,
+      "name": "blocks.java:5631:0"
+    },
+    {
+      "id": 178,
+      "name": "blocks.java:5666:0"
+    },
+    {
+      "id": 179,
+      "name": "blocks.java:5677:0"
+    },
+    {
+      "id": 180,
+      "name": "blocks.java:5912:0"
+    },
+    {
+      "id": 181,
+      "name": "blocks.java:5944:0"
+    },
+    {
+      "id": 182,
+      "name": "blocks.java:5952:0"
+    }
+  ],
+  "effects": [
+    {
+      "id": 0,
+      "name": "none"
+    },
+    {
+      "id": 1,
+      "name": "blockcrash"
+    },
+    {
+      "id": 2,
+      "name": "trailfade"
+    },
+    {
+      "id": 3,
+      "name": "unitspawn"
+    },
+    {
+      "id": 4,
+      "name": "unitcapkill"
+    },
+    {
+      "id": 5,
+      "name": "unitenvkill"
+    },
+    {
+      "id": 6,
+      "name": "unitcontrol"
+    },
+    {
+      "id": 7,
+      "name": "unitdespawn"
+    },
+    {
+      "id": 8,
+      "name": "unitspirit"
+    },
+    {
+      "id": 9,
+      "name": "itemtransfer"
+    },
+    {
+      "id": 10,
+      "name": "pointbeam"
+    },
+    {
+      "id": 11,
+      "name": "pointhit"
+    },
+    {
+      "id": 12,
+      "name": "hitsceptersecondary"
+    },
+    {
+      "id": 13,
+      "name": "lightning"
+    },
+    {
+      "id": 14,
+      "name": "corebuildshockwave"
+    },
+    {
+      "id": 15,
+      "name": "corebuildblock"
+    },
+    {
+      "id": 16,
+      "name": "pointshockwave"
+    },
+    {
+      "id": 17,
+      "name": "movecommand"
+    },
+    {
+      "id": 18,
+      "name": "attackcommand"
+    },
+    {
+      "id": 19,
+      "name": "commandsend"
+    },
+    {
+      "id": 20,
+      "name": "upgradecore"
+    },
+    {
+      "id": 21,
+      "name": "upgradecorebloom"
+    },
+    {
+      "id": 22,
+      "name": "placeblock"
+    },
+    {
+      "id": 23,
+      "name": "corelaunchconstruct"
+    },
+    {
+      "id": 24,
+      "name": "tapblock"
+    },
+    {
+      "id": 25,
+      "name": "breakblock"
+    },
+    {
+      "id": 26,
+      "name": "payloaddeposit"
+    },
+    {
+      "id": 27,
+      "name": "select"
+    },
+    {
+      "id": 28,
+      "name": "smoke"
+    },
+    {
+      "id": 29,
+      "name": "fallsmoke"
+    },
+    {
+      "id": 30,
+      "name": "unitwreck"
+    },
+    {
+      "id": 31,
+      "name": "rocketsmoke"
+    },
+    {
+      "id": 32,
+      "name": "rocketsmokelarge"
+    },
+    {
+      "id": 33,
+      "name": "magmasmoke"
+    },
+    {
+      "id": 34,
+      "name": "spawn"
+    },
+    {
+      "id": 35,
+      "name": "unitassemble"
+    },
+    {
+      "id": 36,
+      "name": "padlaunch"
+    },
+    {
+      "id": 37,
+      "name": "breakprop"
+    },
+    {
+      "id": 38,
+      "name": "unitdrop"
+    },
+    {
+      "id": 39,
+      "name": "unitland"
+    },
+    {
+      "id": 40,
+      "name": "unitdust"
+    },
+    {
+      "id": 41,
+      "name": "unitlandsmall"
+    },
+    {
+      "id": 42,
+      "name": "unitpickup"
+    },
+    {
+      "id": 43,
+      "name": "crawldust"
+    },
+    {
+      "id": 44,
+      "name": "landshock"
+    },
+    {
+      "id": 45,
+      "name": "pickup"
+    },
+    {
+      "id": 46,
+      "name": "sparkexplosion"
+    },
+    {
+      "id": 47,
+      "name": "titanexplosion"
+    },
+    {
+      "id": 48,
+      "name": "titanexplosionlarge"
+    },
+    {
+      "id": 49,
+      "name": "titanexplosionsmall"
+    },
+    {
+      "id": 50,
+      "name": "titanexplosionfrag"
+    },
+    {
+      "id": 51,
+      "name": "titansmoke"
+    },
+    {
+      "id": 52,
+      "name": "titansmokelarge"
+    },
+    {
+      "id": 53,
+      "name": "titansmokesmall"
+    },
+    {
+      "id": 54,
+      "name": "coreexplosion"
+    },
+    {
+      "id": 55,
+      "name": "smokeaoecloud"
+    },
+    {
+      "id": 56,
+      "name": "missiletrailsmoke"
+    },
+    {
+      "id": 57,
+      "name": "missiletrailsmokesmall"
+    },
+    {
+      "id": 58,
+      "name": "neoplasmsplat"
+    },
+    {
+      "id": 59,
+      "name": "scatheexplosion"
+    },
+    {
+      "id": 60,
+      "name": "scatheexplosionsmall"
+    },
+    {
+      "id": 61,
+      "name": "scathelight"
+    },
+    {
+      "id": 62,
+      "name": "scathelightsmall"
+    },
+    {
+      "id": 63,
+      "name": "titanlightsmall"
+    },
+    {
+      "id": 64,
+      "name": "scatheslash"
+    },
+    {
+      "id": 65,
+      "name": "dynamicspikes"
+    },
+    {
+      "id": 66,
+      "name": "greenbomb"
+    },
+    {
+      "id": 67,
+      "name": "greenlasercharge"
+    },
+    {
+      "id": 68,
+      "name": "greenlaserchargesmall"
+    },
+    {
+      "id": 69,
+      "name": "greencloud"
+    },
+    {
+      "id": 70,
+      "name": "healwavedynamic"
+    },
+    {
+      "id": 71,
+      "name": "healwave"
+    },
+    {
+      "id": 72,
+      "name": "heal"
+    },
+    {
+      "id": 73,
+      "name": "dynamicwave"
+    },
+    {
+      "id": 74,
+      "name": "shieldwave"
+    },
+    {
+      "id": 75,
+      "name": "shieldapply"
+    },
+    {
+      "id": 76,
+      "name": "dispersetrail"
+    },
+    {
+      "id": 77,
+      "name": "hitbulletsmall"
+    },
+    {
+      "id": 78,
+      "name": "hitbulletcolor"
+    },
+    {
+      "id": 79,
+      "name": "hitsquarescolor"
+    },
+    {
+      "id": 80,
+      "name": "squarewaveeffect"
+    },
+    {
+      "id": 81,
+      "name": "hitfuse"
+    },
+    {
+      "id": 82,
+      "name": "hitbulletbig"
+    },
+    {
+      "id": 83,
+      "name": "hitflamesmall"
+    },
+    {
+      "id": 84,
+      "name": "hitflameplasma"
+    },
+    {
+      "id": 85,
+      "name": "hitliquid"
+    },
+    {
+      "id": 86,
+      "name": "hitlaserblast"
+    },
+    {
+      "id": 87,
+      "name": "hitempspark"
+    },
+    {
+      "id": 88,
+      "name": "hitlancer"
+    },
+    {
+      "id": 89,
+      "name": "hitlancerlow"
+    },
+    {
+      "id": 90,
+      "name": "hitbeam"
+    },
+    {
+      "id": 91,
+      "name": "hitflamebeam"
+    },
+    {
+      "id": 92,
+      "name": "hitmeltdown"
+    },
+    {
+      "id": 93,
+      "name": "hitmeltheal"
+    },
+    {
+      "id": 94,
+      "name": "instbomb"
+    },
+    {
+      "id": 95,
+      "name": "insttrail"
+    },
+    {
+      "id": 96,
+      "name": "instshoot"
+    },
+    {
+      "id": 97,
+      "name": "insthit"
+    },
+    {
+      "id": 98,
+      "name": "hitlaser"
+    },
+    {
+      "id": 99,
+      "name": "hitlasercolor"
+    },
+    {
+      "id": 100,
+      "name": "despawn"
+    },
+    {
+      "id": 101,
+      "name": "airbubble"
+    },
+    {
+      "id": 102,
+      "name": "flakexplosion"
+    },
+    {
+      "id": 103,
+      "name": "plasticexplosion"
+    },
+    {
+      "id": 104,
+      "name": "plasticexplosionflak"
+    },
+    {
+      "id": 105,
+      "name": "blastexplosion"
+    },
+    {
+      "id": 106,
+      "name": "sapexplosion"
+    },
+    {
+      "id": 107,
+      "name": "massiveexplosion"
+    },
+    {
+      "id": 108,
+      "name": "artillerytrail"
+    },
+    {
+      "id": 109,
+      "name": "incendtrail"
+    },
+    {
+      "id": 110,
+      "name": "missiletrail"
+    },
+    {
+      "id": 111,
+      "name": "missiletrailshort"
+    },
+    {
+      "id": 112,
+      "name": "bulletsparksmoketrailsmall"
+    },
+    {
+      "id": 113,
+      "name": "colortrail"
+    },
+    {
+      "id": 114,
+      "name": "absorb"
+    },
+    {
+      "id": 115,
+      "name": "forceshrink"
+    },
+    {
+      "id": 116,
+      "name": "flakexplosionbig"
+    },
+    {
+      "id": 117,
+      "name": "burning"
+    },
+    {
+      "id": 118,
+      "name": "fireremove"
+    },
+    {
+      "id": 119,
+      "name": "fire"
+    },
+    {
+      "id": 120,
+      "name": "firehit"
+    },
+    {
+      "id": 121,
+      "name": "firesmoke"
+    },
+    {
+      "id": 122,
+      "name": "neoplasmheal"
+    },
+    {
+      "id": 123,
+      "name": "steam"
+    },
+    {
+      "id": 124,
+      "name": "ventsteam"
+    },
+    {
+      "id": 125,
+      "name": "drillsteam"
+    },
+    {
+      "id": 126,
+      "name": "fluxvapor"
+    },
+    {
+      "id": 127,
+      "name": "corrosionvapor"
+    },
+    {
+      "id": 128,
+      "name": "vapor"
+    },
+    {
+      "id": 129,
+      "name": "vaporsmall"
+    },
+    {
+      "id": 130,
+      "name": "fireballsmoke"
+    },
+    {
+      "id": 131,
+      "name": "ballfire"
+    },
+    {
+      "id": 132,
+      "name": "freezing"
+    },
+    {
+      "id": 133,
+      "name": "melting"
+    },
+    {
+      "id": 134,
+      "name": "wet"
+    },
+    {
+      "id": 135,
+      "name": "muddy"
+    },
+    {
+      "id": 136,
+      "name": "sapped"
+    },
+    {
+      "id": 137,
+      "name": "electrified"
+    },
+    {
+      "id": 138,
+      "name": "sporeslowed"
+    },
+    {
+      "id": 139,
+      "name": "oily"
+    },
+    {
+      "id": 140,
+      "name": "overdriven"
+    },
+    {
+      "id": 141,
+      "name": "overclocked"
+    },
+    {
+      "id": 142,
+      "name": "dropitem"
+    },
+    {
+      "id": 143,
+      "name": "shockwave"
+    },
+    {
+      "id": 144,
+      "name": "shockwavesmaller"
+    },
+    {
+      "id": 145,
+      "name": "bigshockwave"
+    },
+    {
+      "id": 146,
+      "name": "spawnshockwave"
+    },
+    {
+      "id": 147,
+      "name": "podlandshockwave"
+    },
+    {
+      "id": 148,
+      "name": "explosion"
+    },
+    {
+      "id": 149,
+      "name": "dynamicexplosion"
+    },
+    {
+      "id": 150,
+      "name": "reactorexplosion"
+    },
+    {
+      "id": 151,
+      "name": "impactreactorexplosion"
+    },
+    {
+      "id": 152,
+      "name": "blockexplosionsmoke"
+    },
+    {
+      "id": 153,
+      "name": "steamcoolsmoke"
+    },
+    {
+      "id": 154,
+      "name": "smokepuff"
+    },
+    {
+      "id": 155,
+      "name": "shootsmall"
+    },
+    {
+      "id": 156,
+      "name": "shootsmallcolor"
+    },
+    {
+      "id": 157,
+      "name": "shootheal"
+    },
+    {
+      "id": 158,
+      "name": "shoothealyellow"
+    },
+    {
+      "id": 159,
+      "name": "shootsmallsmoke"
+    },
+    {
+      "id": 160,
+      "name": "shootbig"
+    },
+    {
+      "id": 161,
+      "name": "shootbig2"
+    },
+    {
+      "id": 162,
+      "name": "shootbigcolor"
+    },
+    {
+      "id": 163,
+      "name": "shootsceptersecondary"
+    },
+    {
+      "id": 164,
+      "name": "shootquellpulse"
+    },
+    {
+      "id": 165,
+      "name": "shoottitan"
+    },
+    {
+      "id": 166,
+      "name": "shootbigsmoke"
+    },
+    {
+      "id": 167,
+      "name": "shootbigsmoke2"
+    },
+    {
+      "id": 168,
+      "name": "shootsmokedisperse"
+    },
+    {
+      "id": 169,
+      "name": "shootsmokesquare"
+    },
+    {
+      "id": 170,
+      "name": "shootsmokesquaresparse"
+    },
+    {
+      "id": 171,
+      "name": "shootsmokesquarebig"
+    },
+    {
+      "id": 172,
+      "name": "shootsmoketitan"
+    },
+    {
+      "id": 173,
+      "name": "shootsmokesmite"
+    },
+    {
+      "id": 174,
+      "name": "shootsmokemissile"
+    },
+    {
+      "id": 175,
+      "name": "shootsmokemissilecolor"
+    },
+    {
+      "id": 176,
+      "name": "regenparticle"
+    },
+    {
+      "id": 177,
+      "name": "regensuppressparticle"
+    },
+    {
+      "id": 178,
+      "name": "regensuppressseek"
+    },
+    {
+      "id": 179,
+      "name": "surgecrucismoke"
+    },
+    {
+      "id": 180,
+      "name": "neoplasiasmoke"
+    },
+    {
+      "id": 181,
+      "name": "heatreactorsmoke"
+    },
+    {
+      "id": 182,
+      "name": "circlecolorspark"
+    },
+    {
+      "id": 183,
+      "name": "colorspark"
+    },
+    {
+      "id": 184,
+      "name": "colorsparkbig"
+    },
+    {
+      "id": 185,
+      "name": "randlifespark"
+    },
+    {
+      "id": 186,
+      "name": "shootpayloaddriver"
+    },
+    {
+      "id": 187,
+      "name": "shootsmallflame"
+    },
+    {
+      "id": 188,
+      "name": "shootpyraflame"
+    },
+    {
+      "id": 189,
+      "name": "shootliquid"
+    },
+    {
+      "id": 190,
+      "name": "casing1"
+    },
+    {
+      "id": 191,
+      "name": "casing2"
+    },
+    {
+      "id": 192,
+      "name": "casing3"
+    },
+    {
+      "id": 193,
+      "name": "casing4"
+    },
+    {
+      "id": 194,
+      "name": "casing2double"
+    },
+    {
+      "id": 195,
+      "name": "casing3double"
+    },
+    {
+      "id": 196,
+      "name": "railshoot"
+    },
+    {
+      "id": 197,
+      "name": "railtrail"
+    },
+    {
+      "id": 198,
+      "name": "railhit"
+    },
+    {
+      "id": 199,
+      "name": "lancerlasershoot"
+    },
+    {
+      "id": 200,
+      "name": "lancerlasershootsmoke"
+    },
+    {
+      "id": 201,
+      "name": "lancerlasercharge"
+    },
+    {
+      "id": 202,
+      "name": "lancerlaserchargebegin"
+    },
+    {
+      "id": 203,
+      "name": "lightningcharge"
+    },
+    {
+      "id": 204,
+      "name": "sparkshoot"
+    },
+    {
+      "id": 205,
+      "name": "lightningshoot"
+    },
+    {
+      "id": 206,
+      "name": "thoriumshoot"
+    },
+    {
+      "id": 207,
+      "name": "reactorsmoke"
+    },
+    {
+      "id": 208,
+      "name": "redgeneratespark"
+    },
+    {
+      "id": 209,
+      "name": "turbinegenerate"
+    },
+    {
+      "id": 210,
+      "name": "generatespark"
+    },
+    {
+      "id": 211,
+      "name": "fuelburn"
+    },
+    {
+      "id": 212,
+      "name": "incinerateslag"
+    },
+    {
+      "id": 213,
+      "name": "coreburn"
+    },
+    {
+      "id": 214,
+      "name": "plasticburn"
+    },
+    {
+      "id": 215,
+      "name": "conveyorpoof"
+    },
+    {
+      "id": 216,
+      "name": "pulverize"
+    },
+    {
+      "id": 217,
+      "name": "pulverizered"
+    },
+    {
+      "id": 218,
+      "name": "pulverizesmall"
+    },
+    {
+      "id": 219,
+      "name": "pulverizemedium"
+    },
+    {
+      "id": 220,
+      "name": "producesmoke"
+    },
+    {
+      "id": 221,
+      "name": "artillerytrailsmoke"
+    },
+    {
+      "id": 222,
+      "name": "smokecloud"
+    },
+    {
+      "id": 223,
+      "name": "smeltsmoke"
+    },
+    {
+      "id": 224,
+      "name": "coalsmeltsmoke"
+    },
+    {
+      "id": 225,
+      "name": "formsmoke"
+    },
+    {
+      "id": 226,
+      "name": "blastsmoke"
+    },
+    {
+      "id": 227,
+      "name": "lava"
+    },
+    {
+      "id": 228,
+      "name": "dooropen"
+    },
+    {
+      "id": 229,
+      "name": "doorclose"
+    },
+    {
+      "id": 230,
+      "name": "dooropenlarge"
+    },
+    {
+      "id": 231,
+      "name": "doorcloselarge"
+    },
+    {
+      "id": 232,
+      "name": "generate"
+    },
+    {
+      "id": 233,
+      "name": "minewallsmall"
+    },
+    {
+      "id": 234,
+      "name": "minesmall"
+    },
+    {
+      "id": 235,
+      "name": "mine"
+    },
+    {
+      "id": 236,
+      "name": "minebig"
+    },
+    {
+      "id": 237,
+      "name": "minehuge"
+    },
+    {
+      "id": 238,
+      "name": "mineimpact"
+    },
+    {
+      "id": 239,
+      "name": "mineimpactwave"
+    },
+    {
+      "id": 240,
+      "name": "payloadreceive"
+    },
+    {
+      "id": 241,
+      "name": "teleportactivate"
+    },
+    {
+      "id": 242,
+      "name": "teleport"
+    },
+    {
+      "id": 243,
+      "name": "teleportout"
+    },
+    {
+      "id": 244,
+      "name": "ripple"
+    },
+    {
+      "id": 245,
+      "name": "bubble"
+    },
+    {
+      "id": 246,
+      "name": "launchaccelerator"
+    },
+    {
+      "id": 247,
+      "name": "launch"
+    },
+    {
+      "id": 248,
+      "name": "launchpod"
+    },
+    {
+      "id": 249,
+      "name": "healwavemend"
+    },
+    {
+      "id": 250,
+      "name": "overdrivewave"
+    },
+    {
+      "id": 251,
+      "name": "healblock"
+    },
+    {
+      "id": 252,
+      "name": "healblockfull"
+    },
+    {
+      "id": 253,
+      "name": "rotateblock"
+    },
+    {
+      "id": 254,
+      "name": "lightblock"
+    },
+    {
+      "id": 255,
+      "name": "overdriveblockfull"
+    },
+    {
+      "id": 256,
+      "name": "shieldbreak"
+    },
+    {
+      "id": 257,
+      "name": "arcshieldbreak"
+    },
+    {
+      "id": 258,
+      "name": "corelanddust"
+    },
+    {
+      "id": 259,
+      "name": "podlanddust"
+    },
+    {
+      "id": 260,
+      "name": "unitshieldbreak"
+    },
+    {
+      "id": 261,
+      "name": "chainlightning"
+    },
+    {
+      "id": 262,
+      "name": "chainemp"
+    },
+    {
+      "id": 263,
+      "name": "legdestroy"
+    },
+    {
+      "id": 264,
+      "name": "debugline"
+    },
+    {
+      "id": 265,
+      "name": "debugrect"
+    }
+  ],
+  "sounds": [
+    {
+      "id": 0,
+      "name": "beamheal"
+    },
+    {
+      "id": 1,
+      "name": "beamlustre"
+    },
+    {
+      "id": 2,
+      "name": "beammeltdown"
+    },
+    {
+      "id": 3,
+      "name": "beamparallax"
+    },
+    {
+      "id": 4,
+      "name": "beamplasma"
+    },
+    {
+      "id": 5,
+      "name": "beamplasmasmall"
+    },
+    {
+      "id": 6,
+      "name": "acceleratorcharge"
+    },
+    {
+      "id": 7,
+      "name": "acceleratorconstruct"
+    },
+    {
+      "id": 8,
+      "name": "acceleratorlaunch"
+    },
+    {
+      "id": 9,
+      "name": "acceleratorlightning1"
+    },
+    {
+      "id": 10,
+      "name": "acceleratorlightning2"
+    },
+    {
+      "id": 11,
+      "name": "blockbreak1"
+    },
+    {
+      "id": 12,
+      "name": "blockbreak2"
+    },
+    {
+      "id": 13,
+      "name": "blockbreak3"
+    },
+    {
+      "id": 14,
+      "name": "blockheal"
+    },
+    {
+      "id": 15,
+      "name": "blockplace1"
+    },
+    {
+      "id": 16,
+      "name": "blockplace2"
+    },
+    {
+      "id": 17,
+      "name": "blockplace3"
+    },
+    {
+      "id": 18,
+      "name": "blockrepair"
+    },
+    {
+      "id": 19,
+      "name": "blockrotate"
+    },
+    {
+      "id": 20,
+      "name": "click"
+    },
+    {
+      "id": 21,
+      "name": "coreland"
+    },
+    {
+      "id": 22,
+      "name": "corelaunch"
+    },
+    {
+      "id": 23,
+      "name": "door"
+    },
+    {
+      "id": 24,
+      "name": "drillcharge"
+    },
+    {
+      "id": 25,
+      "name": "drillimpact"
+    },
+    {
+      "id": 26,
+      "name": "healwave"
+    },
+    {
+      "id": 27,
+      "name": "massdriver"
+    },
+    {
+      "id": 28,
+      "name": "massdriverreceive"
+    },
+    {
+      "id": 29,
+      "name": "padland"
+    },
+    {
+      "id": 30,
+      "name": "padlaunch"
+    },
+    {
+      "id": 31,
+      "name": "payloaddrop1"
+    },
+    {
+      "id": 32,
+      "name": "payloaddrop2"
+    },
+    {
+      "id": 33,
+      "name": "payloaddrop3"
+    },
+    {
+      "id": 34,
+      "name": "payloadpickup"
+    },
+    {
+      "id": 35,
+      "name": "plantbreak"
+    },
+    {
+      "id": 36,
+      "name": "rockbreak"
+    },
+    {
+      "id": 37,
+      "name": "shieldbreak"
+    },
+    {
+      "id": 38,
+      "name": "shieldbreaksmall"
+    },
+    {
+      "id": 39,
+      "name": "shieldhit"
+    },
+    {
+      "id": 40,
+      "name": "shieldwave"
+    },
+    {
+      "id": 41,
+      "name": "shockwavetower"
+    },
+    {
+      "id": 42,
+      "name": "unitcreate"
+    },
+    {
+      "id": 43,
+      "name": "unitcreatebig"
+    },
+    {
+      "id": 44,
+      "name": "chargecorvus"
+    },
+    {
+      "id": 45,
+      "name": "chargelancer"
+    },
+    {
+      "id": 46,
+      "name": "chargevela"
+    },
+    {
+      "id": 47,
+      "name": "rain"
+    },
+    {
+      "id": 48,
+      "name": "wind"
+    },
+    {
+      "id": 49,
+      "name": "wind2"
+    },
+    {
+      "id": 50,
+      "name": "wind3"
+    },
+    {
+      "id": 51,
+      "name": "windhowl"
+    },
+    {
+      "id": 52,
+      "name": "blockexplode1"
+    },
+    {
+      "id": 53,
+      "name": "blockexplode1alt"
+    },
+    {
+      "id": 54,
+      "name": "blockexplode2"
+    },
+    {
+      "id": 55,
+      "name": "blockexplode2alt"
+    },
+    {
+      "id": 56,
+      "name": "blockexplode3"
+    },
+    {
+      "id": 57,
+      "name": "blockexplodeelectric"
+    },
+    {
+      "id": 58,
+      "name": "blockexplodeelectricbig"
+    },
+    {
+      "id": 59,
+      "name": "blockexplodeexplosive"
+    },
+    {
+      "id": 60,
+      "name": "blockexplodeexplosivealt"
+    },
+    {
+      "id": 61,
+      "name": "blockexplodeflammable"
+    },
+    {
+      "id": 62,
+      "name": "blockexplodewall"
+    },
+    {
+      "id": 63,
+      "name": "explosion"
+    },
+    {
+      "id": 64,
+      "name": "explosionafflict"
+    },
+    {
+      "id": 65,
+      "name": "explosionartillery"
+    },
+    {
+      "id": 66,
+      "name": "explosionartilleryshock"
+    },
+    {
+      "id": 67,
+      "name": "explosionartilleryshockbig"
+    },
+    {
+      "id": 68,
+      "name": "explosioncleroi"
+    },
+    {
+      "id": 69,
+      "name": "explosioncore"
+    },
+    {
+      "id": 70,
+      "name": "explosioncrawler"
+    },
+    {
+      "id": 71,
+      "name": "explosiondull"
+    },
+    {
+      "id": 72,
+      "name": "explosionmissile"
+    },
+    {
+      "id": 73,
+      "name": "explosionnavanax"
+    },
+    {
+      "id": 74,
+      "name": "explosionobviate"
+    },
+    {
+      "id": 75,
+      "name": "explosionplasmasmall"
+    },
+    {
+      "id": 76,
+      "name": "explosionquad"
+    },
+    {
+      "id": 77,
+      "name": "explosionreactor"
+    },
+    {
+      "id": 78,
+      "name": "explosionreactor2"
+    },
+    {
+      "id": 79,
+      "name": "explosionreactorneoplasm"
+    },
+    {
+      "id": 80,
+      "name": "explosiontitan"
+    },
+    {
+      "id": 81,
+      "name": "shockbullet"
+    },
+    {
+      "id": 82,
+      "name": "unitexplode1"
+    },
+    {
+      "id": 83,
+      "name": "unitexplode2"
+    },
+    {
+      "id": 84,
+      "name": "unitexplode3"
+    },
+    {
+      "id": 85,
+      "name": "wreckfall"
+    },
+    {
+      "id": 86,
+      "name": "wreckfallbig"
+    },
+    {
+      "id": 87,
+      "name": "loopbio"
+    },
+    {
+      "id": 88,
+      "name": "loopbuild"
+    },
+    {
+      "id": 89,
+      "name": "loopcircuit"
+    },
+    {
+      "id": 90,
+      "name": "loopcombustion"
+    },
+    {
+      "id": 91,
+      "name": "loopconveyor"
+    },
+    {
+      "id": 92,
+      "name": "loopcultivator"
+    },
+    {
+      "id": 93,
+      "name": "loopcutter"
+    },
+    {
+      "id": 94,
+      "name": "loopdifferential"
+    },
+    {
+      "id": 95,
+      "name": "loopdrill"
+    },
+    {
+      "id": 96,
+      "name": "loopelectrichum"
+    },
+    {
+      "id": 97,
+      "name": "loopextract"
+    },
+    {
+      "id": 98,
+      "name": "loopfire"
+    },
+    {
+      "id": 99,
+      "name": "loopflux"
+    },
+    {
+      "id": 100,
+      "name": "loopglow"
+    },
+    {
+      "id": 101,
+      "name": "loopgrind"
+    },
+    {
+      "id": 102,
+      "name": "loophover"
+    },
+    {
+      "id": 103,
+      "name": "loophover2"
+    },
+    {
+      "id": 104,
+      "name": "loophum"
+    },
+    {
+      "id": 105,
+      "name": "loopmachine"
+    },
+    {
+      "id": 106,
+      "name": "loopmachine2"
+    },
+    {
+      "id": 107,
+      "name": "loopmachinespin"
+    },
+    {
+      "id": 108,
+      "name": "loopmalign"
+    },
+    {
+      "id": 109,
+      "name": "loopminebeam"
+    },
+    {
+      "id": 110,
+      "name": "loopmissiletrail"
+    },
+    {
+      "id": 111,
+      "name": "looppulse"
+    },
+    {
+      "id": 112,
+      "name": "loopregen"
+    },
+    {
+      "id": 113,
+      "name": "loopshield"
+    },
+    {
+      "id": 114,
+      "name": "loopsmelter"
+    },
+    {
+      "id": 115,
+      "name": "loopspray"
+    },
+    {
+      "id": 116,
+      "name": "loopsteam"
+    },
+    {
+      "id": 117,
+      "name": "looptech"
+    },
+    {
+      "id": 118,
+      "name": "loopthoriumreactor"
+    },
+    {
+      "id": 119,
+      "name": "loopthruster"
+    },
+    {
+      "id": 120,
+      "name": "loopunitbuilding"
+    },
+    {
+      "id": 121,
+      "name": "mechstep"
+    },
+    {
+      "id": 122,
+      "name": "mechstepheavy"
+    },
+    {
+      "id": 123,
+      "name": "mechstepsmall"
+    },
+    {
+      "id": 124,
+      "name": "shipmove"
+    },
+    {
+      "id": 125,
+      "name": "shipmovebig"
+    },
+    {
+      "id": 126,
+      "name": "stepmud"
+    },
+    {
+      "id": 127,
+      "name": "stepwater"
+    },
+    {
+      "id": 128,
+      "name": "tankmove"
+    },
+    {
+      "id": 129,
+      "name": "tankmoveheavy"
+    },
+    {
+      "id": 130,
+      "name": "tankmovesmall"
+    },
+    {
+      "id": 131,
+      "name": "walkerstep"
+    },
+    {
+      "id": 132,
+      "name": "walkerstepsmall"
+    },
+    {
+      "id": 133,
+      "name": "walkersteptiny"
+    },
+    {
+      "id": 134,
+      "name": "shoot"
+    },
+    {
+      "id": 135,
+      "name": "shootafflict"
+    },
+    {
+      "id": 136,
+      "name": "shootalpha"
+    },
+    {
+      "id": 137,
+      "name": "shootarc"
+    },
+    {
+      "id": 138,
+      "name": "shootartillery"
+    },
+    {
+      "id": 139,
+      "name": "shootartillerysap"
+    },
+    {
+      "id": 140,
+      "name": "shootartillerysapbig"
+    },
+    {
+      "id": 141,
+      "name": "shootartillerysmall"
+    },
+    {
+      "id": 142,
+      "name": "shootatrax"
+    },
+    {
+      "id": 143,
+      "name": "shootavert"
+    },
+    {
+      "id": 144,
+      "name": "shootbeamplasma"
+    },
+    {
+      "id": 145,
+      "name": "shootbeamplasmasmall"
+    },
+    {
+      "id": 146,
+      "name": "shootbreach"
+    },
+    {
+      "id": 147,
+      "name": "shootbreachcarbide"
+    },
+    {
+      "id": 148,
+      "name": "shootcleroi"
+    },
+    {
+      "id": 149,
+      "name": "shootcollaris"
+    },
+    {
+      "id": 150,
+      "name": "shootconquer"
+    },
+    {
+      "id": 151,
+      "name": "shootcorvus"
+    },
+    {
+      "id": 152,
+      "name": "shootcyclone"
+    },
+    {
+      "id": 153,
+      "name": "shootdiffuse"
+    },
+    {
+      "id": 154,
+      "name": "shootdisperse"
+    },
+    {
+      "id": 155,
+      "name": "shootduo"
+    },
+    {
+      "id": 156,
+      "name": "shooteclipse"
+    },
+    {
+      "id": 157,
+      "name": "shootelude"
+    },
+    {
+      "id": 158,
+      "name": "shootenergyfield"
+    },
+    {
+      "id": 159,
+      "name": "shootflame"
+    },
+    {
+      "id": 160,
+      "name": "shootflameplasma"
+    },
+    {
+      "id": 161,
+      "name": "shootforeshadow"
+    },
+    {
+      "id": 162,
+      "name": "shootfuse"
+    },
+    {
+      "id": 163,
+      "name": "shoothorizon"
+    },
+    {
+      "id": 164,
+      "name": "shootlancer"
+    },
+    {
+      "id": 165,
+      "name": "shootlaser"
+    },
+    {
+      "id": 166,
+      "name": "shootlocus"
+    },
+    {
+      "id": 167,
+      "name": "shootmalign"
+    },
+    {
+      "id": 168,
+      "name": "shootmeltdown"
+    },
+    {
+      "id": 169,
+      "name": "shootmerui"
+    },
+    {
+      "id": 170,
+      "name": "shootmissile"
+    },
+    {
+      "id": 171,
+      "name": "shootmissilelarge"
+    },
+    {
+      "id": 172,
+      "name": "shootmissilelong"
+    },
+    {
+      "id": 173,
+      "name": "shootmissileplasma"
+    },
+    {
+      "id": 174,
+      "name": "shootmissileplasmashort"
+    },
+    {
+      "id": 175,
+      "name": "shootmissileshort"
+    },
+    {
+      "id": 176,
+      "name": "shootmissilesmall"
+    },
+    {
+      "id": 177,
+      "name": "shootnavanax"
+    },
+    {
+      "id": 178,
+      "name": "shootomura"
+    },
+    {
+      "id": 179,
+      "name": "shootpayload"
+    },
+    {
+      "id": 180,
+      "name": "shootpulsar"
+    },
+    {
+      "id": 181,
+      "name": "shootquad"
+    },
+    {
+      "id": 182,
+      "name": "shootreign"
+    },
+    {
+      "id": 183,
+      "name": "shootretusa"
+    },
+    {
+      "id": 184,
+      "name": "shootripple"
+    },
+    {
+      "id": 185,
+      "name": "shootsalvo"
+    },
+    {
+      "id": 186,
+      "name": "shootsap"
+    },
+    {
+      "id": 187,
+      "name": "shootscathe"
+    },
+    {
+      "id": 188,
+      "name": "shootscatter"
+    },
+    {
+      "id": 189,
+      "name": "shootscepter"
+    },
+    {
+      "id": 190,
+      "name": "shootsceptersecondary"
+    },
+    {
+      "id": 191,
+      "name": "shootsegment"
+    },
+    {
+      "id": 192,
+      "name": "shootsmite"
+    },
+    {
+      "id": 193,
+      "name": "shootspectre"
+    },
+    {
+      "id": 194,
+      "name": "shootstell"
+    },
+    {
+      "id": 195,
+      "name": "shootsublimate"
+    },
+    {
+      "id": 196,
+      "name": "shoottank"
+    },
+    {
+      "id": 197,
+      "name": "shoottoxopidshotgun"
+    },
+    {
+      "id": 198,
+      "name": "uiback"
+    },
+    {
+      "id": 199,
+      "name": "uibutton"
+    },
+    {
+      "id": 200,
+      "name": "uichat"
+    },
+    {
+      "id": 201,
+      "name": "uifavorite"
+    },
+    {
+      "id": 202,
+      "name": "uinotify"
+    },
+    {
+      "id": 203,
+      "name": "uiunlock"
+    },
+    {
+      "id": 204,
+      "name": "wavespawn"
+    }
+  ],
+  "teams": [
+    {
+      "id": 0,
+      "name": "derelict"
+    },
+    {
+      "id": 1,
+      "name": "sharded"
+    },
+    {
+      "id": 2,
+      "name": "crux"
+    },
+    {
+      "id": 3,
+      "name": "malis"
+    },
+    {
+      "id": 4,
+      "name": "green"
+    },
+    {
+      "id": 5,
+      "name": "blue"
+    },
+    {
+      "id": 6,
+      "name": "neoplastic"
+    },
+    {
+      "id": 7,
+      "name": "team#7"
+    },
+    {
+      "id": 8,
+      "name": "team#8"
+    },
+    {
+      "id": 9,
+      "name": "team#9"
+    },
+    {
+      "id": 10,
+      "name": "team#10"
+    },
+    {
+      "id": 11,
+      "name": "team#11"
+    },
+    {
+      "id": 12,
+      "name": "team#12"
+    },
+    {
+      "id": 13,
+      "name": "team#13"
+    },
+    {
+      "id": 14,
+      "name": "team#14"
+    },
+    {
+      "id": 15,
+      "name": "team#15"
+    },
+    {
+      "id": 16,
+      "name": "team#16"
+    },
+    {
+      "id": 17,
+      "name": "team#17"
+    },
+    {
+      "id": 18,
+      "name": "team#18"
+    },
+    {
+      "id": 19,
+      "name": "team#19"
+    },
+    {
+      "id": 20,
+      "name": "team#20"
+    },
+    {
+      "id": 21,
+      "name": "team#21"
+    },
+    {
+      "id": 22,
+      "name": "team#22"
+    },
+    {
+      "id": 23,
+      "name": "team#23"
+    },
+    {
+      "id": 24,
+      "name": "team#24"
+    },
+    {
+      "id": 25,
+      "name": "team#25"
+    },
+    {
+      "id": 26,
+      "name": "team#26"
+    },
+    {
+      "id": 27,
+      "name": "team#27"
+    },
+    {
+      "id": 28,
+      "name": "team#28"
+    },
+    {
+      "id": 29,
+      "name": "team#29"
+    },
+    {
+      "id": 30,
+      "name": "team#30"
+    },
+    {
+      "id": 31,
+      "name": "team#31"
+    },
+    {
+      "id": 32,
+      "name": "team#32"
+    },
+    {
+      "id": 33,
+      "name": "team#33"
+    },
+    {
+      "id": 34,
+      "name": "team#34"
+    },
+    {
+      "id": 35,
+      "name": "team#35"
+    },
+    {
+      "id": 36,
+      "name": "team#36"
+    },
+    {
+      "id": 37,
+      "name": "team#37"
+    },
+    {
+      "id": 38,
+      "name": "team#38"
+    },
+    {
+      "id": 39,
+      "name": "team#39"
+    },
+    {
+      "id": 40,
+      "name": "team#40"
+    },
+    {
+      "id": 41,
+      "name": "team#41"
+    },
+    {
+      "id": 42,
+      "name": "team#42"
+    },
+    {
+      "id": 43,
+      "name": "team#43"
+    },
+    {
+      "id": 44,
+      "name": "team#44"
+    },
+    {
+      "id": 45,
+      "name": "team#45"
+    },
+    {
+      "id": 46,
+      "name": "team#46"
+    },
+    {
+      "id": 47,
+      "name": "team#47"
+    },
+    {
+      "id": 48,
+      "name": "team#48"
+    },
+    {
+      "id": 49,
+      "name": "team#49"
+    },
+    {
+      "id": 50,
+      "name": "team#50"
+    },
+    {
+      "id": 51,
+      "name": "team#51"
+    },
+    {
+      "id": 52,
+      "name": "team#52"
+    },
+    {
+      "id": 53,
+      "name": "team#53"
+    },
+    {
+      "id": 54,
+      "name": "team#54"
+    },
+    {
+      "id": 55,
+      "name": "team#55"
+    },
+    {
+      "id": 56,
+      "name": "team#56"
+    },
+    {
+      "id": 57,
+      "name": "team#57"
+    },
+    {
+      "id": 58,
+      "name": "team#58"
+    },
+    {
+      "id": 59,
+      "name": "team#59"
+    },
+    {
+      "id": 60,
+      "name": "team#60"
+    },
+    {
+      "id": 61,
+      "name": "team#61"
+    },
+    {
+      "id": 62,
+      "name": "team#62"
+    },
+    {
+      "id": 63,
+      "name": "team#63"
+    },
+    {
+      "id": 64,
+      "name": "team#64"
+    },
+    {
+      "id": 65,
+      "name": "team#65"
+    },
+    {
+      "id": 66,
+      "name": "team#66"
+    },
+    {
+      "id": 67,
+      "name": "team#67"
+    },
+    {
+      "id": 68,
+      "name": "team#68"
+    },
+    {
+      "id": 69,
+      "name": "team#69"
+    },
+    {
+      "id": 70,
+      "name": "team#70"
+    },
+    {
+      "id": 71,
+      "name": "team#71"
+    },
+    {
+      "id": 72,
+      "name": "team#72"
+    },
+    {
+      "id": 73,
+      "name": "team#73"
+    },
+    {
+      "id": 74,
+      "name": "team#74"
+    },
+    {
+      "id": 75,
+      "name": "team#75"
+    },
+    {
+      "id": 76,
+      "name": "team#76"
+    },
+    {
+      "id": 77,
+      "name": "team#77"
+    },
+    {
+      "id": 78,
+      "name": "team#78"
+    },
+    {
+      "id": 79,
+      "name": "team#79"
+    },
+    {
+      "id": 80,
+      "name": "team#80"
+    },
+    {
+      "id": 81,
+      "name": "team#81"
+    },
+    {
+      "id": 82,
+      "name": "team#82"
+    },
+    {
+      "id": 83,
+      "name": "team#83"
+    },
+    {
+      "id": 84,
+      "name": "team#84"
+    },
+    {
+      "id": 85,
+      "name": "team#85"
+    },
+    {
+      "id": 86,
+      "name": "team#86"
+    },
+    {
+      "id": 87,
+      "name": "team#87"
+    },
+    {
+      "id": 88,
+      "name": "team#88"
+    },
+    {
+      "id": 89,
+      "name": "team#89"
+    },
+    {
+      "id": 90,
+      "name": "team#90"
+    },
+    {
+      "id": 91,
+      "name": "team#91"
+    },
+    {
+      "id": 92,
+      "name": "team#92"
+    },
+    {
+      "id": 93,
+      "name": "team#93"
+    },
+    {
+      "id": 94,
+      "name": "team#94"
+    },
+    {
+      "id": 95,
+      "name": "team#95"
+    },
+    {
+      "id": 96,
+      "name": "team#96"
+    },
+    {
+      "id": 97,
+      "name": "team#97"
+    },
+    {
+      "id": 98,
+      "name": "team#98"
+    },
+    {
+      "id": 99,
+      "name": "team#99"
+    },
+    {
+      "id": 100,
+      "name": "team#100"
+    },
+    {
+      "id": 101,
+      "name": "team#101"
+    },
+    {
+      "id": 102,
+      "name": "team#102"
+    },
+    {
+      "id": 103,
+      "name": "team#103"
+    },
+    {
+      "id": 104,
+      "name": "team#104"
+    },
+    {
+      "id": 105,
+      "name": "team#105"
+    },
+    {
+      "id": 106,
+      "name": "team#106"
+    },
+    {
+      "id": 107,
+      "name": "team#107"
+    },
+    {
+      "id": 108,
+      "name": "team#108"
+    },
+    {
+      "id": 109,
+      "name": "team#109"
+    },
+    {
+      "id": 110,
+      "name": "team#110"
+    },
+    {
+      "id": 111,
+      "name": "team#111"
+    },
+    {
+      "id": 112,
+      "name": "team#112"
+    },
+    {
+      "id": 113,
+      "name": "team#113"
+    },
+    {
+      "id": 114,
+      "name": "team#114"
+    },
+    {
+      "id": 115,
+      "name": "team#115"
+    },
+    {
+      "id": 116,
+      "name": "team#116"
+    },
+    {
+      "id": 117,
+      "name": "team#117"
+    },
+    {
+      "id": 118,
+      "name": "team#118"
+    },
+    {
+      "id": 119,
+      "name": "team#119"
+    },
+    {
+      "id": 120,
+      "name": "team#120"
+    },
+    {
+      "id": 121,
+      "name": "team#121"
+    },
+    {
+      "id": 122,
+      "name": "team#122"
+    },
+    {
+      "id": 123,
+      "name": "team#123"
+    },
+    {
+      "id": 124,
+      "name": "team#124"
+    },
+    {
+      "id": 125,
+      "name": "team#125"
+    },
+    {
+      "id": 126,
+      "name": "team#126"
+    },
+    {
+      "id": 127,
+      "name": "team#127"
+    },
+    {
+      "id": 128,
+      "name": "team#128"
+    },
+    {
+      "id": 129,
+      "name": "team#129"
+    },
+    {
+      "id": 130,
+      "name": "team#130"
+    },
+    {
+      "id": 131,
+      "name": "team#131"
+    },
+    {
+      "id": 132,
+      "name": "team#132"
+    },
+    {
+      "id": 133,
+      "name": "team#133"
+    },
+    {
+      "id": 134,
+      "name": "team#134"
+    },
+    {
+      "id": 135,
+      "name": "team#135"
+    },
+    {
+      "id": 136,
+      "name": "team#136"
+    },
+    {
+      "id": 137,
+      "name": "team#137"
+    },
+    {
+      "id": 138,
+      "name": "team#138"
+    },
+    {
+      "id": 139,
+      "name": "team#139"
+    },
+    {
+      "id": 140,
+      "name": "team#140"
+    },
+    {
+      "id": 141,
+      "name": "team#141"
+    },
+    {
+      "id": 142,
+      "name": "team#142"
+    },
+    {
+      "id": 143,
+      "name": "team#143"
+    },
+    {
+      "id": 144,
+      "name": "team#144"
+    },
+    {
+      "id": 145,
+      "name": "team#145"
+    },
+    {
+      "id": 146,
+      "name": "team#146"
+    },
+    {
+      "id": 147,
+      "name": "team#147"
+    },
+    {
+      "id": 148,
+      "name": "team#148"
+    },
+    {
+      "id": 149,
+      "name": "team#149"
+    },
+    {
+      "id": 150,
+      "name": "team#150"
+    },
+    {
+      "id": 151,
+      "name": "team#151"
+    },
+    {
+      "id": 152,
+      "name": "team#152"
+    },
+    {
+      "id": 153,
+      "name": "team#153"
+    },
+    {
+      "id": 154,
+      "name": "team#154"
+    },
+    {
+      "id": 155,
+      "name": "team#155"
+    },
+    {
+      "id": 156,
+      "name": "team#156"
+    },
+    {
+      "id": 157,
+      "name": "team#157"
+    },
+    {
+      "id": 158,
+      "name": "team#158"
+    },
+    {
+      "id": 159,
+      "name": "team#159"
+    },
+    {
+      "id": 160,
+      "name": "team#160"
+    },
+    {
+      "id": 161,
+      "name": "team#161"
+    },
+    {
+      "id": 162,
+      "name": "team#162"
+    },
+    {
+      "id": 163,
+      "name": "team#163"
+    },
+    {
+      "id": 164,
+      "name": "team#164"
+    },
+    {
+      "id": 165,
+      "name": "team#165"
+    },
+    {
+      "id": 166,
+      "name": "team#166"
+    },
+    {
+      "id": 167,
+      "name": "team#167"
+    },
+    {
+      "id": 168,
+      "name": "team#168"
+    },
+    {
+      "id": 169,
+      "name": "team#169"
+    },
+    {
+      "id": 170,
+      "name": "team#170"
+    },
+    {
+      "id": 171,
+      "name": "team#171"
+    },
+    {
+      "id": 172,
+      "name": "team#172"
+    },
+    {
+      "id": 173,
+      "name": "team#173"
+    },
+    {
+      "id": 174,
+      "name": "team#174"
+    },
+    {
+      "id": 175,
+      "name": "team#175"
+    },
+    {
+      "id": 176,
+      "name": "team#176"
+    },
+    {
+      "id": 177,
+      "name": "team#177"
+    },
+    {
+      "id": 178,
+      "name": "team#178"
+    },
+    {
+      "id": 179,
+      "name": "team#179"
+    },
+    {
+      "id": 180,
+      "name": "team#180"
+    },
+    {
+      "id": 181,
+      "name": "team#181"
+    },
+    {
+      "id": 182,
+      "name": "team#182"
+    },
+    {
+      "id": 183,
+      "name": "team#183"
+    },
+    {
+      "id": 184,
+      "name": "team#184"
+    },
+    {
+      "id": 185,
+      "name": "team#185"
+    },
+    {
+      "id": 186,
+      "name": "team#186"
+    },
+    {
+      "id": 187,
+      "name": "team#187"
+    },
+    {
+      "id": 188,
+      "name": "team#188"
+    },
+    {
+      "id": 189,
+      "name": "team#189"
+    },
+    {
+      "id": 190,
+      "name": "team#190"
+    },
+    {
+      "id": 191,
+      "name": "team#191"
+    },
+    {
+      "id": 192,
+      "name": "team#192"
+    },
+    {
+      "id": 193,
+      "name": "team#193"
+    },
+    {
+      "id": 194,
+      "name": "team#194"
+    },
+    {
+      "id": 195,
+      "name": "team#195"
+    },
+    {
+      "id": 196,
+      "name": "team#196"
+    },
+    {
+      "id": 197,
+      "name": "team#197"
+    },
+    {
+      "id": 198,
+      "name": "team#198"
+    },
+    {
+      "id": 199,
+      "name": "team#199"
+    },
+    {
+      "id": 200,
+      "name": "team#200"
+    },
+    {
+      "id": 201,
+      "name": "team#201"
+    },
+    {
+      "id": 202,
+      "name": "team#202"
+    },
+    {
+      "id": 203,
+      "name": "team#203"
+    },
+    {
+      "id": 204,
+      "name": "team#204"
+    },
+    {
+      "id": 205,
+      "name": "team#205"
+    },
+    {
+      "id": 206,
+      "name": "team#206"
+    },
+    {
+      "id": 207,
+      "name": "team#207"
+    },
+    {
+      "id": 208,
+      "name": "team#208"
+    },
+    {
+      "id": 209,
+      "name": "team#209"
+    },
+    {
+      "id": 210,
+      "name": "team#210"
+    },
+    {
+      "id": 211,
+      "name": "team#211"
+    },
+    {
+      "id": 212,
+      "name": "team#212"
+    },
+    {
+      "id": 213,
+      "name": "team#213"
+    },
+    {
+      "id": 214,
+      "name": "team#214"
+    },
+    {
+      "id": 215,
+      "name": "team#215"
+    },
+    {
+      "id": 216,
+      "name": "team#216"
+    },
+    {
+      "id": 217,
+      "name": "team#217"
+    },
+    {
+      "id": 218,
+      "name": "team#218"
+    },
+    {
+      "id": 219,
+      "name": "team#219"
+    },
+    {
+      "id": 220,
+      "name": "team#220"
+    },
+    {
+      "id": 221,
+      "name": "team#221"
+    },
+    {
+      "id": 222,
+      "name": "team#222"
+    },
+    {
+      "id": 223,
+      "name": "team#223"
+    },
+    {
+      "id": 224,
+      "name": "team#224"
+    },
+    {
+      "id": 225,
+      "name": "team#225"
+    },
+    {
+      "id": 226,
+      "name": "team#226"
+    },
+    {
+      "id": 227,
+      "name": "team#227"
+    },
+    {
+      "id": 228,
+      "name": "team#228"
+    },
+    {
+      "id": 229,
+      "name": "team#229"
+    },
+    {
+      "id": 230,
+      "name": "team#230"
+    },
+    {
+      "id": 231,
+      "name": "team#231"
+    },
+    {
+      "id": 232,
+      "name": "team#232"
+    },
+    {
+      "id": 233,
+      "name": "team#233"
+    },
+    {
+      "id": 234,
+      "name": "team#234"
+    },
+    {
+      "id": 235,
+      "name": "team#235"
+    },
+    {
+      "id": 236,
+      "name": "team#236"
+    },
+    {
+      "id": 237,
+      "name": "team#237"
+    },
+    {
+      "id": 238,
+      "name": "team#238"
+    },
+    {
+      "id": 239,
+      "name": "team#239"
+    },
+    {
+      "id": 240,
+      "name": "team#240"
+    },
+    {
+      "id": 241,
+      "name": "team#241"
+    },
+    {
+      "id": 242,
+      "name": "team#242"
+    },
+    {
+      "id": 243,
+      "name": "team#243"
+    },
+    {
+      "id": 244,
+      "name": "team#244"
+    },
+    {
+      "id": 245,
+      "name": "team#245"
+    },
+    {
+      "id": 246,
+      "name": "team#246"
+    },
+    {
+      "id": 247,
+      "name": "team#247"
+    },
+    {
+      "id": 248,
+      "name": "team#248"
+    },
+    {
+      "id": 249,
+      "name": "team#249"
+    },
+    {
+      "id": 250,
+      "name": "team#250"
+    },
+    {
+      "id": 251,
+      "name": "team#251"
+    },
+    {
+      "id": 252,
+      "name": "team#252"
+    },
+    {
+      "id": 253,
+      "name": "team#253"
+    },
+    {
+      "id": 254,
+      "name": "team#254"
+    },
+    {
+      "id": 255,
+      "name": "team#255"
+    }
+  ],
+  "unit_commands": [
+    {
+      "id": 0,
+      "name": "move"
+    },
+    {
+      "id": 1,
+      "name": "repair"
+    },
+    {
+      "id": 2,
+      "name": "rebuild"
+    },
+    {
+      "id": 3,
+      "name": "assist"
+    },
+    {
+      "id": 4,
+      "name": "mine"
+    },
+    {
+      "id": 5,
+      "name": "enterpayload"
+    },
+    {
+      "id": 6,
+      "name": "loadunits"
+    },
+    {
+      "id": 7,
+      "name": "loadblocks"
+    },
+    {
+      "id": 8,
+      "name": "unloadpayload"
+    },
+    {
+      "id": 9,
+      "name": "looppayload"
+    }
+  ],
+  "unit_stances": [
+    {
+      "id": 0,
+      "name": "stop"
+    },
+    {
+      "id": 1,
+      "name": "holdfire"
+    },
+    {
+      "id": 2,
+      "name": "pursuetarget"
+    },
+    {
+      "id": 3,
+      "name": "patrol"
+    },
+    {
+      "id": 4,
+      "name": "ram"
+    },
+    {
+      "id": 5,
+      "name": "boost"
+    },
+    {
+      "id": 6,
+      "name": "holdposition"
+    },
+    {
+      "id": 7,
+      "name": "mineauto"
+    },
+    {
+      "id": 8,
+      "name": "item-copper"
+    },
+    {
+      "id": 9,
+      "name": "item-lead"
+    },
+    {
+      "id": 10,
+      "name": "item-metaglass"
+    },
+    {
+      "id": 11,
+      "name": "item-graphite"
+    },
+    {
+      "id": 12,
+      "name": "item-sand"
+    },
+    {
+      "id": 13,
+      "name": "item-coal"
+    },
+    {
+      "id": 14,
+      "name": "item-titanium"
+    },
+    {
+      "id": 15,
+      "name": "item-thorium"
+    },
+    {
+      "id": 16,
+      "name": "item-scrap"
+    },
+    {
+      "id": 17,
+      "name": "item-silicon"
+    },
+    {
+      "id": 18,
+      "name": "item-plastanium"
+    },
+    {
+      "id": 19,
+      "name": "item-phase-fabric"
+    },
+    {
+      "id": 20,
+      "name": "item-surge-alloy"
+    },
+    {
+      "id": 21,
+      "name": "item-spore-pod"
+    },
+    {
+      "id": 22,
+      "name": "item-blast-compound"
+    },
+    {
+      "id": 23,
+      "name": "item-pyratite"
+    },
+    {
+      "id": 24,
+      "name": "item-beryllium"
+    },
+    {
+      "id": 25,
+      "name": "item-tungsten"
+    },
+    {
+      "id": 26,
+      "name": "item-oxide"
+    },
+    {
+      "id": 27,
+      "name": "item-carbide"
+    },
+    {
+      "id": 28,
+      "name": "item-fissile-matter"
+    },
+    {
+      "id": 29,
+      "name": "item-dormant-cyst"
+    }
+  ],
+  "logic_blocks": [
+    {
+      "id": 0,
+      "name": "graphite-press"
+    },
+    {
+      "id": 1,
+      "name": "multi-press"
+    },
+    {
+      "id": 2,
+      "name": "silicon-smelter"
+    },
+    {
+      "id": 3,
+      "name": "silicon-crucible"
+    },
+    {
+      "id": 4,
+      "name": "kiln"
+    },
+    {
+      "id": 5,
+      "name": "plastanium-compressor"
+    },
+    {
+      "id": 6,
+      "name": "phase-weaver"
+    },
+    {
+      "id": 7,
+      "name": "cryofluid-mixer"
+    },
+    {
+      "id": 8,
+      "name": "pyratite-mixer"
+    },
+    {
+      "id": 9,
+      "name": "blast-mixer"
+    },
+    {
+      "id": 10,
+      "name": "melter"
+    },
+    {
+      "id": 11,
+      "name": "separator"
+    },
+    {
+      "id": 12,
+      "name": "disassembler"
+    },
+    {
+      "id": 13,
+      "name": "spore-press"
+    },
+    {
+      "id": 14,
+      "name": "pulverizer"
+    },
+    {
+      "id": 15,
+      "name": "coal-centrifuge"
+    },
+    {
+      "id": 16,
+      "name": "incinerator"
+    },
+    {
+      "id": 17,
+      "name": "copper-wall"
+    },
+    {
+      "id": 18,
+      "name": "copper-wall-large"
+    },
+    {
+      "id": 19,
+      "name": "titanium-wall"
+    },
+    {
+      "id": 20,
+      "name": "titanium-wall-large"
+    },
+    {
+      "id": 21,
+      "name": "plastanium-wall"
+    },
+    {
+      "id": 22,
+      "name": "plastanium-wall-large"
+    },
+    {
+      "id": 23,
+      "name": "thorium-wall"
+    },
+    {
+      "id": 24,
+      "name": "thorium-wall-large"
+    },
+    {
+      "id": 25,
+      "name": "phase-wall"
+    },
+    {
+      "id": 26,
+      "name": "phase-wall-large"
+    },
+    {
+      "id": 27,
+      "name": "surge-wall"
+    },
+    {
+      "id": 28,
+      "name": "surge-wall-large"
+    },
+    {
+      "id": 29,
+      "name": "door"
+    },
+    {
+      "id": 30,
+      "name": "door-large"
+    },
+    {
+      "id": 31,
+      "name": "scrap-wall"
+    },
+    {
+      "id": 32,
+      "name": "scrap-wall-large"
+    },
+    {
+      "id": 33,
+      "name": "scrap-wall-huge"
+    },
+    {
+      "id": 34,
+      "name": "scrap-wall-gigantic"
+    },
+    {
+      "id": 35,
+      "name": "mender"
+    },
+    {
+      "id": 36,
+      "name": "mend-projector"
+    },
+    {
+      "id": 37,
+      "name": "overdrive-projector"
+    },
+    {
+      "id": 38,
+      "name": "overdrive-dome"
+    },
+    {
+      "id": 39,
+      "name": "force-projector"
+    },
+    {
+      "id": 40,
+      "name": "shock-mine"
+    },
+    {
+      "id": 41,
+      "name": "conveyor"
+    },
+    {
+      "id": 42,
+      "name": "titanium-conveyor"
+    },
+    {
+      "id": 43,
+      "name": "plastanium-conveyor"
+    },
+    {
+      "id": 44,
+      "name": "armored-conveyor"
+    },
+    {
+      "id": 45,
+      "name": "junction"
+    },
+    {
+      "id": 46,
+      "name": "bridge-conveyor"
+    },
+    {
+      "id": 47,
+      "name": "phase-conveyor"
+    },
+    {
+      "id": 48,
+      "name": "sorter"
+    },
+    {
+      "id": 49,
+      "name": "inverted-sorter"
+    },
+    {
+      "id": 50,
+      "name": "router"
+    },
+    {
+      "id": 51,
+      "name": "distributor"
+    },
+    {
+      "id": 52,
+      "name": "overflow-gate"
+    },
+    {
+      "id": 53,
+      "name": "underflow-gate"
+    },
+    {
+      "id": 54,
+      "name": "mass-driver"
+    },
+    {
+      "id": 55,
+      "name": "duct"
+    },
+    {
+      "id": 56,
+      "name": "duct-router"
+    },
+    {
+      "id": 57,
+      "name": "duct-bridge"
+    },
+    {
+      "id": 58,
+      "name": "mechanical-pump"
+    },
+    {
+      "id": 59,
+      "name": "rotary-pump"
+    },
+    {
+      "id": 60,
+      "name": "conduit"
+    },
+    {
+      "id": 61,
+      "name": "pulse-conduit"
+    },
+    {
+      "id": 62,
+      "name": "plated-conduit"
+    },
+    {
+      "id": 63,
+      "name": "liquid-router"
+    },
+    {
+      "id": 64,
+      "name": "liquid-tank"
+    },
+    {
+      "id": 65,
+      "name": "liquid-junction"
+    },
+    {
+      "id": 66,
+      "name": "bridge-conduit"
+    },
+    {
+      "id": 67,
+      "name": "phase-conduit"
+    },
+    {
+      "id": 68,
+      "name": "power-node"
+    },
+    {
+      "id": 69,
+      "name": "power-node-large"
+    },
+    {
+      "id": 70,
+      "name": "surge-tower"
+    },
+    {
+      "id": 71,
+      "name": "diode"
+    },
+    {
+      "id": 72,
+      "name": "battery"
+    },
+    {
+      "id": 73,
+      "name": "battery-large"
+    },
+    {
+      "id": 74,
+      "name": "combustion-generator"
+    },
+    {
+      "id": 75,
+      "name": "thermal-generator"
+    },
+    {
+      "id": 76,
+      "name": "steam-generator"
+    },
+    {
+      "id": 77,
+      "name": "differential-generator"
+    },
+    {
+      "id": 78,
+      "name": "rtg-generator"
+    },
+    {
+      "id": 79,
+      "name": "solar-panel"
+    },
+    {
+      "id": 80,
+      "name": "solar-panel-large"
+    },
+    {
+      "id": 81,
+      "name": "thorium-reactor"
+    },
+    {
+      "id": 82,
+      "name": "impact-reactor"
+    },
+    {
+      "id": 83,
+      "name": "mechanical-drill"
+    },
+    {
+      "id": 84,
+      "name": "pneumatic-drill"
+    },
+    {
+      "id": 85,
+      "name": "laser-drill"
+    },
+    {
+      "id": 86,
+      "name": "blast-drill"
+    },
+    {
+      "id": 87,
+      "name": "water-extractor"
+    },
+    {
+      "id": 88,
+      "name": "cultivator"
+    },
+    {
+      "id": 89,
+      "name": "oil-extractor"
+    },
+    {
+      "id": 90,
+      "name": "core-shard"
+    },
+    {
+      "id": 91,
+      "name": "core-foundation"
+    },
+    {
+      "id": 92,
+      "name": "core-nucleus"
+    },
+    {
+      "id": 93,
+      "name": "vault"
+    },
+    {
+      "id": 94,
+      "name": "container"
+    },
+    {
+      "id": 95,
+      "name": "unloader"
+    },
+    {
+      "id": 96,
+      "name": "duo"
+    },
+    {
+      "id": 97,
+      "name": "scatter"
+    },
+    {
+      "id": 98,
+      "name": "scorch"
+    },
+    {
+      "id": 99,
+      "name": "hail"
+    },
+    {
+      "id": 100,
+      "name": "wave"
+    },
+    {
+      "id": 101,
+      "name": "lancer"
+    },
+    {
+      "id": 102,
+      "name": "arc"
+    },
+    {
+      "id": 103,
+      "name": "parallax"
+    },
+    {
+      "id": 104,
+      "name": "swarmer"
+    },
+    {
+      "id": 105,
+      "name": "salvo"
+    },
+    {
+      "id": 106,
+      "name": "segment"
+    },
+    {
+      "id": 107,
+      "name": "tsunami"
+    },
+    {
+      "id": 108,
+      "name": "fuse"
+    },
+    {
+      "id": 109,
+      "name": "ripple"
+    },
+    {
+      "id": 110,
+      "name": "cyclone"
+    },
+    {
+      "id": 111,
+      "name": "foreshadow"
+    },
+    {
+      "id": 112,
+      "name": "spectre"
+    },
+    {
+      "id": 113,
+      "name": "meltdown"
+    },
+    {
+      "id": 114,
+      "name": "command-center"
+    },
+    {
+      "id": 115,
+      "name": "ground-factory"
+    },
+    {
+      "id": 116,
+      "name": "air-factory"
+    },
+    {
+      "id": 117,
+      "name": "naval-factory"
+    },
+    {
+      "id": 118,
+      "name": "additive-reconstructor"
+    },
+    {
+      "id": 119,
+      "name": "multiplicative-reconstructor"
+    },
+    {
+      "id": 120,
+      "name": "exponential-reconstructor"
+    },
+    {
+      "id": 121,
+      "name": "tetrative-reconstructor"
+    },
+    {
+      "id": 122,
+      "name": "repair-point"
+    },
+    {
+      "id": 123,
+      "name": "repair-turret"
+    },
+    {
+      "id": 124,
+      "name": "payload-conveyor"
+    },
+    {
+      "id": 125,
+      "name": "payload-router"
+    },
+    {
+      "id": 126,
+      "name": "power-source"
+    },
+    {
+      "id": 127,
+      "name": "power-void"
+    },
+    {
+      "id": 128,
+      "name": "item-source"
+    },
+    {
+      "id": 129,
+      "name": "item-void"
+    },
+    {
+      "id": 130,
+      "name": "liquid-source"
+    },
+    {
+      "id": 131,
+      "name": "liquid-void"
+    },
+    {
+      "id": 132,
+      "name": "payload-void"
+    },
+    {
+      "id": 133,
+      "name": "payload-source"
+    },
+    {
+      "id": 134,
+      "name": "illuminator"
+    },
+    {
+      "id": 135,
+      "name": "launch-pad"
+    },
+    {
+      "id": 136,
+      "name": "interplanetary-accelerator"
+    },
+    {
+      "id": 137,
+      "name": "message"
+    },
+    {
+      "id": 138,
+      "name": "switch"
+    },
+    {
+      "id": 139,
+      "name": "micro-processor"
+    },
+    {
+      "id": 140,
+      "name": "logic-processor"
+    },
+    {
+      "id": 141,
+      "name": "hyper-processor"
+    },
+    {
+      "id": 142,
+      "name": "memory-cell"
+    },
+    {
+      "id": 143,
+      "name": "memory-bank"
+    },
+    {
+      "id": 144,
+      "name": "logic-display"
+    },
+    {
+      "id": 145,
+      "name": "large-logic-display"
+    },
+    {
+      "id": 146,
+      "name": "liquid-container"
+    },
+    {
+      "id": 147,
+      "name": "deconstructor"
+    },
+    {
+      "id": 148,
+      "name": "constructor"
+    },
+    {
+      "id": 149,
+      "name": "thruster"
+    },
+    {
+      "id": 150,
+      "name": "large-constructor"
+    },
+    {
+      "id": 151,
+      "name": "payload-loader"
+    },
+    {
+      "id": 152,
+      "name": "payload-unloader"
+    },
+    {
+      "id": 153,
+      "name": "silicon-arc-furnace"
+    },
+    {
+      "id": 154,
+      "name": "cliff-crusher"
+    },
+    {
+      "id": 155,
+      "name": "plasma-bore"
+    },
+    {
+      "id": 156,
+      "name": "reinforced-liquid-junction"
+    },
+    {
+      "id": 157,
+      "name": "breach"
+    },
+    {
+      "id": 158,
+      "name": "core-bastion"
+    },
+    {
+      "id": 159,
+      "name": "turbine-condenser"
+    },
+    {
+      "id": 160,
+      "name": "beam-node"
+    },
+    {
+      "id": 161,
+      "name": "beam-tower"
+    },
+    {
+      "id": 162,
+      "name": "build-tower"
+    },
+    {
+      "id": 163,
+      "name": "impact-drill"
+    },
+    {
+      "id": 164,
+      "name": "carbide-crucible"
+    },
+    {
+      "id": 165,
+      "name": "surge-conveyor"
+    },
+    {
+      "id": 166,
+      "name": "duct-unloader"
+    },
+    {
+      "id": 167,
+      "name": "surge-router"
+    },
+    {
+      "id": 168,
+      "name": "reinforced-conduit"
+    },
+    {
+      "id": 169,
+      "name": "reinforced-liquid-router"
+    },
+    {
+      "id": 170,
+      "name": "reinforced-liquid-container"
+    },
+    {
+      "id": 171,
+      "name": "reinforced-liquid-tank"
+    },
+    {
+      "id": 172,
+      "name": "reinforced-bridge-conduit"
+    },
+    {
+      "id": 173,
+      "name": "core-citadel"
+    },
+    {
+      "id": 174,
+      "name": "core-acropolis"
+    },
+    {
+      "id": 175,
+      "name": "heat-reactor"
+    },
+    {
+      "id": 176,
+      "name": "impulse-pump"
+    },
+    {
+      "id": 177,
+      "name": "reinforced-pump"
+    },
+    {
+      "id": 178,
+      "name": "electrolyzer"
+    },
+    {
+      "id": 179,
+      "name": "oxidation-chamber"
+    },
+    {
+      "id": 180,
+      "name": "surge-smelter"
+    },
+    {
+      "id": 181,
+      "name": "surge-crucible"
+    },
+    {
+      "id": 182,
+      "name": "overflow-duct"
+    },
+    {
+      "id": 183,
+      "name": "large-plasma-bore"
+    },
+    {
+      "id": 184,
+      "name": "cyanogen-synthesizer"
+    },
+    {
+      "id": 185,
+      "name": "slag-centrifuge"
+    },
+    {
+      "id": 186,
+      "name": "electric-heater"
+    },
+    {
+      "id": 187,
+      "name": "slag-incinerator"
+    },
+    {
+      "id": 188,
+      "name": "phase-synthesizer"
+    },
+    {
+      "id": 189,
+      "name": "sublimate"
+    },
+    {
+      "id": 190,
+      "name": "reinforced-container"
+    },
+    {
+      "id": 191,
+      "name": "reinforced-vault"
+    },
+    {
+      "id": 192,
+      "name": "atmospheric-concentrator"
+    },
+    {
+      "id": 193,
+      "name": "unit-cargo-loader"
+    },
+    {
+      "id": 194,
+      "name": "unit-cargo-unload-point"
+    },
+    {
+      "id": 195,
+      "name": "chemical-combustion-chamber"
+    },
+    {
+      "id": 196,
+      "name": "pyrolysis-generator"
+    },
+    {
+      "id": 197,
+      "name": "regen-projector"
+    },
+    {
+      "id": 198,
+      "name": "titan"
+    },
+    {
+      "id": 199,
+      "name": "small-deconstructor"
+    },
+    {
+      "id": 200,
+      "name": "vent-condenser"
+    },
+    {
+      "id": 201,
+      "name": "phase-heater"
+    },
+    {
+      "id": 202,
+      "name": "heat-redirector"
+    },
+    {
+      "id": 203,
+      "name": "tungsten-wall"
+    },
+    {
+      "id": 204,
+      "name": "tungsten-wall-large"
+    },
+    {
+      "id": 205,
+      "name": "tank-assembler"
+    },
+    {
+      "id": 206,
+      "name": "beryllium-wall"
+    },
+    {
+      "id": 207,
+      "name": "beryllium-wall-large"
+    },
+    {
+      "id": 208,
+      "name": "eruption-drill"
+    },
+    {
+      "id": 209,
+      "name": "ship-assembler"
+    },
+    {
+      "id": 210,
+      "name": "mech-assembler"
+    },
+    {
+      "id": 211,
+      "name": "shield-projector"
+    },
+    {
+      "id": 212,
+      "name": "beam-link"
+    },
+    {
+      "id": 213,
+      "name": "world-processor"
+    },
+    {
+      "id": 214,
+      "name": "reinforced-payload-conveyor"
+    },
+    {
+      "id": 215,
+      "name": "reinforced-payload-router"
+    },
+    {
+      "id": 216,
+      "name": "disperse"
+    },
+    {
+      "id": 217,
+      "name": "large-shield-projector"
+    },
+    {
+      "id": 218,
+      "name": "payload-mass-driver"
+    },
+    {
+      "id": 219,
+      "name": "world-cell"
+    },
+    {
+      "id": 220,
+      "name": "carbide-wall"
+    },
+    {
+      "id": 221,
+      "name": "carbide-wall-large"
+    },
+    {
+      "id": 222,
+      "name": "tank-fabricator"
+    },
+    {
+      "id": 223,
+      "name": "mech-fabricator"
+    },
+    {
+      "id": 224,
+      "name": "ship-fabricator"
+    },
+    {
+      "id": 225,
+      "name": "reinforced-surge-wall"
+    },
+    {
+      "id": 226,
+      "name": "radar"
+    },
+    {
+      "id": 227,
+      "name": "blast-door"
+    },
+    {
+      "id": 228,
+      "name": "canvas"
+    },
+    {
+      "id": 229,
+      "name": "armored-duct"
+    },
+    {
+      "id": 230,
+      "name": "unit-repair-tower"
+    },
+    {
+      "id": 231,
+      "name": "diffuse"
+    },
+    {
+      "id": 232,
+      "name": "prime-refabricator"
+    },
+    {
+      "id": 233,
+      "name": "basic-assembler-module"
+    },
+    {
+      "id": 234,
+      "name": "reinforced-surge-wall-large"
+    },
+    {
+      "id": 235,
+      "name": "tank-refabricator"
+    },
+    {
+      "id": 236,
+      "name": "mech-refabricator"
+    },
+    {
+      "id": 237,
+      "name": "ship-refabricator"
+    },
+    {
+      "id": 238,
+      "name": "slag-heater"
+    },
+    {
+      "id": 239,
+      "name": "afflict"
+    },
+    {
+      "id": 240,
+      "name": "shielded-wall"
+    },
+    {
+      "id": 241,
+      "name": "lustre"
+    },
+    {
+      "id": 242,
+      "name": "scathe"
+    },
+    {
+      "id": 243,
+      "name": "smite"
+    },
+    {
+      "id": 244,
+      "name": "underflow-duct"
+    },
+    {
+      "id": 245,
+      "name": "malign"
+    },
+    {
+      "id": 246,
+      "name": "shockwave-tower"
+    },
+    {
+      "id": 247,
+      "name": "heat-source"
+    },
+    {
+      "id": 248,
+      "name": "flux-reactor"
+    },
+    {
+      "id": 249,
+      "name": "neoplasia-reactor"
+    },
+    {
+      "id": 250,
+      "name": "heat-router"
+    },
+    {
+      "id": 251,
+      "name": "large-payload-mass-driver"
+    },
+    {
+      "id": 252,
+      "name": "reinforced-message"
+    },
+    {
+      "id": 253,
+      "name": "world-message"
+    },
+    {
+      "id": 254,
+      "name": "world-switch"
+    },
+    {
+      "id": 255,
+      "name": "small-heat-redirector"
+    },
+    {
+      "id": 256,
+      "name": "large-cliff-crusher"
+    },
+    {
+      "id": 257,
+      "name": "advanced-launch-pad"
+    },
+    {
+      "id": 258,
+      "name": "landing-pad"
+    },
+    {
+      "id": 259,
+      "name": "tile-logic-display"
+    },
+    {
+      "id": 260,
+      "name": "large-canvas"
+    }
+  ],
+  "logic_units": [
+    {
+      "id": 0,
+      "name": "dagger"
+    },
+    {
+      "id": 1,
+      "name": "mace"
+    },
+    {
+      "id": 2,
+      "name": "fortress"
+    },
+    {
+      "id": 3,
+      "name": "scepter"
+    },
+    {
+      "id": 4,
+      "name": "reign"
+    },
+    {
+      "id": 5,
+      "name": "nova"
+    },
+    {
+      "id": 6,
+      "name": "pulsar"
+    },
+    {
+      "id": 7,
+      "name": "quasar"
+    },
+    {
+      "id": 8,
+      "name": "vela"
+    },
+    {
+      "id": 9,
+      "name": "corvus"
+    },
+    {
+      "id": 10,
+      "name": "crawler"
+    },
+    {
+      "id": 11,
+      "name": "atrax"
+    },
+    {
+      "id": 12,
+      "name": "spiroct"
+    },
+    {
+      "id": 13,
+      "name": "arkyid"
+    },
+    {
+      "id": 14,
+      "name": "toxopid"
+    },
+    {
+      "id": 15,
+      "name": "flare"
+    },
+    {
+      "id": 16,
+      "name": "horizon"
+    },
+    {
+      "id": 17,
+      "name": "zenith"
+    },
+    {
+      "id": 18,
+      "name": "antumbra"
+    },
+    {
+      "id": 19,
+      "name": "eclipse"
+    },
+    {
+      "id": 20,
+      "name": "mono"
+    },
+    {
+      "id": 21,
+      "name": "poly"
+    },
+    {
+      "id": 22,
+      "name": "mega"
+    },
+    {
+      "id": 23,
+      "name": "quad"
+    },
+    {
+      "id": 24,
+      "name": "oct"
+    },
+    {
+      "id": 25,
+      "name": "risso"
+    },
+    {
+      "id": 26,
+      "name": "minke"
+    },
+    {
+      "id": 27,
+      "name": "bryde"
+    },
+    {
+      "id": 28,
+      "name": "sei"
+    },
+    {
+      "id": 29,
+      "name": "omura"
+    },
+    {
+      "id": 30,
+      "name": "retusa"
+    },
+    {
+      "id": 31,
+      "name": "oxynoe"
+    },
+    {
+      "id": 32,
+      "name": "cyerce"
+    },
+    {
+      "id": 33,
+      "name": "aegires"
+    },
+    {
+      "id": 34,
+      "name": "navanax"
+    },
+    {
+      "id": 35,
+      "name": "alpha"
+    },
+    {
+      "id": 36,
+      "name": "beta"
+    },
+    {
+      "id": 37,
+      "name": "gamma"
+    },
+    {
+      "id": 38,
+      "name": "stell"
+    },
+    {
+      "id": 39,
+      "name": "locus"
+    },
+    {
+      "id": 40,
+      "name": "precept"
+    },
+    {
+      "id": 41,
+      "name": "vanquish"
+    },
+    {
+      "id": 42,
+      "name": "conquer"
+    },
+    {
+      "id": 43,
+      "name": "merui"
+    },
+    {
+      "id": 44,
+      "name": "cleroi"
+    },
+    {
+      "id": 45,
+      "name": "anthicus"
+    },
+    {
+      "id": 46,
+      "name": "tecta"
+    },
+    {
+      "id": 47,
+      "name": "collaris"
+    },
+    {
+      "id": 48,
+      "name": "elude"
+    },
+    {
+      "id": 49,
+      "name": "avert"
+    },
+    {
+      "id": 50,
+      "name": "obviate"
+    },
+    {
+      "id": 51,
+      "name": "quell"
+    },
+    {
+      "id": 52,
+      "name": "disrupt"
+    },
+    {
+      "id": 53,
+      "name": "evoke"
+    },
+    {
+      "id": 54,
+      "name": "incite"
+    },
+    {
+      "id": 55,
+      "name": "emanate"
+    }
+  ],
+  "logic_items": [
+    {
+      "id": 0,
+      "name": "copper"
+    },
+    {
+      "id": 1,
+      "name": "lead"
+    },
+    {
+      "id": 2,
+      "name": "metaglass"
+    },
+    {
+      "id": 3,
+      "name": "graphite"
+    },
+    {
+      "id": 4,
+      "name": "sand"
+    },
+    {
+      "id": 5,
+      "name": "coal"
+    },
+    {
+      "id": 6,
+      "name": "titanium"
+    },
+    {
+      "id": 7,
+      "name": "thorium"
+    },
+    {
+      "id": 8,
+      "name": "scrap"
+    },
+    {
+      "id": 9,
+      "name": "silicon"
+    },
+    {
+      "id": 10,
+      "name": "plastanium"
+    },
+    {
+      "id": 11,
+      "name": "phase-fabric"
+    },
+    {
+      "id": 12,
+      "name": "surge-alloy"
+    },
+    {
+      "id": 13,
+      "name": "spore-pod"
+    },
+    {
+      "id": 14,
+      "name": "blast-compound"
+    },
+    {
+      "id": 15,
+      "name": "pyratite"
+    },
+    {
+      "id": 16,
+      "name": "beryllium"
+    },
+    {
+      "id": 17,
+      "name": "tungsten"
+    },
+    {
+      "id": 18,
+      "name": "oxide"
+    },
+    {
+      "id": 19,
+      "name": "carbide"
+    }
+  ],
+  "logic_liquids": [
+    {
+      "id": 0,
+      "name": "water"
+    },
+    {
+      "id": 1,
+      "name": "slag"
+    },
+    {
+      "id": 2,
+      "name": "oil"
+    },
+    {
+      "id": 3,
+      "name": "cryofluid"
+    },
+    {
+      "id": 4,
+      "name": "neoplasm"
+    },
+    {
+      "id": 5,
+      "name": "hydrogen"
+    },
+    {
+      "id": 6,
+      "name": "ozone"
+    },
+    {
+      "id": 7,
+      "name": "cyanogen"
+    },
+    {
+      "id": 8,
+      "name": "gallium"
+    },
+    {
+      "id": 9,
+      "name": "nitrogen"
+    },
+    {
+      "id": 10,
+      "name": "arkycite"
+    }
+  ]
+}

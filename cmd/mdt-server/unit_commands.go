@@ -659,7 +659,8 @@ func stepRepairCommand(wld *world.World, unitID int32, entity world.RawEntity, s
 		setUnitMineIdleAndRetreatIfNeeded(wld, entity)
 		return
 	}
-	if squaredWorldDistance(entity.X, entity.Y, target.X, target.Y) <= commandRepairRange*commandRepairRange {
+	rangeLimit := repairCommandMoveRange(entity)
+	if squaredWorldDistance(entity.X, entity.Y, target.X, target.Y) <= rangeLimit*rangeLimit {
 		setUnitCommandIdleIfNeeded(wld, entity)
 		return
 	}
@@ -721,6 +722,18 @@ func stepRebuildCommand(wld *world.World, unitID int32, entity world.RawEntity, 
 		}
 		setUnitMineIdleAndRetreatIfNeeded(wld, entity)
 		return
+	}
+
+	if leader, ok := wld.FindNearestAssistConstructBuilder(entity.Team, entity.ID, entity.X, entity.Y, builderCommandRange, unitCommandMoveSpeed(entity), commandAssistBuildRadius); ok {
+		if plan, planOK := primaryEntityBuildPlan(leader); planOK {
+			if hold && !ignoreRange && !builderPlanWithinRange(entity, plan, builderCommandRange) {
+				clearUnitBuilderCommandState(wld, unitID, entity.Team)
+				setUnitCommandIdleIfNeeded(wld, entity)
+				return
+			}
+			applyUnitCommandBuildPlan(wld, unitID, entity, plan, !hold)
+			return
+		}
 	}
 
 	var (
@@ -992,6 +1005,13 @@ func builderPlanWithinRange(entity world.RawEntity, op world.BuildPlanOp, buildR
 	targetX := float32(op.X*8 + 4)
 	targetY := float32(op.Y*8 + 4)
 	return squaredWorldDistance(entity.X, entity.Y, targetX, targetY) <= buildRange*buildRange
+}
+
+func repairCommandMoveRange(entity world.RawEntity) float32 {
+	if entity.AttackRange > 0 {
+		return maxFloat32(entity.AttackRange*0.65, 24)
+	}
+	return commandRepairRange
 }
 
 func defaultMineAutoItems() []world.ItemID {

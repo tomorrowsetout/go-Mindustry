@@ -1,0 +1,37 @@
+2026-04-24T10:04:27.1206769Z [NET] kind=tcp_accept packet= conn_id=1840513236 uuid= ip=127.0.0.1 name="" detail=
+2026-04-24T10:04:27.1328966Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=version=157 type=official mods=0 | checkpoint conn_uuid="57062" conn_uuid_ready=true identity_ready=true display_name_ready=true display_name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]"
+2026-04-24T10:04:27.240659Z [NET] kind=world_handshake_sent packet= conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=checkpoint conn_uuid="57062" conn_uuid_ready=true identity_ready=true display_name_ready=true display_name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]"
+2026-04-24T10:04:27.7631993Z [NET] kind=client_snapshot_ignored_pre_confirm packet=*protocol.Remote_NetServer_clientSnapshot_48 conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=waiting_for_connect_confirm
+2026-04-24T10:04:27.7643414Z [NET] kind=connect_confirm packet=*protocol.Remote_NetServer_connectConfirm_50 conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=checkpoint conn_uuid="57062" conn_uuid_ready=true identity_ready=true display_name_ready=true display_name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]"
+2026-04-24T18:04:28.1757635+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳" team=1 core=core-nucleus core_x=166 core_y=159 spawn_x=166 spawn_y=159
+2026-04-24T18:04:28.1763637+08:00 [RESPAWN] player="[#F285D1]月[#8982edff]子[#87ceebff]芳" team=1 unit=37 build_speed=1.00 spawn_x=166 spawn_y=159
+2026-04-24T18:04:47.7460989+08:00 [BUILD] action=deconstructing x=163 y=171 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:48.7459491+08:00 [BUILD] action=destroyed x=163 y=171 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:48.7546666+08:00 [BUILD] action=deconstructing x=166 y=175 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:49.7547159+08:00 [BUILD] action=destroyed x=166 y=175 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:49.7666079+08:00 [BUILD] action=deconstructing x=168 y=173 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:50.7577623+08:00 [BUILD] action=destroyed x=168 y=173 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:50.7712747+08:00 [BUILD] action=deconstructing x=168 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:50.8047809+08:00 [BUILD] action=destroyed x=168 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:50.8129185+08:00 [BUILD] action=deconstructing x=169 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:50.8463082+08:00 [BUILD] action=destroyed x=169 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:50.8544777+08:00 [BUILD] action=deconstructing x=169 y=182 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:51.8876861+08:00 [BUILD] action=destroyed x=169 y=182 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:51.8960739+08:00 [BUILD] action=deconstructing x=170 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:51.9307119+08:00 [BUILD] action=destroyed x=170 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:51.937847+08:00 [BUILD] action=deconstructing x=171 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:51.9711559+08:00 [BUILD] action=destroyed x=171 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:51.9799352+08:00 [BUILD] action=deconstructing x=172 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.0126093+08:00 [BUILD] action=destroyed x=172 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.0212029+08:00 [BUILD] action=deconstructing x=173 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.0544521+08:00 [BUILD] action=destroyed x=173 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.0630811+08:00 [BUILD] action=deconstructing x=174 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.0960506+08:00 [BUILD] action=destroyed x=174 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.1047645+08:00 [BUILD] action=deconstructing x=175 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.1380819+08:00 [BUILD] action=destroyed x=175 y=178 block_id=258 block=钛传送带 team=1
+2026-04-24T18:04:52.1485113+08:00 [BUILD] action=deconstructing x=176 y=173 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:53.1464171+08:00 [BUILD] action=destroyed x=176 y=173 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:53.1543436+08:00 [BUILD] action=deconstructing x=180 y=170 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:54.1547982+08:00 [BUILD] action=destroyed x=180 y=170 block_id=116 block=玄武岩石块 team=1
+2026-04-24T18:04:54.1629423+08:00 [BUILD] action=deconstructing x=182 y=173 block_id=116 block=玄武岩石块 team=1
+2026-04-24T10:04:54.5756957Z [NET] kind=tcp_closed packet= conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=EOF

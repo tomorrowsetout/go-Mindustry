@@ -1,0 +1,12 @@
+# 地图投票配置
+
+[map_vote]
+align = "top_left"
+bottom = 0
+duration_sec = 15
+home_link_url = "https://example.com/votemap"
+left = 0
+popup_duration_ms = 1800
+right = 0
+status_refresh_ms = 1500
+top = 220

@@ -312,9 +312,19 @@ func buildTestMSAV(t *testing.T, version int32) []byte {
 }
 
 func TestLoadWorldStreamAcceptsLegacyMSAVVersion(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "legacy.msav")
-	if err := os.WriteFile(path, buildTestMSAV(t, 5), 0o600); err != nil {
-		t.Fatalf("write legacy msav failed: %v", err)
+	path := testRepoPath(t, filepath.Join("assets", "worlds", "maps", "erekir", "ravine.msav"))
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("legacy ravine map not present in workspace")
+		}
+		t.Fatalf("stat legacy map failed: %v", err)
+	}
+	ver, err := worldstream.ReadMSAVVersion(path)
+	if err != nil {
+		t.Fatalf("read legacy msav version: %v", err)
+	}
+	if ver >= 11 {
+		t.Fatalf("expected a legacy save version (<11), got %d", ver)
 	}
 
 	payload, err := loadWorldStream(path, nil)
@@ -418,6 +428,20 @@ func TestBuildInitialWorldDataPayloadFallsBackToBaseWorldStreamWithoutWorld(t *t
 	if !bytes.Equal(payload, basePayload) {
 		t.Fatal("expected nil-world initial connect payload to use base cached worldstream")
 	}
+}
+
+func testRepoPath(t *testing.T, rel string) string {
+	t.Helper()
+	candidates := []string{
+		rel,
+		filepath.Join("..", "..", rel),
+	}
+	for _, candidate := range candidates {
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate
+		}
+	}
+	return rel
 }
 
 func TestBuilderSnapshotActiveTreatsQueuedPlansAsActive(t *testing.T) {
@@ -884,11 +908,12 @@ func TestSyncCurrentWorldToConnSendsBlockSnapshotsBeforeTileConfig(t *testing.T)
 	}
 	nodePos := placeSyncTestBuilding(t, model, 8, 10, 422, 1, 0)
 	_ = placeSyncTestBuilding(t, model, 14, 10, 421, 1, 0)
-	storePos := placeSyncTestBuilding(t, model, 9, 8, 500, 1, 0)
+	_ = placeSyncTestBuilding(t, model, 9, 8, 500, 1, 0)
 	storeTile, err := model.TileAt(9, 8)
 	if err != nil || storeTile == nil || storeTile.Build == nil {
 		t.Fatalf("container tile lookup failed: %v", err)
 	}
+	storeWirePos := int32(storeTile.Y*model.Width + storeTile.X)
 	storeTile.Build.Items = []world.ItemStack{{Item: 0, Amount: 37}}
 	w.SetModel(model)
 	w.ConfigureBuildingPacked(nodePos, protocol.Point2{X: 6, Y: 0})
@@ -926,7 +951,7 @@ func TestSyncCurrentWorldToConnSendsBlockSnapshotsBeforeTileConfig(t *testing.T)
 			if err != nil {
 				t.Fatalf("read blockSnapshot pos failed: %v", err)
 			}
-			if pos == storePos {
+			if pos == storeWirePos {
 				foundStoreSnapshot = true
 			}
 		case tileConfigID:
@@ -1126,11 +1151,12 @@ func TestSendBlockSnapshotsToConnEmitsBlockSnapshotPayload(t *testing.T) {
 	model.BlockNames = map[int16]string{
 		500: "container",
 	}
-	containerPos := placeSyncTestBuilding(t, model, 9, 8, 500, 1, 0)
+	_ = placeSyncTestBuilding(t, model, 9, 8, 500, 1, 0)
 	tile, err := model.TileAt(9, 8)
 	if err != nil || tile == nil || tile.Build == nil {
 		t.Fatalf("container tile lookup failed: %v", err)
 	}
+	containerWirePos := int32(tile.Y*model.Width + tile.X)
 	tile.Build.Items = []world.ItemStack{{Item: 0, Amount: 37}}
 	w.SetModel(model)
 
@@ -1164,7 +1190,7 @@ func TestSendBlockSnapshotsToConnEmitsBlockSnapshotPayload(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read blockSnapshot block failed: %v", err)
 			}
-			if pos == containerPos && blockID == 500 {
+			if pos == containerWirePos && blockID == 500 {
 				foundSnapshot = true
 				break
 			}
@@ -1202,6 +1228,7 @@ func TestSendRequestedBlockSnapshotToConnEmitsOnlyBlockSnapshotPayload(t *testin
 	if err != nil || tile == nil || tile.Build == nil {
 		t.Fatalf("container tile lookup failed: %v", err)
 	}
+	containerWirePos := int32(tile.Y*model.Width + tile.X)
 	tile.Build.Items = []world.ItemStack{{Item: 0, Amount: 37}}
 	w.SetModel(model)
 
@@ -1239,8 +1266,8 @@ func TestSendRequestedBlockSnapshotToConnEmitsOnlyBlockSnapshotPayload(t *testin
 	if err != nil {
 		t.Fatalf("read requested blockSnapshot block failed: %v", err)
 	}
-	if pos != containerPos || blockID != 500 {
-		t.Fatalf("expected requested container snapshot pos=%d block=500, got pos=%d block=%d", containerPos, pos, blockID)
+	if pos != containerWirePos || blockID != 500 {
+		t.Fatalf("expected requested container snapshot pos=%d block=500, got pos=%d block=%d", containerWirePos, pos, blockID)
 	}
 }
 
@@ -1328,7 +1355,7 @@ func TestSyncWorldDiffToConnReplaysRuntimeStateForUnchangedContainer(t *testing.
 	model.BlockNames = map[int16]string{
 		500: "container",
 	}
-	containerPos := placeSyncTestBuilding(t, model, 9, 8, 500, 1, 0)
+	_ = placeSyncTestBuilding(t, model, 9, 8, 500, 1, 0)
 	baseModel := model.Clone()
 	if baseModel == nil {
 		t.Fatal("expected base model clone")
@@ -1337,6 +1364,7 @@ func TestSyncWorldDiffToConnReplaysRuntimeStateForUnchangedContainer(t *testing.
 	if err != nil || tile == nil || tile.Build == nil {
 		t.Fatalf("container tile lookup failed: %v", err)
 	}
+	containerWirePos := int32(tile.Y*model.Width + tile.X)
 	tile.Build.Items = []world.ItemStack{{Item: 0, Amount: 42}}
 	w.SetModel(model)
 
@@ -1365,7 +1393,7 @@ func TestSyncWorldDiffToConnReplaysRuntimeStateForUnchangedContainer(t *testing.
 		if err != nil {
 			t.Fatalf("read blockSnapshot pos failed: %v", err)
 		}
-		if pos == containerPos {
+		if pos == containerWirePos {
 			foundContainerSnapshot = true
 			break
 		}

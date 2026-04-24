@@ -39,3 +39,24 @@ func TestLoadWorldModelFromMSAVHasOwnedCoreBuild(t *testing.T) {
 		t.Fatalf("expected at least one owned core with build state in loaded map")
 	}
 }
+
+func TestLoadWorldModelFromMSAVSkipsNaturalWallBuildState(t *testing.T) {
+	path := filepath.Join("..", "..", "assets", "worlds", "maps", "erekir", "origin.msav")
+	model, err := LoadWorldModelFromMSAV(path, nil)
+	if err != nil {
+		t.Fatalf("load world model: %v", err)
+	}
+	if model == nil {
+		t.Fatalf("expected model")
+	}
+	for i := range model.Tiles {
+		tile := &model.Tiles[i]
+		if tile.Block <= 0 || tile.Build == nil {
+			continue
+		}
+		name := model.BlockNames[int16(tile.Block)]
+		if !legacyBlockHasEntity(name) {
+			t.Fatalf("expected non-building map block %s at (%d,%d) to have no build state", name, tile.X, tile.Y)
+		}
+	}
+}
