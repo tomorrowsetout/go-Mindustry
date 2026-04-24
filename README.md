@@ -8,11 +8,13 @@
 
 ## 主要特性
 
-- 仅支持 Mindustry `build 157`
+- 仅支 Mindustry `build 156 157`
 - 使用 Go 编写，方便二次开发与部署
 - 内置 HTTP API，可按需对接前端
-- 支持基础管理与持久化能力
+- 支持基础管理与热加载地图
 - 配置已拆分为 `configs/*.toml`，比单文件配置更容易维护
+- 支持四颗Core 运行  多核心调度
+
 
 ## 系统要求
 
@@ -114,7 +116,6 @@ mdt-server/
 │   └── worlds/
 ├── bin/                     # 编译输出目录
 ├── cmd/
-│   ├── mdt-headless-probe/  # 探测工具
 │   └── mdt-server/          # 主程序入口
 ├── config/                  # 兼容或辅助配置资源
 ├── configs/                 # 运行配置文件
