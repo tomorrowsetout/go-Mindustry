@@ -1,7 +1,0 @@
-2026-04-22T06:41:11.0731414Z [NET] kind=tcp_accept packet= conn_id=1092476702 uuid= ip=127.0.0.1 name="" detail=
-2026-04-22T06:41:18.1155247Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=version=157 type=official mods=0
-2026-04-22T06:41:23.1168254Z [NET] kind=tcp_closed packet= conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=EOF
-2026-04-22T06:41:23.1188899Z [NET] kind=connect_aborted_pre_confirm packet= conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][#F285D1]月[#8982edff]子[#87ceebff]芳[gray]57062[]" detail=live_worldstream=false last_packet_id=-1 last_framework_id=2
-2026-04-22T06:41:26.8654659Z [NET] kind=tcp_accept packet= conn_id=1380934459 uuid= ip=127.0.0.1 name="" detail=
-2026-04-22T06:41:38.8983343Z [NET] kind=tcp_closed packet= conn_id=1380934459 uuid= ip=127.0.0.1 name="[scarlet]（未绑定）[][scarlet]（未绑定）[]未知玩家[gray]1380934459[][gray]1380934459[]" detail=EOF
-2026-04-22T06:41:43.5544407Z [NET] kind=connect_packet packet=*protocol.ConnectPacket conn_id=57062 uuid=MAv3KaDNyXEAAAAAz4iNgQ== ip=127.0.0.1 name="[scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[]未知玩家[gray]1380934459[][gray]1380934459[][gray]1380934459[]" detail=version=157 type=official mods=0

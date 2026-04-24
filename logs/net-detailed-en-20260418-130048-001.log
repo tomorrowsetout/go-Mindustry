@@ -1,6 +1,0 @@
-2026-04-18T05:01:09.9122831Z [NET] kind=tcp_accept packet= conn_id=1296222917 uuid= ip=127.0.0.1 name="" detail=
-2026-04-18T05:01:09.9222999Z [NET] kind=read_error packet= conn_id=1296222917 uuid= ip=127.0.0.1 name="" detail=packet_id=3 framework_id=-1 err=unknown packet id: 3
-2026-04-18T05:01:29.9120129Z [NET] kind=tcp_closed packet= conn_id=1296222917 uuid= ip=127.0.0.1 name="[scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[]未知玩家[gray]1296222917[][gray]1296222917[][gray]1296222917[][gray]1296222917[]" detail=EOF
-2026-04-18T05:02:31.6956797Z [NET] kind=tcp_accept packet= conn_id=352369260 uuid= ip=127.0.0.1 name="" detail=
-2026-04-18T05:02:31.6988024Z [NET] kind=read_error packet= conn_id=352369260 uuid= ip=127.0.0.1 name="" detail=packet_id=3 framework_id=-1 err=unknown packet id: 3
-2026-04-18T05:03:31.6964331Z [NET] kind=tcp_closed packet= conn_id=352369260 uuid= ip=127.0.0.1 name="[scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[][scarlet]（未绑定）[]未知玩家[gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[][gray]352369260[]" detail=EOF
