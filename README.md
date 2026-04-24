@@ -136,7 +136,9 @@ mdt-server/
 │   ├── video/               # 对局视频录制
 │   ├── world/               # 世界逻辑
 │   └── worldstream/         # MSAV 与世界流处理
-├── mods/                    # 扩展脚本目录
+├── mods/                    # 扩展脚本目录    ├── node/             
+│    ├── js/               
+│    └── go/
 ├── go.mod
 ├── Makefile
 └── README.md
