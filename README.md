@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务器，目前支持官方 `build 156 demo版1x3.8``build 157 demo版1.3.9`。
+`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务器，目前支持官方 `build 156 demo版1.x.8``build 157 demo版1.3.9`。
 
 项目除了基础开服能力，还内置了 HTTP API，方便按需接入你自己的前端或管理工具。
 
@@ -136,9 +136,9 @@ mdt-server/
 │   ├── video/               # 对局视频录制
 │   ├── world/               # 世界逻辑
 │   └── worldstream/         # MSAV 与世界流处理
-├── mods/                    # 扩展脚本目录    ├── node/             
-│    ├── js/               
-│    └── go/
+├── mods/                    # 扩展脚本目录    ├── node/              #    
+│    ├── js/                #
+│    └── go/                #
 ├── go.mod
 ├── Makefile
 └── README.md
