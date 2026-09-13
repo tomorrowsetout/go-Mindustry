@@ -85,7 +85,7 @@ func TestRemoteNetServerClientSnapshotUsesOfficialPlansQueueLayout(t *testing.T)
 			t.Fatalf("skip state bool[%d]: %v", i, err)
 		}
 	}
-	if _, err := ReadContent(reader, ctx); err != nil {
+	if _, err := ReadBlock(reader, ctx); err != nil {
 		t.Fatalf("skip selectedBlock: %v", err)
 	}
 	if _, err := reader.ReadInt32(); err != nil {

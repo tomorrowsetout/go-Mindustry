@@ -1585,7 +1585,8 @@ func (p *Remote_NetServer_clientSnapshot_48) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Building = v16
-	v17, err := ReadContent(r, r.Ctx)
+	// Java TypeIO.writeBlock: signed short id (-1 = null), not writeContent.
+	v17, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -1672,7 +1673,7 @@ func (p *Remote_NetServer_clientSnapshot_48) Write(w *Writer) error {
 	if err := w.WriteBool(p.Building); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.SelectedBlock); err != nil {
+	if err := WriteBlock(w, p.SelectedBlock); err != nil {
 		return err
 	}
 	if err := w.WriteInt32(p.SelectedRotation); err != nil {
@@ -3290,11 +3291,8 @@ type Remote_InputHandler_tileTap_91 struct {
 }
 
 func (p *Remote_InputHandler_tileTap_91) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player; wire is Tile only (packed pos int32).
+	p.Player = nil
 	v1, err := ReadTile(r, r.Ctx)
 	if err != nil {
 		return err
@@ -4921,11 +4919,8 @@ type Remote_Menus_menuChoose_109 struct {
 }
 
 func (p *Remote_Menus_menuChoose_109) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := r.ReadInt32()
 	if err != nil {
 		return err
