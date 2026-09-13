@@ -4404,20 +4404,27 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 	if c == nil {
 		return nil
 	}
+	original := unwrapPreEncoded(obj)
+	// Official clients reject several packet classes on the UDP endpoint
+	// (ArcNetProvider: "Invalid packet type for endpoint"). Also keep the
+	// world-load→confirm window TCP-only so join is not torn down by UDP
+	// decode races.
+	if !udpAllowedPacket(original) || c.InWorldReloadGrace() || (c.hasBegunConnecting && !c.hasConnected) {
+		return c.Send(original)
+	}
 	if s.canWriteUDP() {
 		if addr := c.UDPAddr(); addr != nil {
 			c.udpSendMu.Lock()
 			defer c.udpSendMu.Unlock()
-			original := unwrapPreEncoded(obj)
 			var payload []byte
 			if pre, ok := obj.(*preEncodedPacket); ok {
 				payload = pre.payload
 			} else {
 				buf := getSendBuffer()
 				defer putSendBuffer(buf)
-				if err := c.serial.WriteObject(buf, obj); err != nil {
+				if err := c.serial.WriteObject(buf, original); err != nil {
 					c.udpErrors.Add(1)
-					fmt.Printf("[net] sendUnreliable encode failed id=%d err=%v obj=%T\n", c.id, err, obj)
+					fmt.Printf("[net] sendUnreliable encode failed id=%d err=%v obj=%T\n", c.id, err, original)
 					return err
 				}
 				payload = buf.Bytes()
@@ -4454,11 +4461,36 @@ func (s *Server) sendUnreliable(c *Conn, obj any) error {
 	}
 	if s.UdpFallbackTCP {
 		if s.udpConn != nil && c.UDPAddr() == nil {
-			fmt.Printf("[net] sendUnreliable tcp fallback id=%d obj=%T reason=no_udp_addr\n", c.id, obj)
+			fmt.Printf("[net] sendUnreliable tcp fallback id=%d obj=%T reason=no_udp_addr\n", c.id, original)
 		}
-		return c.Send(obj)
+		return c.Send(original)
 	}
 	return nil
+}
+
+// udpAllowedPacket lists S→C types the official ArcNet client accepts on UDP.
+// Anything else (logic data, menus, tile writes, markers, …) must stay on TCP
+// or the client throws "Invalid packet type for endpoint" and disconnects.
+func udpAllowedPacket(obj any) bool {
+	switch obj.(type) {
+	case *protocol.Remote_NetClient_entitySnapshot_32,
+		*protocol.Remote_NetClient_hiddenSnapshot_33,
+		*protocol.Remote_NetClient_blockSnapshot_34,
+		*protocol.Remote_NetClient_stateSnapshot_35,
+		*protocol.Remote_NetClient_effect_11,
+		*protocol.Remote_NetClient_effect_12,
+		*protocol.Remote_NetClient_effectReliable_13,
+		*protocol.Remote_NetClient_sound_9,
+		*protocol.Remote_NetClient_soundAt_10,
+		*protocol.Remote_NetClient_setPosition_29,
+		*protocol.Remote_NetClient_setCameraPosition_30,
+		*protocol.Remote_BulletType_createBullet_58,
+		*protocol.Remote_NetClient_ping_18,
+		*protocol.Remote_NetClient_pingResponse_19:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) sendPlayerSpawn(c *Conn) bool {
