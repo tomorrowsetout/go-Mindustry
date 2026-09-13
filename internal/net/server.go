@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -1097,18 +1098,44 @@ func (s *Server) handleConn(c *Conn) {
 			continue
 		}
 		if err != nil {
-			if errors.Is(err, io.EOF) || isConnReadClosed(err) {
+			// Outer TCP frame EOF = peer closed. Payload decode errors (including
+			// wrapped io.EOF from short C→S TypeIO) must NOT tear down the socket —
+			// custom clients often emit stub packets during the world-load→confirm
+			// window.
+			if isConnFrameClosed(err) {
 				s.verbosef("[net] tcp closed id=%d remote=%s\n", c.id, c.RemoteAddr().String())
 				s.emitEvent(c, "tcp_closed", "", err.Error())
 				return
 			}
-			// Skip malformed packet frame and keep the connection alive.
 			fmt.Printf("[net] read object failed id=%d remote=%s packet_id=%d framework_id=%d err=%v\n", c.id, c.RemoteAddr().String(), c.lastRecvPacketID, c.lastRecvFrameworkID, err)
 			s.emitEvent(c, "read_error", "", fmt.Sprintf("packet_id=%d framework_id=%d err=%v", c.lastRecvPacketID, c.lastRecvFrameworkID, err))
+			// World already streamed; any inbound activity means the client finished
+			// loadWorld. Complete the join loop so respawn/sync can run.
+			if c.hasBegunConnecting && !c.hasConnected && !c.UsesLiveWorldStream() {
+				s.emitEvent(c, "connect_confirm_decode_fallback", fmt.Sprintf("packet_id=%d", c.lastRecvPacketID), err.Error())
+				s.handleOfficialConnectConfirm(c, &protocol.Remote_NetServer_connectConfirm_50{})
+			}
 			continue
 		}
 		s.handlePacket(c, obj, true)
 	}
+}
+
+// isConnFrameClosed reports whether the TCP stream itself ended (or is unusable),
+// as opposed to a successfully framed packet whose payload failed to decode.
+func isConnFrameClosed(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.ECONNRESET) {
+		// Wrapped payload-decode EOF is tagged by the serializer; do not treat it
+		// as a frame close.
+		if strings.Contains(err.Error(), "unknown packet id") {
+			return false
+		}
+		return true
+	}
+	return isConnReadClosed(err)
 }
 
 func (s *Server) logPlayerJoinCN(c *Conn) {
