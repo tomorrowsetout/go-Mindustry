@@ -55,6 +55,104 @@ type powerGeneratorState struct {
 	Instability float32
 }
 
+// Power generator kinds indexed by block ID (avoids per-tick string switches).
+const (
+	powerGenNone uint8 = iota
+	powerGenSolar
+	powerGenSolarLarge
+	powerGenThermal
+	powerGenCombustion
+	powerGenSteam
+	powerGenDifferential
+	powerGenRTG
+	powerGenThorium
+	powerGenImpact
+	powerGenTurbineCondenser
+	powerGenChemicalCombustion
+	powerGenPyrolysis
+	powerGenFlux
+	powerGenNeoplasia
+	powerGenSource
+)
+
+func powerGenKindForName(name string) uint8 {
+	switch name {
+	case "solar-panel":
+		return powerGenSolar
+	case "solar-panel-large":
+		return powerGenSolarLarge
+	case "thermal-generator":
+		return powerGenThermal
+	case "combustion-generator":
+		return powerGenCombustion
+	case "steam-generator":
+		return powerGenSteam
+	case "differential-generator":
+		return powerGenDifferential
+	case "rtg-generator":
+		return powerGenRTG
+	case "thorium-reactor":
+		return powerGenThorium
+	case "impact-reactor":
+		return powerGenImpact
+	case "turbine-condenser":
+		return powerGenTurbineCondenser
+	case "chemical-combustion-chamber":
+		return powerGenChemicalCombustion
+	case "pyrolysis-generator":
+		return powerGenPyrolysis
+	case "flux-reactor":
+		return powerGenFlux
+	case "neoplasia-reactor":
+		return powerGenNeoplasia
+	case "power-source":
+		return powerGenSource
+	default:
+		return powerGenNone
+	}
+}
+
+func (w *World) powerGenKindLocked(blockID int16) uint8 {
+	if w == nil || blockID <= 0 {
+		return powerGenNone
+	}
+	if idx := int(blockID); idx < len(w.powerGenKindByBlock) {
+		return w.powerGenKindByBlock[idx]
+	}
+	return powerGenKindForName(w.blockNameByID(blockID))
+}
+
+// Shared fuel tables — allocating these per generator per tick was pure GC churn.
+var (
+	combustionFuels = []generatorFuelOption{
+		{Item: pyratiteItemID, DurationMul: 3},
+		{Item: coalItemID, DurationMul: 1},
+		{Item: sporePodItemID, DurationMul: 1},
+	}
+	steamFuels = []generatorFuelOption{
+		{Item: pyratiteItemID, DurationMul: 3},
+		{Item: coalItemID, DurationMul: 1},
+		{Item: sporePodItemID, DurationMul: 1},
+	}
+	differentialFuels = []generatorFuelOption{
+		{Item: pyratiteItemID, DurationMul: 1},
+	}
+	rtgFuels = []generatorFuelOption{
+		{Item: phaseFabricItemID, DurationMul: 15},
+		{Item: thoriumItemID, DurationMul: 1},
+		{Item: legacyThoriumItemID, DurationMul: 1},
+	}
+	chemicalCombustionLiquids = []LiquidStack{
+		{Liquid: ozoneLiquidID, Amount: 2.0 / 60.0},
+		{Liquid: arkyciteLiquidID, Amount: 40.0 / 60.0},
+	}
+	pyrolysisLiquids = []LiquidStack{
+		{Liquid: slagLiquidID, Amount: 20.0 / 60.0},
+		{Liquid: arkyciteLiquidID, Amount: 40.0 / 60.0},
+	}
+	pyrolysisWater = LiquidStack{Liquid: waterLiquidID, Amount: 20.0 / 60.0}
+)
+
 func (w *World) beginTeamPowerStep(delta time.Duration) {
 	if w == nil {
 		return
@@ -63,36 +161,27 @@ func (w *World) beginTeamPowerStep(delta time.Duration) {
 	if w.teamPowerBudget == nil {
 		w.teamPowerBudget = map[TeamID]float32{}
 	} else {
-		for team := range w.teamPowerBudget {
-			delete(w.teamPowerBudget, team)
-		}
+		clear(w.teamPowerBudget)
 	}
 	if w.teamPowerStates == nil {
 		w.teamPowerStates = map[TeamID]*teamPowerState{}
 	}
 	if w.powerNetStates == nil {
 		w.powerNetStates = map[int32]*powerNetState{}
-	} else {
-		for pos := range w.powerNetStates {
-			delete(w.powerNetStates, pos)
-		}
 	}
+	// powerNetStates is rebuilt field-by-field below; do not delete entries.
 	if w.powerNetByPos == nil {
 		w.powerNetByPos = map[int32]int32{}
 	}
 	if w.powerRequested == nil {
 		w.powerRequested = map[int32]float32{}
 	} else {
-		for pos := range w.powerRequested {
-			delete(w.powerRequested, pos)
-		}
+		clear(w.powerRequested)
 	}
 	if w.powerSupplied == nil {
 		w.powerSupplied = map[int32]float32{}
 	} else {
-		for pos := range w.powerSupplied {
-			delete(w.powerSupplied, pos)
-		}
+		clear(w.powerSupplied)
 	}
 	for team := range w.teamPowerStates {
 		st := w.teamPowerStateLocked(team)
@@ -148,7 +237,12 @@ func (w *World) endTeamPowerStep() {
 	if w == nil {
 		return
 	}
-	seenStorage := map[int32]struct{}{}
+	if w.powerSeenStorage == nil {
+		w.powerSeenStorage = map[int32]struct{}{}
+	} else {
+		clear(w.powerSeenStorage)
+	}
+	seenStorage := w.powerSeenStorage
 	for _, net := range w.powerNetStates {
 		if net == nil {
 			continue
@@ -312,72 +406,52 @@ func (w *World) producePowerForBuildingLocked(pos int32, tile *Tile, dt float32)
 	if w == nil || tile == nil || tile.Build == nil || tile.Build.Team == 0 || dt <= 0 {
 		return
 	}
-	name := w.blockNameByID(int16(tile.Block))
-	switch name {
-	case "solar-panel":
+	switch w.powerGenKindLocked(int16(tile.Block)) {
+	case powerGenSolar:
 		w.addPowerBudgetLocked(pos, 0.12*dt)
-	case "solar-panel-large":
+	case powerGenSolarLarge:
 		w.addPowerBudgetLocked(pos, 1.6*dt)
-	case "thermal-generator":
+	case powerGenThermal:
 		if eff := w.thermalGenerationEfficiencyLocked(tile); eff > 0 {
 			w.addPowerBudgetLocked(pos, 1.8*eff*dt)
 		}
-	case "combustion-generator":
-		_ = w.runFueledGeneratorLocked(pos, tile, dt, 1.0, 120, []generatorFuelOption{
-			{Item: pyratiteItemID, DurationMul: 3},
-			{Item: coalItemID, DurationMul: 1},
-			{Item: sporePodItemID, DurationMul: 1},
-		}, nil)
-	case "steam-generator":
-		_ = w.runFueledGeneratorLocked(pos, tile, dt, 5.5, 90, []generatorFuelOption{
-			{Item: pyratiteItemID, DurationMul: 3},
-			{Item: coalItemID, DurationMul: 1},
-			{Item: sporePodItemID, DurationMul: 1},
-		}, func(build *Building, seconds float32) bool {
+	case powerGenCombustion:
+		_ = w.runFueledGeneratorLocked(pos, tile, dt, 1.0, 120, combustionFuels, nil)
+	case powerGenSteam:
+		_ = w.runFueledGeneratorLocked(pos, tile, dt, 5.5, 90, steamFuels, func(build *Building, seconds float32) bool {
 			return consumeBuildingLiquidLocked(build, waterLiquidID, 0.1*seconds)
 		})
-	case "differential-generator":
-		_ = w.runFueledGeneratorLocked(pos, tile, dt, 18, 220, []generatorFuelOption{
-			{Item: pyratiteItemID, DurationMul: 1},
-		}, func(build *Building, seconds float32) bool {
+	case powerGenDifferential:
+		_ = w.runFueledGeneratorLocked(pos, tile, dt, 18, 220, differentialFuels, func(build *Building, seconds float32) bool {
 			return consumeBuildingLiquidLocked(build, cryofluidLiquidID, 0.1*seconds)
 		})
-	case "rtg-generator":
-		_ = w.runFueledGeneratorLocked(pos, tile, dt, 4.5, 60*14, []generatorFuelOption{
-			{Item: phaseFabricItemID, DurationMul: 15},
-			{Item: thoriumItemID, DurationMul: 1},
-			{Item: legacyThoriumItemID, DurationMul: 1},
-		}, nil)
-	case "thorium-reactor":
+	case powerGenRTG:
+		_ = w.runFueledGeneratorLocked(pos, tile, dt, 4.5, 60*14, rtgFuels, nil)
+	case powerGenThorium:
 		fuel := itemAmountOneOf(tile.Build, thoriumItemID, legacyThoriumItemID)
 		if fuel > 0 {
 			fullness := clampf(float32(fuel)/30, 0, 1)
 			w.addPowerBudgetLocked(pos, 15*fullness*dt)
 		}
-	case "impact-reactor":
+	case powerGenImpact:
 		_ = w.runImpactReactorLocked(pos, tile, dt)
-	case "turbine-condenser":
+	case powerGenTurbineCondenser:
 		eff := w.sumFloorAttributeLocked(tile, "steam")
 		if eff <= 0 {
 			return
 		}
 		w.addPowerBudgetLocked(pos, (3.0/9.0)*eff*dt)
 		w.addGeneratorLiquidOutputLocked(pos, tile, waterLiquidID, (5.0/60.0)/9.0, dt*60, eff)
-	case "chemical-combustion-chamber":
-		_ = w.runLiquidGeneratorLocked(pos, tile, dt, 550.0/60.0, []LiquidStack{
-			{Liquid: ozoneLiquidID, Amount: 2.0 / 60.0},
-			{Liquid: arkyciteLiquidID, Amount: 40.0 / 60.0},
-		}, nil)
-	case "pyrolysis-generator":
-		_ = w.runLiquidGeneratorLocked(pos, tile, dt, 1400.0/60.0, []LiquidStack{
-			{Liquid: slagLiquidID, Amount: 20.0 / 60.0},
-			{Liquid: arkyciteLiquidID, Amount: 40.0 / 60.0},
-		}, &LiquidStack{Liquid: waterLiquidID, Amount: 20.0 / 60.0})
-	case "flux-reactor":
+	case powerGenChemicalCombustion:
+		_ = w.runLiquidGeneratorLocked(pos, tile, dt, 550.0/60.0, chemicalCombustionLiquids, nil)
+	case powerGenPyrolysis:
+		out := pyrolysisWater
+		_ = w.runLiquidGeneratorLocked(pos, tile, dt, 1400.0/60.0, pyrolysisLiquids, &out)
+	case powerGenFlux:
 		_ = w.runFluxReactorLocked(pos, tile, dt)
-	case "neoplasia-reactor":
+	case powerGenNeoplasia:
 		_ = w.runNeoplasiaReactorLocked(pos, tile, dt)
-	case "power-source":
+	case powerGenSource:
 		w.addPowerBudgetLocked(pos, (1000000.0/60.0)*dt)
 	}
 }
@@ -959,6 +1033,36 @@ func (w *World) powerStorageCapacityForBlockID(blockID int16) float32 {
 	return powerStorageCapacityByBlockName(w.blockNameByID(blockID))
 }
 
+const (
+	powerFlagDiode uint8 = 1 << iota
+	powerFlagVoid
+	powerFlagNode
+)
+
+func powerFlagsForName(name string) uint8 {
+	var f uint8
+	if isPowerDiodeBlockName(name) || name == "diode" {
+		f |= powerFlagDiode
+	}
+	if name == "power-void" {
+		f |= powerFlagVoid
+	}
+	if isPowerNodeBlockName(name) {
+		f |= powerFlagNode
+	}
+	return f
+}
+
+func (w *World) powerFlagsLocked(blockID int16) uint8 {
+	if w == nil || blockID <= 0 {
+		return 0
+	}
+	if idx := int(blockID); idx < len(w.powerFlagsByBlock) {
+		return w.powerFlagsByBlock[idx]
+	}
+	return powerFlagsForName(w.blockNameByID(blockID))
+}
+
 func (w *World) stepPowerDiodesLocked() {
 	if w == nil || w.model == nil {
 		return
@@ -968,7 +1072,7 @@ func (w *World) stepPowerDiodesLocked() {
 			continue
 		}
 		tile := &w.model.Tiles[pos]
-		if tile.Build == nil || tile.Build.Team == 0 || w.blockNameByID(int16(tile.Block)) != "diode" {
+		if tile.Build == nil || tile.Build.Team == 0 || w.powerFlagsLocked(int16(tile.Block))&powerFlagDiode == 0 {
 			continue
 		}
 		dx, dy := dirDelta(tile.Rotation)
@@ -1016,13 +1120,18 @@ func (w *World) stepPowerVoidsLocked() {
 	if w == nil || w.model == nil {
 		return
 	}
-	drained := make(map[int32]struct{})
+	if w.powerVoidDrained == nil {
+		w.powerVoidDrained = map[int32]struct{}{}
+	} else {
+		clear(w.powerVoidDrained)
+	}
+	drained := w.powerVoidDrained
 	for _, pos := range w.powerVoidTilePositions {
 		if pos < 0 || int(pos) >= len(w.model.Tiles) {
 			continue
 		}
 		tile := &w.model.Tiles[pos]
-		if tile.Build == nil || tile.Build.Team == 0 || w.blockNameByID(int16(tile.Block)) != "power-void" {
+		if tile.Build == nil || tile.Build.Team == 0 || w.powerFlagsLocked(int16(tile.Block))&powerFlagVoid == 0 {
 			continue
 		}
 		net, ok := w.powerNetStateForPosLocked(pos)

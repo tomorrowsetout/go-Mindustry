@@ -153,7 +153,11 @@ type World struct {
 	powerStorageCapacityByBlock []float32
 	itemInsertNeverByBlock      []uint8
 	logisticsKindByBlock        []uint8
+	powerGenKindByBlock         []uint8
+	powerFlagsByBlock           []uint8
 	liquidCapByBlock            []float32
+	powerSeenStorage            map[int32]struct{}
+	powerVoidDrained            map[int32]struct{}
 	unitNamesByID               map[int16]string
 	unitNamesByIndex            []string
 	unitLookupNamesByID         map[int16]string
@@ -8921,6 +8925,10 @@ func (w *World) SetModel(m *WorldModel) {
 	w.blockLookupNamesByID = nil
 	w.blockLookupNamesByIndex = nil
 	w.powerStorageCapacityByBlock = nil
+	w.powerGenKindByBlock = nil
+	w.powerFlagsByBlock = nil
+	w.logisticsKindByBlock = nil
+	w.liquidCapByBlock = nil
 	w.itemInsertNeverByBlock = nil
 	w.unitNamesByID = nil
 	w.unitNamesByIndex = nil
@@ -8959,7 +8967,8 @@ func (w *World) SetModel(m *WorldModel) {
 		w.powerStorageCapacityByBlock = make([]float32, int(maxBlockID)+1)
 		w.itemInsertNeverByBlock = make([]uint8, int(maxBlockID)+1)
 		w.logisticsKindByBlock = make([]uint8, int(maxBlockID)+1)
-		w.liquidCapByBlock = make([]float32, int(maxBlockID)+1)
+		w.powerGenKindByBlock = make([]uint8, int(maxBlockID)+1)
+		w.powerFlagsByBlock = make([]uint8, int(maxBlockID)+1)
 		w.liquidCapByBlock = make([]float32, int(maxBlockID)+1)
 		for k, v := range m.BlockNames {
 			name := strings.ToLower(strings.TrimSpace(v))
@@ -8974,7 +8983,8 @@ func (w *World) SetModel(m *WorldModel) {
 					w.itemInsertNeverByBlock[int(k)] = 1
 				}
 				w.logisticsKindByBlock[int(k)] = logisticsKindForName(name)
-				// Cap cache filled lazily via liquidCapacityForBlockLocked.
+				w.powerGenKindByBlock[int(k)] = powerGenKindForName(name)
+				w.powerFlagsByBlock[int(k)] = powerFlagsForName(name)
 			}
 		}
 	}
