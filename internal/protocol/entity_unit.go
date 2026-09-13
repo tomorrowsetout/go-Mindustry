@@ -48,23 +48,19 @@ func (u *UnitEntitySync) BeforeWrite() {}
 func (u *UnitEntitySync) SnapSync()    {}
 func (u *UnitEntitySync) Add()         {}
 
+// WriteSync matches official UnitWaterMove.writeSync field order
+// (Mindustry.jar 160.3). Extra optional fields from other unit classes are
+// omitted; ClassID should be a UnitWaterMove-compatible id for this layout.
 func (u *UnitEntitySync) WriteSync(w *Writer) error {
-	layout := u.layout()
 	if err := WriteAbilities(w, u.Abilities); err != nil {
 		return err
 	}
-	if err := w.WriteFloat32(u.Ammo); err != nil {
+	// aimX / aimY — not synced in our model; write zeros so later fields align.
+	if err := w.WriteFloat32(0); err != nil {
 		return err
 	}
-	if layout.baseRotation {
-		if err := w.WriteFloat32(u.BaseRotation); err != nil {
-			return err
-		}
-	}
-	if layout.building {
-		if err := WriteBuilding(w, u.Building); err != nil {
-			return err
-		}
+	if err := w.WriteFloat32(0); err != nil {
+		return err
 	}
 	if err := WriteController(w, u.Controller); err != nil {
 		return err
@@ -81,21 +77,11 @@ func (u *UnitEntitySync) WriteSync(w *Writer) error {
 	if err := w.WriteBool(u.Shooting); err != nil {
 		return err
 	}
-	if layout.timedKill {
-		if err := w.WriteFloat32(u.Lifetime); err != nil {
-			return err
-		}
-	}
 	if err := WriteTile(w, u.MineTile); err != nil {
 		return err
 	}
 	if err := WriteMounts(w, u.Mounts); err != nil {
 		return err
-	}
-	if layout.payloads {
-		if err := writePayloadSeq(w, u.Payloads); err != nil {
-			return err
-		}
 	}
 	if err := WritePlansQueueNet(w, u.Plans, w.Ctx); err != nil {
 		return err
@@ -123,12 +109,11 @@ func (u *UnitEntitySync) WriteSync(w *Writer) error {
 	if err := WriteTeam(w, &Team{ID: u.TeamID}); err != nil {
 		return err
 	}
-	if layout.timedKill {
-		if err := w.WriteFloat32(u.Time); err != nil {
-			return err
-		}
+	typeID := u.TypeID
+	if typeID < 0 {
+		typeID = 0
 	}
-	if err := w.WriteInt16(u.TypeID); err != nil {
+	if err := w.WriteInt16(typeID); err != nil {
 		return err
 	}
 	if err := w.WriteBool(u.UpdateBuilding); err != nil {
@@ -253,23 +238,16 @@ func (u *UnitEntitySync) ReadSync(r *Reader) error {
 }
 
 func (u *UnitEntitySync) read(r *Reader, readPlans func(*Reader, *TypeIOContext) ([]*BuildPlan, error)) error {
-	layout := u.layout()
 	var err error
 	if u.Abilities, err = ReadAbilities(r, u.Abilities); err != nil {
 		return err
 	}
-	if u.Ammo, err = r.ReadFloat32(); err != nil {
+	// aimX / aimY
+	if _, err = r.ReadFloat32(); err != nil {
 		return err
 	}
-	if layout.baseRotation {
-		if u.BaseRotation, err = r.ReadFloat32(); err != nil {
-			return err
-		}
-	}
-	if layout.building {
-		if u.Building, err = ReadBuilding(r, r.Ctx); err != nil {
-			return err
-		}
+	if _, err = r.ReadFloat32(); err != nil {
+		return err
 	}
 	if u.Controller, err = ReadController(r, u.Controller); err != nil {
 		return err
@@ -286,21 +264,11 @@ func (u *UnitEntitySync) read(r *Reader, readPlans func(*Reader, *TypeIOContext)
 	if u.Shooting, err = r.ReadBool(); err != nil {
 		return err
 	}
-	if layout.timedKill {
-		if u.Lifetime, err = r.ReadFloat32(); err != nil {
-			return err
-		}
-	}
 	if u.MineTile, err = ReadTile(r, r.Ctx); err != nil {
 		return err
 	}
 	if u.Mounts, err = ReadMounts(r, u.Mounts); err != nil {
 		return err
-	}
-	if layout.payloads {
-		if u.Payloads, err = readPayloadSeq(r); err != nil {
-			return err
-		}
 	}
 	if u.Plans, err = readPlans(r, r.Ctx); err != nil {
 		return err
@@ -337,11 +305,6 @@ func (u *UnitEntitySync) read(r *Reader, readPlans func(*Reader, *TypeIOContext)
 		return err
 	}
 	u.TeamID = team.ID
-	if layout.timedKill {
-		if u.Time, err = r.ReadFloat32(); err != nil {
-			return err
-		}
-	}
 	if u.TypeID, err = r.ReadInt16(); err != nil {
 		return err
 	}
