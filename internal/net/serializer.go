@@ -86,17 +86,18 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 
 	// A few official client->server packets omit the injected player/entity
 	// parameter on the wire even though the generated packet struct keeps it.
-	// IDs follow build-159.7 registration order.
+	// IDs are 160.3 wire ids (TextureStream occupies framework id 6, so remotes
+	// are 159.7 official ids + 1; later remotes also shift for new 160 methods).
 	switch id {
-	case 49:
+	case 50:
 		return &protocol.Remote_NetServer_connectConfirm_50{}, nil
-	case 54:
+	case 55:
 		return &protocol.Remote_NetServer_requestDebugStatus_36{Player: nil}, nil
-	case 26:
+	case 27:
 		return readClientPingWithoutPlayer(payload)
-	case 53:
+	case 54:
 		return readRequestBlockSnapshotWithoutPlayer(payload)
-	case 102:
+	case 103:
 		return &protocol.Remote_InputHandler_unitClear_95{}, nil
 	default:
 		return nil, fmt.Errorf("unknown packet id: %d", id)
