@@ -1,0 +1,24 @@
+# 入服公告配置
+
+[join_popup]
+announcement_text = """
+[accent]服务器公告[]
+
+1. 如果有任何问题请转移到交流群333641130
+2. 请保证友好的交流
+"""
+delay_ms = 100
+enabled = true
+help_text = """
+[accent]帮助为分页弹窗[]
+第 1 页显示基础指令与投票换图；
+第 2 页显示常用与 OP 指令；
+第 3 页显示单位控制。
+"""
+link_url = "https://qm.qq.com/q/Op6STL0WMG"
+message = """
+欢迎 [green]{player_name}[] 来到 [white]{server_name}[]
+当前地图: [white]{current_map}[]
+请选择下方按钮。
+"""
+title = "[accent]服务器公告[]"

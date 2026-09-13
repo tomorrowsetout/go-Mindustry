@@ -1,0 +1,9 @@
+{
+  "name": "official-go-one-tick",
+  "mapPath": "/server/go-Mindustry-main/assets/worlds/file.msav",
+  "seed": 0,
+  "ticks": 1,
+  "deltaMs": 16,
+  "vanillaProfilesPath": "/server/go-Mindustry-main/data/vanilla/profiles.json",
+  "captureInitial": true
+}

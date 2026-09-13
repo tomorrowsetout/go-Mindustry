@@ -1,0 +1,535 @@
+package world
+
+import (
+	"errors"
+	"math"
+)
+
+var ErrOutOfBounds = errors.New("world: out of bounds")
+var ErrEntityExists = errors.New("world: entity id already exists")
+
+type TeamID byte
+
+type BlockID int16
+type FloorID int16
+type OverlayID int16
+type ConID int16
+
+type ItemID int16
+type LiquidID int16
+
+type Vec2 struct {
+	X float32
+	Y float32
+}
+
+// Entity 实体接口
+type Entity interface {
+	GetX() float32
+	GetY() float32
+	GetTeam() TeamID
+}
+
+type Tile struct {
+	X           int
+	Y           int
+	Floor       FloorID
+	Overlay     OverlayID
+	Block       BlockID
+	Team        TeamID
+	Rotation    int8
+	Con         ConID
+	HasData     bool
+	Data        byte
+	FloorData   byte
+	OverlayData byte
+	ExtraData   int32
+	Build       *Building
+}
+
+type Building struct {
+	Block    BlockID
+	Team     TeamID
+	Rotation int8
+	X        int
+	Y        int
+	Items    []ItemStack
+	Liquids  []LiquidStack
+	// Mindustry's LiquidModule keeps a "current" liquid separate from the
+	// stored amounts. It is the last added/removed liquid, or the largest
+	// loaded liquid after save hydration.
+	CurrentLiquid    LiquidID
+	CurrentLiquidSet bool
+	Health           float32
+	Config           []byte
+	Payload          []byte
+	MaxHealth        float32
+	// Transient runtime state for vanilla heal suppression.
+	healSuppressionUntilSec float32
+	// Inline MSAV sync data preserved from map chunk loading. This lets us
+	// recover original client-visible runtime state before server-side runtime
+	// systems have rebuilt their own state.
+	MapSyncRevision   byte
+	MapSyncData       []byte
+	MapSyncTail       []byte
+	MapSyncAmmoLoaded bool
+	MapPowerLinks     []int32
+	MapPowerStatus    float32
+	MapPowerStatusSet bool
+}
+
+// GetX 获取X坐标
+func (b *Building) GetX() float32 {
+	return float32(b.X)
+}
+
+// GetY 获取Y坐标
+func (b *Building) GetY() float32 {
+	return float32(b.Y)
+}
+
+// GetTeam 获取队伍
+func (b *Building) GetTeam() TeamID {
+	return b.Team
+}
+
+// AddItem 添加物品
+func (b *Building) AddItem(item ItemID, amount int32) {
+	for i, stack := range b.Items {
+		if stack.Item == item {
+			b.Items[i].Amount += amount
+			return
+		}
+	}
+	b.Items = append(b.Items, ItemStack{Item: item, Amount: amount})
+}
+
+// RemoveItem 移除物品
+func (b *Building) RemoveItem(item ItemID, amount int32) bool {
+	for i, stack := range b.Items {
+		if stack.Item == item {
+			if stack.Amount >= amount {
+				b.Items[i].Amount -= amount
+				if b.Items[i].Amount <= 0 {
+					b.Items = append(b.Items[:i], b.Items[i+1:]...)
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (b *Building) ItemAmount(item ItemID) int32 {
+	for _, stack := range b.Items {
+		if stack.Item == item {
+			return stack.Amount
+		}
+	}
+	return 0
+}
+
+func (b *Building) SetItemAmount(item ItemID, amount int32) {
+	for i, stack := range b.Items {
+		if stack.Item != item {
+			continue
+		}
+		if amount <= 0 {
+			b.Items = append(b.Items[:i], b.Items[i+1:]...)
+			return
+		}
+		b.Items[i].Amount = amount
+		return
+	}
+	if amount > 0 {
+		b.Items = append(b.Items, ItemStack{Item: item, Amount: amount})
+	}
+}
+
+func (b *Building) AddLiquid(liquid LiquidID, amount float32) {
+	b.CurrentLiquid = liquid
+	b.CurrentLiquidSet = true
+	for i, stack := range b.Liquids {
+		if stack.Liquid == liquid {
+			b.Liquids[i].Amount += amount
+			if b.Liquids[i].Amount <= 0 {
+				b.Liquids = append(b.Liquids[:i], b.Liquids[i+1:]...)
+			}
+			return
+		}
+	}
+	if amount > 0 {
+		b.Liquids = append(b.Liquids, LiquidStack{Liquid: liquid, Amount: amount})
+	}
+}
+
+func (b *Building) RemoveLiquid(liquid LiquidID, amount float32) bool {
+	b.CurrentLiquid = liquid
+	b.CurrentLiquidSet = true
+	for i, stack := range b.Liquids {
+		if stack.Liquid == liquid {
+			if stack.Amount >= amount {
+				b.Liquids[i].Amount -= amount
+				if b.Liquids[i].Amount <= 0 {
+					b.Liquids = append(b.Liquids[:i], b.Liquids[i+1:]...)
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (b *Building) LiquidAmount(liquid LiquidID) float32 {
+	for _, stack := range b.Liquids {
+		if stack.Liquid == liquid {
+			return stack.Amount
+		}
+	}
+	return 0
+}
+
+// DistanceTo 距离到
+func (b *Building) DistanceTo(other *Building) float32 {
+	dx := float32(b.X - other.X)
+	dy := float32(b.Y - other.Y)
+	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
+}
+
+type ItemStack struct {
+	Item   ItemID
+	Amount int32
+}
+
+type LiquidStack struct {
+	Liquid LiquidID
+	Amount float32
+}
+
+type Unit struct {
+	ID        int32
+	Team      TeamID
+	Pos       Vec2
+	Health    float32
+	Type      int16
+	MaxHealth float32
+}
+
+type entityBuildPlan struct {
+	Breaking bool
+	Pos      int32
+	Rotation byte
+	BlockID  int16
+	Config   any
+}
+
+type entityAbilityState struct {
+	Data  float32
+	Timer float32
+	Aux   float32
+}
+
+// GetX 获取X坐标
+func (u *Unit) GetX() float32 {
+	return u.Pos.X
+}
+
+// GetY 获取Y坐标
+func (u *Unit) GetY() float32 {
+	return u.Pos.Y
+}
+
+// GetTeam 获取队伍
+func (u *Unit) GetTeam() TeamID {
+	return u.Team
+}
+
+// DistanceTo 距离到
+func (u *Unit) DistanceTo(other *Unit) float32 {
+	dx := u.Pos.X - other.Pos.X
+	dy := u.Pos.Y - other.Pos.Y
+	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
+}
+
+type RawEntity struct {
+	TypeID      int16
+	ID          int32
+	PlayerID    int32
+	X           float32
+	Y           float32
+	Rotation    float32
+	VelX        float32
+	VelY        float32
+	RotVel      float32
+	LifeSec     float32
+	AgeSec      float32
+	Health      float32
+	MaxHealth   float32
+	Shield      float32
+	Ammo        float32
+	ShieldMax   float32
+	ShieldRegen float32
+	Armor       float32
+	Elevation   float32
+	Shooting    bool
+
+	AttackRange              float32
+	AttackFireMode           string
+	AttackDamage             float32
+	AttackSplashDamage       float32
+	AttackInterval           float32
+	AttackCooldown           float32
+	AttackBulletType         int16
+	AttackBulletSpeed        float32
+	AttackBulletLifetime     float32
+	AttackBulletHitSize      float32
+	AttackSplashRadius       float32
+	AttackBuildingDamage     float32
+	AttackBuildingDamageSet  bool
+	AttackArmorMultiplier    float32
+	AttackMaxDamageFraction  float32
+	AttackShieldDamageMul    float32
+	AttackPierceDamageFactor float32
+	AttackPierceArmor        bool
+	AttackSlowSec            float32
+	AttackSlowMul            float32
+	AttackPierce             int32
+	AttackPierceBuilding     bool
+	AttackChainCount         int32
+	AttackChainRange         float32
+	AttackPreferBuildings    bool
+	AttackStatusID           int16
+	AttackStatusName         string
+	AttackStatusDuration     float32
+	AttackShootStatusID      int16
+	AttackShootStatusName    string
+	AttackShootStatusDur     float32
+	AttackFragmentCount      int32
+	AttackFragmentSpread     float32
+	AttackFragmentSpeed      float32
+	AttackFragmentLife       float32
+	AttackFragmentRand       float32
+	AttackFragmentAngle      float32
+	AttackFragmentVelMin     float32
+	AttackFragmentVelMax     float32
+	AttackFragmentLifeMin    float32
+	AttackFragmentLifeMax    float32
+	AttackFragmentBullet     *bulletRuntimeProfile
+	AttackShootEffect        string
+	AttackSmokeEffect        string
+	AttackHitEffect          string
+	AttackDespawnEffect      string
+	AttackTargetAir          bool
+	AttackTargetGround       bool
+	AttackTargetPriority     string
+	AttackBuildings          bool
+	RuntimeInit              bool
+	Statuses                 []entityStatusState
+	StatusDamageMul          float32
+	StatusHealthMul          float32
+	StatusSpeedMul           float32
+	StatusReloadMul          float32
+	StatusBuildSpeedMul      float32
+	StatusDragMul            float32
+	StatusArmorOverride      float32
+	Disarmed                 bool
+	SlowRemain               float32
+	SlowMul                  float32
+	HitRadius                float32
+
+	Behavior string
+	// ControllerType records the vanilla runtime controller class for units
+	// whose controller is not representable by command state alone.
+	ControllerType string
+	CommandID      int16
+	TargetID       int32
+	Flag           float64
+	PatrolAX       float32
+	PatrolAY       float32
+	PatrolBX       float32
+	PatrolBY       float32
+	PatrolToB      bool
+	MoveSpeed      float32
+	Team           TeamID
+	Payload        []byte
+	Payloads       []payloadData
+
+	SpawnedByCore  bool
+	UpdateBuilding bool
+	MineTilePos    int32
+	Stack          ItemStack
+	Plans          []entityBuildPlan
+	Abilities      []entityAbilityState
+
+	Flying          bool
+	LowAltitude     bool
+	CanBoost        bool
+	CoreUnitDock    bool
+	MineWalls       bool
+	MineFloor       bool
+	MineSpeed       float32
+	MineTier        int16
+	BuildSpeed      float32
+	ItemCapacity    int32
+	AmmoCapacity    float32
+	AmmoPerShot     float32
+	AmmoRegen       float32
+	PayloadCapacity float32
+}
+
+type WorldModel struct {
+	Width  int
+	Height int
+	Tiles  []Tile
+
+	Units        map[int32]*Unit
+	Entities     []RawEntity
+	NextEntityID int32
+
+	MSAVVersion   int32
+	Tags          map[string]string
+	Content       []byte
+	Patches       []byte
+	RawMap        []byte
+	EntityMapping []byte
+	TeamBlocks    []byte
+	RawEntities   []byte
+	Markers       []byte
+	Custom        []byte
+	BlockNames    map[int16]string
+	UnitNames     map[int16]string
+
+	EntitiesRev byte
+}
+
+func (w *WorldModel) Clone() *WorldModel {
+	if w == nil {
+		return nil
+	}
+	out := &WorldModel{
+		Width:         w.Width,
+		Height:        w.Height,
+		NextEntityID:  w.NextEntityID,
+		MSAVVersion:   w.MSAVVersion,
+		EntitiesRev:   w.EntitiesRev,
+		Content:       append([]byte(nil), w.Content...),
+		Patches:       append([]byte(nil), w.Patches...),
+		RawMap:        append([]byte(nil), w.RawMap...),
+		EntityMapping: append([]byte(nil), w.EntityMapping...),
+		TeamBlocks:    append([]byte(nil), w.TeamBlocks...),
+		RawEntities:   append([]byte(nil), w.RawEntities...),
+		Markers:       append([]byte(nil), w.Markers...),
+		Custom:        append([]byte(nil), w.Custom...),
+	}
+	if len(w.Tags) > 0 {
+		out.Tags = make(map[string]string, len(w.Tags))
+		for k, v := range w.Tags {
+			out.Tags[k] = v
+		}
+	}
+	if len(w.BlockNames) > 0 {
+		out.BlockNames = make(map[int16]string, len(w.BlockNames))
+		for k, v := range w.BlockNames {
+			out.BlockNames[k] = v
+		}
+	}
+	if len(w.UnitNames) > 0 {
+		out.UnitNames = make(map[int16]string, len(w.UnitNames))
+		for k, v := range w.UnitNames {
+			out.UnitNames[k] = v
+		}
+	}
+	if len(w.Tiles) > 0 {
+		out.Tiles = make([]Tile, len(w.Tiles))
+		for i := range w.Tiles {
+			out.Tiles[i] = w.Tiles[i]
+			if w.Tiles[i].Build != nil {
+				build := *w.Tiles[i].Build
+				build.Items = append([]ItemStack(nil), build.Items...)
+				build.Liquids = append([]LiquidStack(nil), build.Liquids...)
+				build.Config = append([]byte(nil), build.Config...)
+				build.Payload = append([]byte(nil), build.Payload...)
+				build.MapSyncData = append([]byte(nil), build.MapSyncData...)
+				build.MapSyncTail = append([]byte(nil), build.MapSyncTail...)
+				build.MapPowerLinks = append([]int32(nil), build.MapPowerLinks...)
+				out.Tiles[i].Build = &build
+			}
+		}
+	}
+	if len(w.Units) > 0 {
+		out.Units = make(map[int32]*Unit, len(w.Units))
+		for id, unit := range w.Units {
+			if unit == nil {
+				continue
+			}
+			copyUnit := *unit
+			out.Units[id] = &copyUnit
+		}
+	} else {
+		out.Units = make(map[int32]*Unit)
+	}
+	if len(w.Entities) > 0 {
+		out.Entities = make([]RawEntity, len(w.Entities))
+		for i := range w.Entities {
+			out.Entities[i] = cloneRawEntity(w.Entities[i])
+		}
+	}
+	return out
+}
+
+func NewWorldModel(width, height int) *WorldModel {
+	total := width * height
+	tiles := make([]Tile, total)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			i := y*width + x
+			tiles[i] = Tile{X: x, Y: y}
+		}
+	}
+	return &WorldModel{
+		Width:        width,
+		Height:       height,
+		Tiles:        tiles,
+		Units:        make(map[int32]*Unit),
+		Entities:     make([]RawEntity, 0),
+		NextEntityID: 1,
+	}
+}
+
+func (w *WorldModel) InBounds(x, y int) bool {
+	return x >= 0 && y >= 0 && x < w.Width && y < w.Height
+}
+
+func (w *WorldModel) TileAt(x, y int) (*Tile, error) {
+	if !w.InBounds(x, y) {
+		return nil, ErrOutOfBounds
+	}
+	return &w.Tiles[y*w.Width+x], nil
+}
+
+func (w *WorldModel) AddEntity(e RawEntity) RawEntity {
+	if e.ID == 0 {
+		e.ID = w.NextEntityID
+	}
+	if e.ID >= w.NextEntityID {
+		w.NextEntityID = e.ID + 1
+	}
+	w.Entities = append(w.Entities, e)
+	w.EntitiesRev++
+	return e
+}
+
+func (w *WorldModel) RemoveEntity(id int32) (RawEntity, bool) {
+	for i := range w.Entities {
+		if w.Entities[i].ID != id {
+			continue
+		}
+		removed := w.Entities[i]
+		last := len(w.Entities) - 1
+		w.Entities[i] = w.Entities[last]
+		w.Entities = w.Entities[:last]
+		w.EntitiesRev++
+		return removed, true
+	}
+	return RawEntity{}, false
+}

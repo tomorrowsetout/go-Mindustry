@@ -1,0 +1,45 @@
+import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.compile.JavaCompile
+
+def benchProps = gradle.startParameter.projectProperties
+def launcherFile = benchProps["mdtBenchLauncherFile"]
+def classesDir = benchProps["mdtBenchClassesDir"]
+def mapFile = benchProps["mdtBenchMap"]
+def mode = benchProps["mdtBenchMode"] ?: ""
+def warmup = benchProps["mdtBenchWarmup"] ?: "20"
+def ticks = benchProps["mdtBenchTicks"] ?: "300"
+def deltaMs = benchProps["mdtBenchDeltaMs"] ?: "16.666667"
+def runtimeDir = benchProps["mdtBenchRuntimeDir"] ?: "build/mdt-step-bench-runtime"
+
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    if(!root.childProjects.containsKey("server")){
+        return
+    }
+    def serverProject = root.project(":server")
+
+    root.tasks.register("mdtStepBenchCompile", JavaCompile) {
+        dependsOn(serverProject.tasks.named("classes"))
+        source = root.files(launcherFile)
+        classpath = serverProject.sourceSets.main.runtimeClasspath
+        destinationDirectory.set(root.file(classesDir))
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+        options.release.set(17)
+        options.encoding = "UTF-8"
+    }
+
+    root.tasks.register("mdtOfficialStepBench", JavaExec) {
+        dependsOn(root.tasks.named("mdtStepBenchCompile"))
+        classpath = root.files(classesDir) + serverProject.sourceSets.main.runtimeClasspath
+        mainClass.set("mdtserver.bench.OfficialStepBenchmark")
+        workingDir = new File(root.projectDir, "core/assets")
+        jvmArgs "-Xms512m", "-Xmx2g"
+        args "--map", mapFile,
+            "--mode", mode,
+            "--runtime-dir", runtimeDir,
+            "--warmup", warmup,
+            "--ticks", ticks,
+            "--delta-ms", deltaMs
+    }
+}

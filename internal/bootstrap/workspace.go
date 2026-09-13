@@ -1,0 +1,198 @@
+package bootstrap
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	mdtserver "mdt-server"
+	"mdt-server/internal/config"
+)
+
+type Result struct {
+	CreatedDirs  []string
+	CreatedFiles []string
+}
+
+func EnsureWorkspace(cfgPath string, cfg config.Config) (Result, error) {
+	var out Result
+	createdDirSet := map[string]struct{}{}
+	createdFileSet := map[string]struct{}{}
+	configDir := filepath.FromSlash("configs")
+	rootDir := "."
+	if p := strings.TrimSpace(cfgPath); p != "" {
+		configDir = filepath.Dir(p)
+		rootDir = filepath.Dir(configDir)
+	}
+	if strings.TrimSpace(configDir) == "" {
+		configDir = filepath.FromSlash("configs")
+	}
+	if strings.TrimSpace(rootDir) == "" || rootDir == configDir {
+		rootDir = "."
+	}
+	toRoot := func(p string) string {
+		p = strings.TrimSpace(p)
+		if p == "" || filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(rootDir, p)
+	}
+
+	mkdir := func(dir string) error {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return nil
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		if _, ok := createdDirSet[dir]; !ok {
+			out.CreatedDirs = append(out.CreatedDirs, dir)
+			createdDirSet[dir] = struct{}{}
+		}
+		return nil
+	}
+	writeIfMissing := func(path string, data []byte, mode os.FileMode) error {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return nil
+		}
+		if st, err := os.Stat(path); err == nil {
+			if st.IsDir() {
+				return fmt.Errorf("path is directory: %s", path)
+			}
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := mkdir(filepath.Dir(path)); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, data, mode); err != nil {
+			return err
+		}
+		if _, ok := createdFileSet[path]; !ok {
+			out.CreatedFiles = append(out.CreatedFiles, path)
+			createdFileSet[path] = struct{}{}
+		}
+		return nil
+	}
+
+	// Main config is user-owned; bootstrap should not rewrite or auto-create it.
+	if strings.TrimSpace(cfgPath) != "" {
+		if _, err := os.Stat(cfgPath); err != nil && !os.IsNotExist(err) {
+			return out, err
+		}
+	}
+	policy, err := loadReleasePolicy(cfg.Persist.Directory)
+	if err != nil {
+		return out, err
+	}
+
+	dirs := []string{
+		configDir, // configs 目录存放 INI 与 JSON 配置/字典文件
+		filepath.Join(configDir, "json"),
+		cfg.Runtime.WorldsDir,
+		cfg.Runtime.LogsDir,
+		cfg.Storage.Directory,
+		filepath.Join(cfg.Storage.Directory, "players"),
+		cfg.Persist.Directory,
+		cfg.Mods.Directory,
+		cfg.Mods.JSDir,
+		cfg.Mods.NodeDir,
+		cfg.Mods.GoDir,
+		filepath.Dir(strings.TrimSpace(cfg.Script.File)),
+		filepath.Dir(strings.TrimSpace(cfg.Admin.OpsFile)),
+		filepath.Dir(strings.TrimSpace(cfg.Runtime.VanillaProfiles)),
+	}
+	dirs = append(dirs,
+		filepath.Dir(cfgPath),
+	)
+	dirs = uniqDirs(dirs)
+	for _, d := range dirs {
+		if err := mkdir(d); err != nil {
+			return out, err
+		}
+	}
+
+	_ = writeIfMissing(filepath.Join(cfg.Storage.Directory, "all.jsonl"), []byte(""), 0o644)
+
+	scriptPayload := map[string]any{
+		"version":       1,
+		"startup_tasks": []any{},
+		"daily_gc_time": "",
+		"updated_at":    time.Now().UTC().Format(time.RFC3339),
+	}
+	if b, err := json.MarshalIndent(scriptPayload, "", "  "); err == nil {
+		_ = writeIfMissing(cfg.Script.File, b, 0o644)
+	}
+	opsPayload := map[string]any{
+		"ops":      []any{},
+		"saved_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if b, err := json.MarshalIndent(opsPayload, "", "  "); err == nil {
+		_ = writeIfMissing(cfg.Admin.OpsFile, b, 0o644)
+	}
+	if strings.TrimSpace(cfg.Runtime.VanillaProfiles) != "" {
+		_ = writeBundledRuntimeFileIfMissing(rootDir, cfg.Runtime.VanillaProfiles)
+		_ = writeBundledRuntimeFileIfMissing(rootDir, filepath.Join(filepath.Dir(cfg.Runtime.VanillaProfiles), "content_ids.json"))
+	}
+
+	if err := releaseEmbeddedConfigs(configDir); err != nil {
+		return out, err
+	}
+	worldsDirAbs := toRoot(cfg.Runtime.WorldsDir)
+	if err := releaseEmbeddedWorlds(worldsDirAbs); err != nil {
+		return out, err
+	}
+	if shouldReleaseEmbedded(policy) {
+		if err := markEmbeddedReleasedAt(cfg.Persist.Directory, policy); err != nil {
+			return out, err
+		}
+	}
+
+	return out, nil
+}
+
+func writeBundledRuntimeFileIfMissing(rootDir, rel string) error {
+	rootDir = strings.TrimSpace(rootDir)
+	rel = filepath.Clean(strings.TrimSpace(rel))
+	if rel == "" || rel == "." {
+		return nil
+	}
+	target := rel
+	if rootDir != "" && rootDir != "." && !filepath.IsAbs(target) {
+		target = filepath.Join(rootDir, rel)
+	}
+	if st, err := os.Stat(target); err == nil && !st.IsDir() {
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	bundledRel := rel
+	if filepath.IsAbs(bundledRel) {
+		if rootDir != "" {
+			if rootAbs, err := filepath.Abs(rootDir); err == nil {
+				if targetAbs, terr := filepath.Abs(bundledRel); terr == nil {
+					if r, rerr := filepath.Rel(rootAbs, targetAbs); rerr == nil &&
+						r != "." && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+						bundledRel = r
+					}
+				}
+			}
+		}
+	}
+	bundledPath := filepath.ToSlash(filepath.Clean(bundledRel))
+	data, err := fs.ReadFile(mdtserver.BundledFiles, bundledPath)
+	if err != nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, data, 0o644)
+}

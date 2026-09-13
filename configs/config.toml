@@ -1,0 +1,31 @@
+# mdt-server 主配置
+# 这里只保留少量全局控制项。
+# 其他大部分配置已经拆分到同目录下的各个 .toml 侧配置文件。
+
+[config]
+# API 侧配置文件名，通常保持 api.toml 即可。
+api_file = "api.toml"
+# 是否在缺失时自动创建公开连接 UUID 映射文件。
+conn_uuid_auto_create = true
+# 是否在缺失时自动创建玩家身份文件。
+player_identity_auto_create = true
+# 是否启用公开连接 UUID 显示。
+public_conn_uuid_enabled = true
+# 公开连接 UUID 文件相对路径。
+public_conn_uuid_file = "json/conn_uuid.json"
+# 配置热重载扫描间隔，单位秒。
+reload_interval_sec = 5
+# 是否输出配置热重载日志。
+reload_log_enabled = false
+# 是否启用翻译后的连接日志显示。
+translated_conn_log_enabled = true
+
+[authority_sync]
+# 同步策略，可选 official / static / dynamic。
+strategy = "dynamic"
+
+[building]
+# 是否输出建筑相关日志。
+log_enabled = true
+# 建筑日志是否优先显示翻译后的中文名称。
+translated_enabled = true

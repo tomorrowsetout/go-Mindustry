@@ -1,0 +1,35 @@
+import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.compile.JavaCompile
+
+def oracleProps = gradle.startParameter.projectProperties
+def launcherFile = oracleProps["mdtOracleLauncherFile"]
+def classesDir = oracleProps["mdtOracleClassesDir"]
+def scenarioFile = oracleProps["mdtOracleScenario"]
+def outputFile = oracleProps["mdtOracleOut"]
+
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    if(!root.childProjects.containsKey("server")){
+        return
+    }
+    def serverProject = root.project(":server")
+
+    root.tasks.register("mdtOracleCompile", JavaCompile) {
+        dependsOn(serverProject.tasks.named("classes"))
+        source = root.files(launcherFile)
+        classpath = serverProject.sourceSets.main.runtimeClasspath
+        destinationDirectory.set(root.file(classesDir))
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+        options.release.set(17)
+        options.encoding = "UTF-8"
+    }
+
+    root.tasks.register("mdtOfficialTrace", JavaExec) {
+        dependsOn(root.tasks.named("mdtOracleCompile"))
+        classpath = root.files(classesDir) + serverProject.sourceSets.main.runtimeClasspath
+        mainClass.set("mdtserver.oracle.OfficialTraceLauncher")
+        workingDir = new File(root.projectDir, "core/assets")
+        args "--scenario", scenarioFile, "--out", outputFile
+    }
+}

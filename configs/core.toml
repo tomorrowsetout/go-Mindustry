@@ -1,0 +1,18 @@
+# 核心配置
+
+[core]
+dual_core_enabled = true
+tps = 120
+
+[runtime]
+# 0 = 自动使用本机逻辑核数 (runtime.NumCPU)
+# 也可显式写死，例如 cores = 8；写死值不会超过本机核数
+cores = 0
+scheduler_enabled = true
+
+[memory]
+check_interval_sec = 5
+free_os_memory = false
+gc_trigger_mb = 0
+limit_mb = 0
+startup_max_mb = 0

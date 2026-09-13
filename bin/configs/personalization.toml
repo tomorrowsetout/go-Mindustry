@@ -1,0 +1,34 @@
+# 个性化显示配置
+
+[personalization]
+console_intro_api_enabled = true
+console_intro_current_map_enabled = true
+console_intro_enabled = true
+console_intro_help_hint_enabled = true
+console_intro_listen_addr_enabled = true
+console_intro_local_ip_enabled = true
+console_intro_server_name_enabled = true
+core2_console_title = "mdt-server | Core2 | IO"
+core3_console_title = "mdt-server | Core3 | Snapshot"
+core4_console_title = "mdt-server | Core4 | Policy"
+join_leave_chat_enabled = true
+main_console_title = "mdt-server | 主进程 | {server_name}"
+map_load_details_enabled = true
+player_bind_api_cache_sec = 30
+player_bind_api_timeout_ms = 1500
+player_bind_api_url = ""
+player_bind_prefix_enabled = true
+player_bind_source = "internal"
+player_bound_prefix = "[green]（已绑定）[]"
+player_conn_id_suffix_enabled = true
+player_conn_id_suffix_format = "[gray]{id}[]"
+player_identity_file = "json/player_identity.json"
+player_name_color_enabled = true
+player_name_prefix = ""
+player_name_suffix = ""
+player_title_enabled = true
+player_unbound_prefix = "[scarlet]（未绑定）[]"
+startup_current_map_line_enabled = true
+startup_help_enabled = true
+startup_report_enabled = true
+unit_id_list_enabled = true

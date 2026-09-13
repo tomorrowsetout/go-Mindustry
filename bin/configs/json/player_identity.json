@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "by_conn_uuid": {
+    "2380196": {
+      "bound": true
+    },
+    "25248": {
+      "bound": false
+    },
+    "45503": {
+      "bound": false
+    },
+    "57062": {
+      "bound": false
+    },
+    "62511": {
+      "bound": false
+    }
+  }
+}
