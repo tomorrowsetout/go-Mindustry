@@ -4859,16 +4859,20 @@ func (p *Remote_Menus_menu_106) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.MenuId = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := ReadString(r)
 	if err != nil {
 		return err
 	}
-	p.Title = v1
-	v2, err := r.ReadStringRaw()
+	if v1 != nil {
+		p.Title = *v1
+	}
+	v2, err := ReadString(r)
 	if err != nil {
 		return err
 	}
-	p.Message = v2
+	if v2 != nil {
+		p.Message = *v2
+	}
 	v3, err := ReadStringArray(r)
 	if err != nil {
 		return err
@@ -4881,10 +4885,13 @@ func (p *Remote_Menus_menu_106) Write(w *Writer) error {
 	if err := w.WriteInt32(p.MenuId); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Title); err != nil {
+	// Java TypeIO.writeString: exists-byte + write.str
+	title := p.Title
+	if err := WriteString(w, &title); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	message := p.Message
+	if err := WriteString(w, &message); err != nil {
 		return err
 	}
 	if err := WriteStringArray(w, p.Options); err != nil {
