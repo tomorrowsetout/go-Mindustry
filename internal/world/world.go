@@ -153,6 +153,7 @@ type World struct {
 	powerStorageCapacityByBlock []float32
 	itemInsertNeverByBlock      []uint8
 	logisticsKindByBlock        []uint8
+	liquidCapByBlock            []float32
 	unitNamesByID               map[int16]string
 	unitNamesByIndex            []string
 	unitLookupNamesByID         map[int16]string
@@ -226,6 +227,9 @@ type World struct {
 	payloadDriverShots          []payloadDriverShot
 	blockDumpIndex              map[int32]int
 	dumpNeighborCache           map[int32][]int32
+	liquidDumpNeighborCache     map[int32][]int32
+	virtualDumpBlockedUntil     map[int32]uint64
+	liquidDumpBlockedUntil      map[int32]uint64
 	unloaderLastUsed            map[int64]int
 	itemSourceAccum             map[int32]float32
 	itemSourceAccumByPos        []float32
@@ -2056,6 +2060,9 @@ func New(cfg Config) *World {
 		payloadDriverShots:          []payloadDriverShot{},
 		blockDumpIndex:              map[int32]int{},
 		dumpNeighborCache:           map[int32][]int32{},
+		liquidDumpNeighborCache:     map[int32][]int32{},
+		virtualDumpBlockedUntil:     map[int32]uint64{},
+		liquidDumpBlockedUntil:      map[int32]uint64{},
 		unloaderLastUsed:            map[int64]int{},
 		itemSourceAccum:             map[int32]float32{},
 		itemSourceAccumByPos:        []float32{},
@@ -3335,14 +3342,34 @@ func (w *World) pushLiquidSourceLocked(pos int32, tile *Tile, liquid LiquidID, a
 	if tile == nil || tile.Build == nil || w.model == nil {
 		return
 	}
+	if until, ok := w.liquidDumpBlockedUntil[pos]; ok && w.tick < until {
+		return
+	}
 	capacity := w.liquidCapacityForBlockLocked(tile)
 	if capacity <= 0 {
 		return
 	}
-	tile.Build.Liquids = []LiquidStack{{Liquid: liquid, Amount: capacity}}
+	// Reuse the existing stack when the source already holds this liquid.
+	if len(tile.Build.Liquids) == 1 && tile.Build.Liquids[0].Liquid == liquid {
+		tile.Build.Liquids[0].Amount = capacity
+	} else {
+		if cap(tile.Build.Liquids) >= 1 {
+			tile.Build.Liquids = tile.Build.Liquids[:1]
+			tile.Build.Liquids[0] = LiquidStack{Liquid: liquid, Amount: capacity}
+		} else {
+			tile.Build.Liquids = []LiquidStack{{Liquid: liquid, Amount: capacity}}
+		}
+	}
 	tile.Build.CurrentLiquid = liquid
 	tile.Build.CurrentLiquidSet = true
-	w.dumpLiquidProportionalLocked(pos, tile, liquid, 2)
+	if !w.dumpLiquidProportionalLocked(pos, tile, liquid, 2) {
+		if w.liquidDumpBlockedUntil == nil {
+			w.liquidDumpBlockedUntil = map[int32]uint64{}
+		}
+		w.liquidDumpBlockedUntil[pos] = w.tick + 8
+	} else {
+		delete(w.liquidDumpBlockedUntil, pos)
+	}
 }
 
 func (w *World) logisticsKindLocked(blockID int16) uint8 {
@@ -3499,7 +3526,23 @@ func (w *World) liquidCapacityForBlockLocked(tile *Tile) float32 {
 	if tile == nil || tile.Block == 0 {
 		return 0
 	}
-	name := w.blockNameByID(int16(tile.Block))
+	id := int16(tile.Block)
+	if w.liquidCapByBlock != nil {
+		if idx := int(id); idx < len(w.liquidCapByBlock) {
+			if c := w.liquidCapByBlock[idx]; c != 0 {
+				return c
+			}
+		}
+	}
+	name := w.blockNameByID(id)
+	capacity := w.liquidCapacityForBlockNameLocked(name)
+	if w.liquidCapByBlock != nil && id > 0 && int(id) < len(w.liquidCapByBlock) && capacity > 0 {
+		w.liquidCapByBlock[int(id)] = capacity
+	}
+	return capacity
+}
+
+func (w *World) liquidCapacityForBlockNameLocked(name string) float32 {
 	switch name {
 	case "conduit":
 		return 20
@@ -4565,76 +4608,81 @@ func (w *World) stepItemLogistics(delta time.Duration, profileDetails bool) item
 		if tile.Build == nil || tile.Block == 0 {
 			continue
 		}
-		switch w.blockNameByID(int16(tile.Block)) {
-		case "duct":
-			var startedAt time.Time
-			if profileDetails {
-				startedAt = time.Now()
+		kind := w.logisticsKindLocked(int16(tile.Block))
+		if kind == logKindNone {
+			switch w.blockNameByID(int16(tile.Block)) {
+			case "duct":
+				kind = logKindDuct
+			case "armored-duct":
+				kind = logKindArmoredDuct
+			case "duct-router":
+				kind = logKindDuctRouter
+			case "overflow-duct":
+				kind = logKindOverflowDuct
+			case "underflow-duct":
+				kind = logKindOverflowDuct // overflow step with invert
+			case "duct-bridge":
+				kind = logKindDuctBridge
+			case "duct-unloader":
+				kind = logKindDuctUnloader
 			}
-			w.stepDuctLocked(pos, tile, 4, false, dt)
+		}
+		switch kind {
+		case logKindDuct:
 			if profileDetails {
+				startedAt := time.Now()
+				w.stepDuctLocked(pos, tile, 4, false, dt)
 				perf.Duct += time.Since(startedAt)
 				perf.DuctCount++
+			} else {
+				w.stepDuctLocked(pos, tile, 4, false, dt)
 			}
-		case "armored-duct":
-			var startedAt time.Time
+		case logKindArmoredDuct:
 			if profileDetails {
-				startedAt = time.Now()
-			}
-			w.stepDuctLocked(pos, tile, 4, true, dt)
-			if profileDetails {
+				startedAt := time.Now()
+				w.stepDuctLocked(pos, tile, 4, true, dt)
 				perf.Duct += time.Since(startedAt)
 				perf.DuctCount++
+			} else {
+				w.stepDuctLocked(pos, tile, 4, true, dt)
 			}
-		case "duct-router":
-			var startedAt time.Time
+		case logKindDuctRouter:
 			if profileDetails {
-				startedAt = time.Now()
-			}
-			w.stepDuctRouterLocked(pos, tile, 4, false, dt)
-			if profileDetails {
+				startedAt := time.Now()
+				w.stepDuctRouterLocked(pos, tile, 4, false, dt)
 				perf.Router += time.Since(startedAt)
 				perf.RouterCount++
+			} else {
+				w.stepDuctRouterLocked(pos, tile, 4, false, dt)
 			}
-		case "overflow-duct":
-			var startedAt time.Time
+		case logKindOverflowDuct:
+			// overflow-duct uses invert=false; underflow-duct invert=true.
+			invert := w.blockNameByID(int16(tile.Block)) == "underflow-duct"
 			if profileDetails {
-				startedAt = time.Now()
-			}
-			w.stepOverflowDuctLocked(pos, tile, 4, false, dt)
-			if profileDetails {
+				startedAt := time.Now()
+				w.stepOverflowDuctLocked(pos, tile, 4, invert, dt)
 				perf.Router += time.Since(startedAt)
 				perf.RouterCount++
+			} else {
+				w.stepOverflowDuctLocked(pos, tile, 4, invert, dt)
 			}
-		case "underflow-duct":
-			var startedAt time.Time
+		case logKindDuctBridge:
 			if profileDetails {
-				startedAt = time.Now()
-			}
-			w.stepOverflowDuctLocked(pos, tile, 4, true, dt)
-			if profileDetails {
-				perf.Router += time.Since(startedAt)
-				perf.RouterCount++
-			}
-		case "duct-bridge":
-			var startedAt time.Time
-			if profileDetails {
-				startedAt = time.Now()
-			}
-			w.stepDuctBridgeLocked(pos, tile, 4, dt)
-			if profileDetails {
+				startedAt := time.Now()
+				w.stepDuctBridgeLocked(pos, tile, 4, dt)
 				perf.Bridge += time.Since(startedAt)
 				perf.BridgeCount++
+			} else {
+				w.stepDuctBridgeLocked(pos, tile, 4, dt)
 			}
-		case "duct-unloader":
-			var startedAt time.Time
+		case logKindDuctUnloader:
 			if profileDetails {
-				startedAt = time.Now()
-			}
-			w.stepDirectionalUnloaderLocked(pos, tile, 4, dt)
-			if profileDetails {
+				startedAt := time.Now()
+				w.stepDirectionalUnloaderLocked(pos, tile, 4, dt)
 				perf.Unloader += time.Since(startedAt)
 				perf.UnloaderCount++
+			} else {
+				w.stepDirectionalUnloaderLocked(pos, tile, 4, dt)
 			}
 		}
 	}
@@ -7302,6 +7350,9 @@ func (w *World) dumpVirtualItemLocked(pos int32, item ItemID, canDump func(int32
 	if w.model == nil {
 		return false
 	}
+	if until, ok := w.virtualDumpBlockedUntil[pos]; ok && w.tick < until {
+		return false
+	}
 	neighbors := w.dumpProximityLocked(pos)
 	if len(neighbors) == 0 {
 		return false
@@ -7323,10 +7374,16 @@ func (w *World) dumpVirtualItemLocked(pos int32, item ItemID, canDump func(int32
 		}
 		if w.tryInsertItemLocked(pos, target, item, 0) {
 			w.advanceDumpIndexLocked(pos, index+1, len(neighbors))
+			delete(w.virtualDumpBlockedUntil, pos)
 			return true
 		}
 		w.advanceDumpIndexLocked(pos, index+1, len(neighbors))
 	}
+	// All neighbors refused — back off to skip the walk on saturated networks.
+	if w.virtualDumpBlockedUntil == nil {
+		w.virtualDumpBlockedUntil = map[int32]uint64{}
+	}
+	w.virtualDumpBlockedUntil[pos] = w.tick + 8
 	return false
 }
 
@@ -8045,6 +8102,9 @@ func computeBlockEdgeOffsets(size int) [][2]int {
 func (w *World) rebuildBlockOccupancyLocked() {
 	w.blockOccupancy = map[int32]int32{}
 	w.dumpNeighborCache = map[int32][]int32{}
+	w.liquidDumpNeighborCache = map[int32][]int32{}
+	w.virtualDumpBlockedUntil = map[int32]uint64{}
+	w.liquidDumpBlockedUntil = map[int32]uint64{}
 	w.unloaderLastUsed = map[int64]int{}
 	w.activeTilePositions = w.activeTilePositions[:0]
 	w.itemLogisticsTilePositions = w.itemLogisticsTilePositions[:0]
@@ -8804,6 +8864,9 @@ func (w *World) SetModel(m *WorldModel) {
 	w.payloadDriverShots = []payloadDriverShot{}
 	w.blockDumpIndex = map[int32]int{}
 	w.dumpNeighborCache = map[int32][]int32{}
+	w.liquidDumpNeighborCache = map[int32][]int32{}
+	w.virtualDumpBlockedUntil = map[int32]uint64{}
+	w.liquidDumpBlockedUntil = map[int32]uint64{}
 	w.itemSourceAccum = map[int32]float32{}
 	w.itemSourceAccumByPos = w.itemSourceAccumByPos[:0]
 	w.routerInputPos = map[int32]int32{}
@@ -8896,6 +8959,8 @@ func (w *World) SetModel(m *WorldModel) {
 		w.powerStorageCapacityByBlock = make([]float32, int(maxBlockID)+1)
 		w.itemInsertNeverByBlock = make([]uint8, int(maxBlockID)+1)
 		w.logisticsKindByBlock = make([]uint8, int(maxBlockID)+1)
+		w.liquidCapByBlock = make([]float32, int(maxBlockID)+1)
+		w.liquidCapByBlock = make([]float32, int(maxBlockID)+1)
 		for k, v := range m.BlockNames {
 			name := strings.ToLower(strings.TrimSpace(v))
 			lookupName := normalizeBlockLookupName(name)
@@ -8909,6 +8974,7 @@ func (w *World) SetModel(m *WorldModel) {
 					w.itemInsertNeverByBlock[int(k)] = 1
 				}
 				w.logisticsKindByBlock[int(k)] = logisticsKindForName(name)
+				// Cap cache filled lazily via liquidCapacityForBlockLocked.
 			}
 		}
 	}

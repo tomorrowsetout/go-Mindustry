@@ -1,6 +1,9 @@
 package world
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 func (w *World) normalizeBuildingLiquidCurrentsLocked() {
 	if w == nil || w.model == nil {
@@ -464,6 +467,31 @@ func (w *World) moveLiquidProportionalFromLocked(originPos, fromPos, toPos int32
 	return flow
 }
 
+func (w *World) liquidDumpNeighborsLocked(pos int32) []int32 {
+	if w == nil {
+		return nil
+	}
+	if liquidDumpProximityProxySeed == dumpProximityProxySeed {
+		return w.dumpProximityLocked(pos)
+	}
+	if cached, ok := w.liquidDumpNeighborCache[pos]; ok {
+		return cached
+	}
+	base := w.dumpProximityLocked(pos)
+	if len(base) <= 1 {
+		w.liquidDumpNeighborCache[pos] = base
+		return base
+	}
+	out := append(make([]int32, 0, len(base)), base...)
+	sort.SliceStable(out, func(i, j int) bool {
+		ki := dumpProximityProxyKeyForSeed(out[i], liquidDumpProximityProxySeed)
+		kj := dumpProximityProxyKeyForSeed(out[j], liquidDumpProximityProxySeed)
+		return ki < kj
+	})
+	w.liquidDumpNeighborCache[pos] = out
+	return out
+}
+
 func (w *World) dumpLiquidProportionalLocked(pos int32, tile *Tile, liquid LiquidID, scaling float32) bool {
 	if tile == nil || tile.Build == nil || w.model == nil || tile.Build.LiquidAmount(liquid) <= 0.0001 {
 		return false
@@ -471,12 +499,9 @@ func (w *World) dumpLiquidProportionalLocked(pos int32, tile *Tile, liquid Liqui
 	if scaling <= 0 {
 		scaling = 2
 	}
-	neighbors := w.dumpProximityLocked(pos)
+	neighbors := w.liquidDumpNeighborsLocked(pos)
 	if len(neighbors) == 0 {
 		return false
-	}
-	if liquidDumpProximityProxySeed != dumpProximityProxySeed {
-		neighbors = sortedDumpNeighborsForSeed(neighbors, liquidDumpProximityProxySeed)
 	}
 	start := 0
 	if idx, ok := w.blockDumpIndex[pos]; ok && len(neighbors) > 0 {

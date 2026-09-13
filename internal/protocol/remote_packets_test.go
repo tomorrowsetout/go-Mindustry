@@ -85,7 +85,7 @@ func TestRemoteNetServerClientSnapshotUsesOfficialPlansQueueLayout(t *testing.T)
 			t.Fatalf("skip state bool[%d]: %v", i, err)
 		}
 	}
-	if _, err := ReadBlock(reader, ctx); err != nil {
+	if _, err := ReadContent(reader, ctx); err != nil {
 		t.Fatalf("skip selectedBlock: %v", err)
 	}
 	if _, err := reader.ReadInt32(); err != nil {
@@ -232,6 +232,10 @@ func TestRemoteNetServerClientPlanSnapshotReadMatchesOfficialClientLayout(t *tes
 
 func TestRemoteNetClientSendChatMessageReadMatchesOfficialClientLayout(t *testing.T) {
 	wire := NewWriter()
+	// S→C: player entity id is on the wire, then nullable TypeIO string.
+	if err := WriteEntity(wire, &EntityBox{IDValue: 7}); err != nil {
+		t.Fatalf("write player: %v", err)
+	}
 	message := "hello world"
 	if err := WriteString(wire, &message); err != nil {
 		t.Fatalf("write message: %v", err)
@@ -241,8 +245,8 @@ func TestRemoteNetClientSendChatMessageReadMatchesOfficialClientLayout(t *testin
 	if err := packet.Read(NewReader(wire.Bytes()), len(wire.Bytes())); err != nil {
 		t.Fatalf("read packet: %v", err)
 	}
-	if packet.Player != nil {
-		t.Fatalf("expected no implicit player in sendChatMessage payload, got %T", packet.Player)
+	if packet.Player == nil || packet.Player.ID() != 7 {
+		t.Fatalf("expected player id=7, got %#v", packet.Player)
 	}
 	if packet.Message != message {
 		t.Fatalf("expected message %q, got %q", message, packet.Message)

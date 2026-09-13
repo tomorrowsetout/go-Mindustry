@@ -771,6 +771,7 @@ func (p *Remote_NetClient_playerDisconnect_31) Write(w *Writer) error {
 func (p *Remote_NetClient_playerDisconnect_31) Priority() int { return PriorityNormal }
 
 type Remote_NetClient_sendChatMessage_16 struct {
+	// Player IS on the S→C wire (server broadcast).
 	Player Entity
 	Message string
 }
@@ -781,11 +782,13 @@ func (p *Remote_NetClient_sendChatMessage_16) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := r.ReadStringNullable()
 	if err != nil {
 		return err
 	}
-	p.Message = v1
+	if v1 != nil {
+		p.Message = *v1
+	}
 	return nil
 }
 
@@ -793,10 +796,8 @@ func (p *Remote_NetClient_sendChatMessage_16) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Message); err != nil {
-		return err
-	}
-	return nil
+	msg := p.Message
+	return w.WriteStringNullable(&msg)
 }
 
 func (p *Remote_NetClient_sendChatMessage_16) Priority() int { return PriorityNormal }
@@ -806,19 +807,19 @@ type Remote_NetClient_sendMessage_14 struct {
 }
 
 func (p *Remote_NetClient_sendMessage_14) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := r.ReadStringNullable()
 	if err != nil {
 		return err
 	}
-	p.Message = v0
+	if v0 != nil {
+		p.Message = *v0
+	}
 	return nil
 }
 
 func (p *Remote_NetClient_sendMessage_14) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
-		return err
-	}
-	return nil
+	msg := p.Message
+	return w.WriteStringNullable(&msg)
 }
 
 func (p *Remote_NetClient_sendMessage_14) Priority() int { return PriorityNormal }
@@ -1395,11 +1396,6 @@ type Remote_NetServer_clientPlanSnapshot_46 struct {
 }
 
 func (p *Remote_NetServer_clientPlanSnapshot_46) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
 	v1, err := r.ReadInt32()
 	if err != nil {
 		return err
@@ -1414,9 +1410,6 @@ func (p *Remote_NetServer_clientPlanSnapshot_46) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetServer_clientPlanSnapshot_46) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Player); err != nil {
-		return err
-	}
 	if err := w.WriteInt32(p.GroupId); err != nil {
 		return err
 	}
@@ -1469,6 +1462,7 @@ func (p *Remote_NetServer_clientPlanSnapshotReceived_47) Write(w *Writer) error 
 func (p *Remote_NetServer_clientPlanSnapshotReceived_47) Priority() int { return PriorityNormal }
 
 type Remote_NetServer_clientSnapshot_48 struct {
+	// Player is injected by the server from the connection; NOT on the C→S wire.
 	Player Entity
 	SnapshotID int32
 	UnitID int32
@@ -1496,11 +1490,6 @@ type Remote_NetServer_clientSnapshot_48 struct {
 }
 
 func (p *Remote_NetServer_clientSnapshot_48) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
 	v1, err := r.ReadInt32()
 	if err != nil {
 		return err
@@ -1620,9 +1609,6 @@ func (p *Remote_NetServer_clientSnapshot_48) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetServer_clientSnapshot_48) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Player); err != nil {
-		return err
-	}
 	if err := w.WriteInt32(p.SnapshotID); err != nil {
 		return err
 	}
@@ -1698,22 +1684,15 @@ func (p *Remote_NetServer_clientSnapshot_48) Write(w *Writer) error {
 func (p *Remote_NetServer_clientSnapshot_48) Priority() int { return PriorityNormal }
 
 type Remote_NetServer_connectConfirm_50 struct {
+	// Player is injected by the server from the connection; it is NOT on the wire.
 	Player Entity
 }
 
 func (p *Remote_NetServer_connectConfirm_50) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
 	return nil
 }
 
 func (p *Remote_NetServer_connectConfirm_50) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Player); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -2278,10 +2257,7 @@ func (p *Remote_InputHandler_buildingControlSelect_92) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := WriteEntity(w, p.Build); err != nil {
-		return err
-	}
-	return nil
+	return WriteEntity(w, p.Build)
 }
 
 func (p *Remote_InputHandler_buildingControlSelect_92) Priority() int { return PriorityNormal }
@@ -2627,6 +2603,7 @@ type Remote_InputHandler_pingLocation_73 struct {
 }
 
 func (p *Remote_InputHandler_pingLocation_73) Read(r *Reader, _ int) error {
+	// S→C includes the player; C→S omits it (serializer special-cases inbound).
 	v0, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -2836,12 +2813,7 @@ type Remote_InputHandler_requestUnitPayload_81 struct {
 }
 
 func (p *Remote_InputHandler_requestUnitPayload_81) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
-	v1, err := ReadEntity(r, r.Ctx)
+	v1, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2853,10 +2825,7 @@ func (p *Remote_InputHandler_requestUnitPayload_81) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := WriteEntity(w, p.Target); err != nil {
-		return err
-	}
-	return nil
+	return WriteUnit(w, p.Target)
 }
 
 func (p *Remote_InputHandler_requestUnitPayload_81) Priority() int { return PriorityNormal }
@@ -3582,17 +3551,13 @@ func (p *Remote_InputHandler_unitClear_95) Write(w *Writer) error {
 func (p *Remote_InputHandler_unitClear_95) Priority() int { return PriorityNormal }
 
 type Remote_InputHandler_unitControl_94 struct {
+	// Player is injected by the server from the connection; NOT on the C→S wire.
 	Player Entity
 	Unit Entity
 }
 
 func (p *Remote_InputHandler_unitControl_94) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
-	v1, err := ReadEntity(r, r.Ctx)
+	v1, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -3604,10 +3569,7 @@ func (p *Remote_InputHandler_unitControl_94) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := WriteEntity(w, p.Unit); err != nil {
-		return err
-	}
-	return nil
+	return WriteUnit(w, p.Unit)
 }
 
 func (p *Remote_InputHandler_unitControl_94) Priority() int { return PriorityNormal }

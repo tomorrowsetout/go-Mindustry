@@ -47,7 +47,19 @@ func benchmarkWorldStepMSAV(b *testing.B, relMapPath string, tps int, delta time
 	}
 	if scheduler {
 		prevProcs := runtime.GOMAXPROCS(0)
-		engine := sim.NewEngine(sim.Config{TPS: tps, Cores: 6, Partitions: 4})
+		numCPU := runtime.NumCPU()
+		ioWorkers := 1
+		if numCPU >= 8 {
+			ioWorkers = 2
+		}
+		if numCPU >= 16 {
+			ioWorkers = 3
+		}
+		partitions := numCPU - 1 - ioWorkers
+		if partitions < 1 {
+			partitions = 1
+		}
+		engine := sim.NewEngine(sim.Config{TPS: tps, Cores: numCPU, Partitions: partitions})
 		wld.SetScheduler(engine)
 		b.Cleanup(func() {
 			wld.SetScheduler(nil)
