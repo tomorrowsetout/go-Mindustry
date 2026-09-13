@@ -29,6 +29,18 @@ func writeLenBytes(w *Writer, b []byte) error {
 	}
 	return w.WriteBytes(b)
 }
+
+// readTypeIOString reads a TypeIO nullable string into a plain Go string.
+func readTypeIOString(r *Reader) (string, error) {
+	s, err := ReadString(r)
+	if err != nil {
+		return "", err
+	}
+	if s == nil {
+		return "", nil
+	}
+	return *s, nil
+}
 func readLenInt16s(r *Reader) ([]int16, error) {
 	// TypeIO int/short arrays use a short length prefix.
 	n, err := r.ReadInt16()
@@ -247,7 +259,7 @@ type Remote_NetClient_clientBinaryPacketReliable_5 struct {
 }
 
 func (p *Remote_NetClient_clientBinaryPacketReliable_5) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -261,7 +273,7 @@ func (p *Remote_NetClient_clientBinaryPacketReliable_5) Read(r *Reader, _ int) e
 }
 
 func (p *Remote_NetClient_clientBinaryPacketReliable_5) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
 	if err := writeLenBytes(w, p.Contents); err != nil {
@@ -278,7 +290,7 @@ type Remote_NetClient_clientBinaryPacketUnreliable_6 struct {
 }
 
 func (p *Remote_NetClient_clientBinaryPacketUnreliable_6) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -292,7 +304,7 @@ func (p *Remote_NetClient_clientBinaryPacketUnreliable_6) Read(r *Reader, _ int)
 }
 
 func (p *Remote_NetClient_clientBinaryPacketUnreliable_6) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
 	if err := writeLenBytes(w, p.Contents); err != nil {
@@ -309,12 +321,12 @@ type Remote_NetClient_clientPacketReliable_7 struct {
 }
 
 func (p *Remote_NetClient_clientPacketReliable_7) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Type = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -323,10 +335,10 @@ func (p *Remote_NetClient_clientPacketReliable_7) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetClient_clientPacketReliable_7) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Contents); err != nil {
+	if err := WriteString(w, &p.Contents); err != nil {
 		return err
 	}
 	return nil
@@ -340,12 +352,12 @@ type Remote_NetClient_clientPacketUnreliable_8 struct {
 }
 
 func (p *Remote_NetClient_clientPacketUnreliable_8) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Type = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -354,10 +366,10 @@ func (p *Remote_NetClient_clientPacketUnreliable_8) Read(r *Reader, _ int) error
 }
 
 func (p *Remote_NetClient_clientPacketUnreliable_8) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Contents); err != nil {
+	if err := WriteString(w, &p.Contents); err != nil {
 		return err
 	}
 	return nil
@@ -393,7 +405,7 @@ type Remote_NetClient_connect_17 struct {
 }
 
 func (p *Remote_NetClient_connect_17) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -407,7 +419,7 @@ func (p *Remote_NetClient_connect_17) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetClient_connect_17) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Ip); err != nil {
+	if err := WriteString(w, &p.Ip); err != nil {
 		return err
 	}
 	if err := w.WriteInt32(p.Port); err != nil {
@@ -659,7 +671,7 @@ type Remote_NetClient_kick_22 struct {
 }
 
 func (p *Remote_NetClient_kick_22) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -668,7 +680,7 @@ func (p *Remote_NetClient_kick_22) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetClient_kick_22) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Reason); err != nil {
+	if err := WriteString(w, &p.Reason); err != nil {
 		return err
 	}
 	return nil
@@ -834,7 +846,7 @@ type Remote_NetClient_sendMessage_15 struct {
 }
 
 func (p *Remote_NetClient_sendMessage_15) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -855,7 +867,7 @@ func (p *Remote_NetClient_sendMessage_15) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetClient_sendMessage_15) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	if err := w.WriteStringNullable(&p.Unformatted); err != nil {
@@ -959,12 +971,12 @@ type Remote_NetClient_setRule_24 struct {
 }
 
 func (p *Remote_NetClient_setRule_24) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Rule = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -973,10 +985,10 @@ func (p *Remote_NetClient_setRule_24) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_NetClient_setRule_24) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Rule); err != nil {
+	if err := WriteString(w, &p.Rule); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.JsonData); err != nil {
+	if err := WriteString(w, &p.JsonData); err != nil {
 		return err
 	}
 	return nil
@@ -1324,7 +1336,7 @@ func (p *Remote_NetServer_clientLogicDataReliable_43) Read(r *Reader, _ int) err
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -1341,7 +1353,7 @@ func (p *Remote_NetServer_clientLogicDataReliable_43) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Channel); err != nil {
+	if err := WriteString(w, &p.Channel); err != nil {
 		return err
 	}
 	if err := WriteObject(w, p.Value, w.Ctx); err != nil {
@@ -1364,7 +1376,7 @@ func (p *Remote_NetServer_clientLogicDataUnreliable_44) Read(r *Reader, _ int) e
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -1381,7 +1393,7 @@ func (p *Remote_NetServer_clientLogicDataUnreliable_44) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Channel); err != nil {
+	if err := WriteString(w, &p.Channel); err != nil {
 		return err
 	}
 	if err := WriteObject(w, p.Value, w.Ctx); err != nil {
@@ -1828,7 +1840,7 @@ func (p *Remote_NetServer_serverBinaryPacketReliable_41) Read(r *Reader, _ int) 
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -1845,7 +1857,7 @@ func (p *Remote_NetServer_serverBinaryPacketReliable_41) Write(w *Writer) error 
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
 	if err := writeLenBytes(w, p.Contents); err != nil {
@@ -1868,7 +1880,7 @@ func (p *Remote_NetServer_serverBinaryPacketUnreliable_42) Read(r *Reader, _ int
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -1885,7 +1897,7 @@ func (p *Remote_NetServer_serverBinaryPacketUnreliable_42) Write(w *Writer) erro
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
 	if err := writeLenBytes(w, p.Contents); err != nil {
@@ -1908,12 +1920,12 @@ func (p *Remote_NetServer_serverPacketReliable_39) Read(r *Reader, _ int) error 
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Type = v1
-	v2, err := r.ReadStringRaw()
+	v2, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -1925,10 +1937,10 @@ func (p *Remote_NetServer_serverPacketReliable_39) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Contents); err != nil {
+	if err := WriteString(w, &p.Contents); err != nil {
 		return err
 	}
 	return nil
@@ -1948,12 +1960,12 @@ func (p *Remote_NetServer_serverPacketUnreliable_40) Read(r *Reader, _ int) erro
 		return err
 	}
 	p.Player = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Type = v1
-	v2, err := r.ReadStringRaw()
+	v2, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -1965,10 +1977,10 @@ func (p *Remote_NetServer_serverPacketUnreliable_40) Write(w *Writer) error {
 	if err := WriteEntity(w, p.Player); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Type); err != nil {
+	if err := WriteString(w, &p.Type); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Contents); err != nil {
+	if err := WriteString(w, &p.Contents); err != nil {
 		return err
 	}
 	return nil
@@ -3760,7 +3772,7 @@ type Remote_LExecutor_setFlag_99 struct {
 }
 
 func (p *Remote_LExecutor_setFlag_99) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -3774,7 +3786,7 @@ func (p *Remote_LExecutor_setFlag_99) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_LExecutor_setFlag_99) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Flag); err != nil {
+	if err := WriteString(w, &p.Flag); err != nil {
 		return err
 	}
 	if err := w.WriteBool(p.Add); err != nil {
@@ -3955,7 +3967,7 @@ func (p *Remote_LExecutor_updateMarkerText_103) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Fetch = v2
-	v3, err := r.ReadStringRaw()
+	v3, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -3973,7 +3985,7 @@ func (p *Remote_LExecutor_updateMarkerText_103) Write(w *Writer) error {
 	if err := w.WriteBool(p.Fetch); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Text); err != nil {
+	if err := WriteString(w, &p.Text); err != nil {
 		return err
 	}
 	return nil
@@ -4075,7 +4087,7 @@ type Remote_Menus_announce_116 struct {
 }
 
 func (p *Remote_Menus_announce_116) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -4084,7 +4096,7 @@ func (p *Remote_Menus_announce_116) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_announce_116) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	return nil
@@ -4097,7 +4109,7 @@ type Remote_Menus_copyToClipboard_129 struct {
 }
 
 func (p *Remote_Menus_copyToClipboard_129) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -4106,7 +4118,7 @@ func (p *Remote_Menus_copyToClipboard_129) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_copyToClipboard_129) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Text); err != nil {
+	if err := WriteString(w, &p.Text); err != nil {
 		return err
 	}
 	return nil
@@ -4127,12 +4139,12 @@ func (p *Remote_Menus_followUpMenu_107) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.MenuId = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Title = v1
-	v2, err := r.ReadStringRaw()
+	v2, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -4149,10 +4161,10 @@ func (p *Remote_Menus_followUpMenu_107) Write(w *Writer) error {
 	if err := w.WriteInt32(p.MenuId); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Title); err != nil {
+	if err := WriteString(w, &p.Title); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	if err := WriteStringArray(w, p.Options); err != nil {
@@ -4206,7 +4218,7 @@ type Remote_Menus_infoMessage_117 struct {
 }
 
 func (p *Remote_Menus_infoMessage_117) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -4215,7 +4227,7 @@ func (p *Remote_Menus_infoMessage_117) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_infoMessage_117) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	return nil
@@ -4563,7 +4575,7 @@ type Remote_Menus_infoToast_126 struct {
 }
 
 func (p *Remote_Menus_infoToast_126) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -4577,7 +4589,7 @@ func (p *Remote_Menus_infoToast_126) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_infoToast_126) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	if err := w.WriteFloat32(p.Duration); err != nil {
@@ -4947,7 +4959,7 @@ type Remote_Menus_openURI_128 struct {
 }
 
 func (p *Remote_Menus_openURI_128) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -4956,7 +4968,7 @@ func (p *Remote_Menus_openURI_128) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_openURI_128) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Uri); err != nil {
+	if err := WriteString(w, &p.Uri); err != nil {
 		return err
 	}
 	return nil
@@ -4991,7 +5003,7 @@ type Remote_Menus_setHudText_113 struct {
 }
 
 func (p *Remote_Menus_setHudText_113) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5000,7 +5012,7 @@ func (p *Remote_Menus_setHudText_113) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_setHudText_113) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	return nil
@@ -5013,7 +5025,7 @@ type Remote_Menus_setHudTextReliable_115 struct {
 }
 
 func (p *Remote_Menus_setHudTextReliable_115) Read(r *Reader, _ int) error {
-	v0, err := r.ReadStringRaw()
+	v0, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5022,7 +5034,7 @@ func (p *Remote_Menus_setHudTextReliable_115) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Menus_setHudTextReliable_115) Write(w *Writer) error {
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	return nil
@@ -5045,12 +5057,12 @@ func (p *Remote_Menus_textInput_110) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.TextInputId = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Title = v1
-	v2, err := r.ReadStringRaw()
+	v2, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5060,7 +5072,7 @@ func (p *Remote_Menus_textInput_110) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.TextLength = v3
-	v4, err := r.ReadStringRaw()
+	v4, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5077,16 +5089,16 @@ func (p *Remote_Menus_textInput_110) Write(w *Writer) error {
 	if err := w.WriteInt32(p.TextInputId); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Title); err != nil {
+	if err := WriteString(w, &p.Title); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	if err := w.WriteInt32(p.TextLength); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Def); err != nil {
+	if err := WriteString(w, &p.Def); err != nil {
 		return err
 	}
 	if err := w.WriteBool(p.Numeric); err != nil {
@@ -5113,12 +5125,12 @@ func (p *Remote_Menus_textInput_111) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.TextInputId = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
 	p.Title = v1
-	v2, err := r.ReadStringRaw()
+	v2, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5128,7 +5140,7 @@ func (p *Remote_Menus_textInput_111) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.TextLength = v3
-	v4, err := r.ReadStringRaw()
+	v4, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5150,16 +5162,16 @@ func (p *Remote_Menus_textInput_111) Write(w *Writer) error {
 	if err := w.WriteInt32(p.TextInputId); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Title); err != nil {
+	if err := WriteString(w, &p.Title); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Message); err != nil {
+	if err := WriteString(w, &p.Message); err != nil {
 		return err
 	}
 	if err := w.WriteInt32(p.TextLength); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Def); err != nil {
+	if err := WriteString(w, &p.Def); err != nil {
 		return err
 	}
 	if err := w.WriteBool(p.Numeric); err != nil {
@@ -5226,7 +5238,7 @@ func (p *Remote_Menus_warningToast_127) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Unicode = v0
-	v1, err := r.ReadStringRaw()
+	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
 	}
@@ -5238,7 +5250,7 @@ func (p *Remote_Menus_warningToast_127) Write(w *Writer) error {
 	if err := w.WriteInt32(p.Unicode); err != nil {
 		return err
 	}
-	if err := w.WriteStringRaw(p.Text); err != nil {
+	if err := WriteString(w, &p.Text); err != nil {
 		return err
 	}
 	return nil
