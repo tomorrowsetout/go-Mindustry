@@ -1981,7 +1981,7 @@ type Remote_Units_unitCapDeath_52 struct {
 }
 
 func (p *Remote_Units_unitCapDeath_52) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -1990,7 +1990,7 @@ func (p *Remote_Units_unitCapDeath_52) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Units_unitCapDeath_52) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	return nil
@@ -2025,7 +2025,7 @@ type Remote_Units_unitDespawn_56 struct {
 }
 
 func (p *Remote_Units_unitDespawn_56) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2034,7 +2034,7 @@ func (p *Remote_Units_unitDespawn_56) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Units_unitDespawn_56) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	return nil
@@ -2069,7 +2069,7 @@ type Remote_Units_unitEnvDeath_53 struct {
 }
 
 func (p *Remote_Units_unitEnvDeath_53) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2078,7 +2078,7 @@ func (p *Remote_Units_unitEnvDeath_53) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Units_unitEnvDeath_53) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	return nil
@@ -2091,7 +2091,7 @@ type Remote_Units_unitSafeDeath_57 struct {
 }
 
 func (p *Remote_Units_unitSafeDeath_57) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2100,7 +2100,7 @@ func (p *Remote_Units_unitSafeDeath_57) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Units_unitSafeDeath_57) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	return nil
@@ -2479,7 +2479,7 @@ type Remote_InputHandler_payloadDropped_86 struct {
 }
 
 func (p *Remote_InputHandler_payloadDropped_86) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2498,7 +2498,7 @@ func (p *Remote_InputHandler_payloadDropped_86) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_InputHandler_payloadDropped_86) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := w.WriteFloat32(p.X); err != nil {
@@ -2519,7 +2519,7 @@ type Remote_InputHandler_pickedBuildPayload_84 struct {
 }
 
 func (p *Remote_InputHandler_pickedBuildPayload_84) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2538,7 +2538,7 @@ func (p *Remote_InputHandler_pickedBuildPayload_84) Read(r *Reader, _ int) error
 }
 
 func (p *Remote_InputHandler_pickedBuildPayload_84) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteEntity(w, p.Build); err != nil {
@@ -2558,7 +2558,7 @@ type Remote_InputHandler_pickedUnitPayload_83 struct {
 }
 
 func (p *Remote_InputHandler_pickedUnitPayload_83) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -2572,7 +2572,7 @@ func (p *Remote_InputHandler_pickedUnitPayload_83) Read(r *Reader, _ int) error 
 }
 
 func (p *Remote_InputHandler_pickedUnitPayload_83) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteEntity(w, p.Target); err != nil {
@@ -3354,7 +3354,7 @@ type Remote_InputHandler_transferItemTo_71 struct {
 }
 
 func (p *Remote_InputHandler_transferItemTo_71) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -3388,7 +3388,7 @@ func (p *Remote_InputHandler_transferItemTo_71) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_InputHandler_transferItemTo_71) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteItem(w, p.Item); err != nil {
@@ -3466,7 +3466,7 @@ type Remote_InputHandler_unitBuildingControlSelect_93 struct {
 }
 
 func (p *Remote_InputHandler_unitBuildingControlSelect_93) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -3480,7 +3480,7 @@ func (p *Remote_InputHandler_unitBuildingControlSelect_93) Read(r *Reader, _ int
 }
 
 func (p *Remote_InputHandler_unitBuildingControlSelect_93) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteEntity(w, p.Build); err != nil {
@@ -3540,7 +3540,7 @@ type Remote_InputHandler_unitEnteredPayload_87 struct {
 }
 
 func (p *Remote_InputHandler_unitEnteredPayload_87) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -3554,7 +3554,7 @@ func (p *Remote_InputHandler_unitEnteredPayload_87) Read(r *Reader, _ int) error
 }
 
 func (p *Remote_InputHandler_unitEnteredPayload_87) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteEntity(w, p.Build); err != nil {
@@ -5240,7 +5240,7 @@ type Remote_Build_beginBreak_132 struct {
 }
 
 func (p *Remote_Build_beginBreak_132) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5264,7 +5264,7 @@ func (p *Remote_Build_beginBreak_132) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Build_beginBreak_132) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteTeam(w, &p.Team); err != nil {
@@ -5292,7 +5292,7 @@ type Remote_Build_beginPlace_133 struct {
 }
 
 func (p *Remote_Build_beginPlace_133) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
+	v0, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5331,7 +5331,7 @@ func (p *Remote_Build_beginPlace_133) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Build_beginPlace_133) Write(w *Writer) error {
-	if err := WriteEntity(w, p.Unit); err != nil {
+	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
 	if err := WriteContent(w, p.Result); err != nil {
