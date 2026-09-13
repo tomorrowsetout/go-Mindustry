@@ -14,7 +14,7 @@ var (
 
 	ProductName = "mdt-server"
 	DisplayName = "mdt-server"
-	GameVersion = "Mindustry 159.7"
+	GameVersion = "Mindustry 160.3"
 	QQGroup     = ""
 	FooterText  = ""
 	IconPNG     = "FBF.png"

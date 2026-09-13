@@ -30,9 +30,12 @@ type testBulletType struct {
 	name string
 }
 
-func TestValidateBuildVersionOnlyAllows159(t *testing.T) {
-	if err := validateBuildVersion(159); err != nil {
-		t.Fatalf("expected build 159 to be accepted, got %v", err)
+func TestValidateBuildVersionOnlyAllows160(t *testing.T) {
+	if err := validateBuildVersion(160); err != nil {
+		t.Fatalf("expected build 160 to be accepted, got %v", err)
+	}
+	if err := validateBuildVersion(159); err == nil {
+		t.Fatal("expected build 159 to be rejected")
 	}
 	if err := validateBuildVersion(158); err == nil {
 		t.Fatal("expected build 158 to be rejected")

@@ -3,7 +3,7 @@
     <img src="./md/logo.png" alt="月月岛科技 Logo" width="170" />
   </a>
 
-  <p><strong>月月岛科技维护 GO-Mindustry Build 158 服务端</strong></p>
+  <p><strong>月月岛科技维护 GO-Mindustry Build 160 服务端</strong></p>
 
   <p>
     <a href="https://github.com/MonthZifang/YUEYUEDAO-TECH"><strong>查看月月岛科技详情</strong></a>
@@ -12,13 +12,13 @@
 
 ## 项目简介
 
-`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务端项目，当前面向官方 `build 158` 客户端版本。
+`mdt-server` 是一个使用 Go 语言实现的 Mindustry 服务端项目，当前面向官方 `build 160`（160.3）客户端版本。
 
 项目提供基础开服能力，并内置 HTTP API，便于后续接入前端面板、自动化管理工具或其他扩展服务。
 
 ## 主要特性
 
-- 支持 Mindustry `build 158`
+- 支持 Mindustry `build 160`（160.3）
 - 使用 Go 编写，便于编译、部署和二次开发
 - 内置 HTTP API，可按需接入外部管理工具
 - 支持地图文件、地图名和随机地图启动
@@ -30,7 +30,7 @@
 
 - Go `1.22` 或更高版本
 - Windows / Linux / macOS
-- Mindustry 客户端版本：`build 158`
+- Mindustry 客户端版本：`build 160`（160.3）
 
 ## 编译
 

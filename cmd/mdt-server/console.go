@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -301,7 +302,16 @@ func runConsole(
 			fmt.Println("用法: data status | data db on|off | data mode file|postgres|mysql|redis | data dir <path>")
 		case "scheduler":
 			if len(parts) == 1 || strings.EqualFold(parts[1], "status") {
-				fmt.Printf("scheduler: enabled=%v cores=%d\n", cfg.Runtime.SchedulerEnabled, cfg.Runtime.Cores)
+				numCPU := runtime.NumCPU()
+				gomax := runtime.GOMAXPROCS(0)
+				cores := cfg.Runtime.Cores
+				if cores <= 0 {
+					cores = numCPU
+				} else if cores > numCPU {
+					cores = numCPU
+				}
+				fmt.Printf("scheduler: enabled=%v dual_core=%v cores_cfg=%d cores_effective=%d num_cpu=%d gomaxprocs=%d\n",
+					cfg.Runtime.SchedulerEnabled, cfg.Core.DualCoreEnabled, cfg.Runtime.Cores, cores, numCPU, gomax)
 				continue
 			}
 			switch strings.ToLower(parts[1]) {

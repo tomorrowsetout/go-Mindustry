@@ -75,7 +75,7 @@ type bindStatusResolver struct {
 const (
 	defaultConfigPath            = "configs/config.toml"
 	maxBlockSnapshotPayloadBytes = netserver.MaxBlockSnapshotPayloadBytes
-	supportedMindustryBuild      = 159
+	supportedMindustryBuild      = 160
 )
 
 var (
@@ -976,7 +976,7 @@ func validateBuildVersion(build int) error {
 func main() {
 	cfgPath := flag.String("config", filepath.FromSlash(defaultConfigPath), "path to config file")
 	addr := flag.String("addr", "0.0.0.0:6567", "listen address for Mindustry protocol (TCP+UDP)")
-	buildVersion := flag.Int("build", supportedMindustryBuild, "Mindustry build version; only official build 159 is supported")
+	buildVersion := flag.Int("build", supportedMindustryBuild, "Mindustry build version; only official build 160 (160.3) is supported")
 	worldArg := flag.String("world", "random", "world source: random | <map-name> | <.msav file path>")
 	recordVideo := flag.Bool("record-video", false, "record a realtime top-down match video from live server state")
 	videoDir := flag.String("video-dir", filepath.FromSlash("data/video"), "base directory for recorded match video sessions")

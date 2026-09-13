@@ -106,6 +106,13 @@ func (p *WorldStream) Read(r *Reader, _ int) error { return nil }
 func (p *WorldStream) Write(w *Writer) error       { return nil }
 func (p *WorldStream) Priority() int               { return PriorityNormal }
 
+// TextureStream is the build-160 incremental texture stream (packet id 6).
+type TextureStream struct{}
+
+func (p *TextureStream) Read(r *Reader, _ int) error { return nil }
+func (p *TextureStream) Write(w *Writer) error       { return nil }
+func (p *TextureStream) Priority() int               { return PriorityNormal }
+
 // ConnectPacket mirrors mindustry.net.Packets.ConnectPacket.
 type ConnectPacket struct {
 	Version     int32

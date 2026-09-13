@@ -31,9 +31,10 @@ func NewRegistry() *PacketRegistry {
 	r.Register(func() Packet { return &StreamChunk{} })
 	r.Register(func() Packet { return &WorldStream{} })
 	r.Register(func() Packet { return &ConnectPacket{} })
-	// build-159.7: external asset streaming base packets
+	// build-160.3: asset + texture streaming base packets
 	r.Register(func() Packet { return &AssetRequirementStream{} })
 	r.Register(func() Packet { return &AssetStream{} })
+	r.Register(func() Packet { return &TextureStream{} })
 	// generated packets from @Remote (Call.registerPackets)
 	initRemotePackets(r)
 	return r

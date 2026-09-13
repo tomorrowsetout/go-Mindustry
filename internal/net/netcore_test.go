@@ -11,9 +11,9 @@ import (
 )
 
 func TestNewServerUsesConfiguredBuildVersion(t *testing.T) {
-	srv := NewServer("127.0.0.1:0", 159)
-	if srv.BuildVersion != 159 {
-		t.Fatalf("expected configured build 159, got %d", srv.BuildVersion)
+	srv := NewServer("127.0.0.1:0", 160)
+	if srv.BuildVersion != 160 {
+		t.Fatalf("expected configured build 160, got %d", srv.BuildVersion)
 	}
 	if err := ValidateConnect(&protocol.ConnectPacket{Version: 157}, srv.BuildVersion); !errors.Is(err, ErrClientOutdated) {
 		t.Fatalf("expected build 157 client to be rejected as outdated, got %v", err)

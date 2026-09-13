@@ -5,7 +5,8 @@ dual_core_enabled = true
 tps = 120
 
 [runtime]
-cores = 6
+# 0 = 自动使用本机逻辑核数 (runtime.NumCPU)
+cores = 0
 scheduler_enabled = true
 
 [memory]

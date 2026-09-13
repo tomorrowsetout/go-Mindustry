@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"mdt-server/internal/nativespatial"
 	"mdt-server/internal/protocol"
 	"mdt-server/internal/vanilla"
 )
@@ -78,7 +79,12 @@ type itemLogisticsPerf struct {
 
 type entitySpatialIndex struct {
 	cellSize int
-	cells    map[int64][]int
+	// native CSR grid (cgo or pure-Go fallback).
+	native *nativespatial.Grid
+	// When non-nil, CSR slot i maps to entity index teamLocalToEntity[i].
+	// Nil for the global all-entity index (slot == entity index).
+	teamLocalToEntity []int
+	query             []int32
 }
 
 type buildingSpatialIndex struct {
@@ -12080,17 +12086,18 @@ func buildEntitySpatialIndex(ents []RawEntity) *entitySpatialIndex {
 		return nil
 	}
 	const entitySpatialCellSize = 64
-	idx := &entitySpatialIndex{
-		cellSize: entitySpatialCellSize,
-		cells:    make(map[int64][]int, len(ents)),
-	}
+	xs := make([]float32, len(ents))
+	ys := make([]float32, len(ents))
 	for i := range ents {
-		cx := int(math.Floor(float64(ents[i].X) / float64(entitySpatialCellSize)))
-		cy := int(math.Floor(float64(ents[i].Y) / float64(entitySpatialCellSize)))
-		key := packSpatialCell(cx, cy)
-		idx.cells[key] = append(idx.cells[key], i)
+		xs[i] = ents[i].X
+		ys[i] = ents[i].Y
 	}
-	return idx
+	g := nativespatial.New(entitySpatialCellSize)
+	g.Build(xs, ys)
+	return &entitySpatialIndex{
+		cellSize: entitySpatialCellSize,
+		native:   g,
+	}
 }
 
 func buildTeamEntitySpatialIndexes(ents []RawEntity) map[TeamID]*entitySpatialIndex {
@@ -12098,24 +12105,32 @@ func buildTeamEntitySpatialIndexes(ents []RawEntity) map[TeamID]*entitySpatialIn
 		return nil
 	}
 	const entitySpatialCellSize = 64
-	out := make(map[TeamID]*entitySpatialIndex)
+	byTeam := make(map[TeamID][]int, 8)
 	for i := range ents {
 		team := ents[i].Team
 		if team == 0 {
 			continue
 		}
-		idx := out[team]
-		if idx == nil {
-			idx = &entitySpatialIndex{
-				cellSize: entitySpatialCellSize,
-				cells:    map[int64][]int{},
-			}
-			out[team] = idx
+		byTeam[team] = append(byTeam[team], i)
+	}
+	if len(byTeam) == 0 {
+		return nil
+	}
+	out := make(map[TeamID]*entitySpatialIndex, len(byTeam))
+	for team, idxs := range byTeam {
+		xs := make([]float32, len(idxs))
+		ys := make([]float32, len(idxs))
+		for j, i := range idxs {
+			xs[j] = ents[i].X
+			ys[j] = ents[i].Y
 		}
-		cx := int(math.Floor(float64(ents[i].X) / float64(entitySpatialCellSize)))
-		cy := int(math.Floor(float64(ents[i].Y) / float64(entitySpatialCellSize)))
-		key := packSpatialCell(cx, cy)
-		idx.cells[key] = append(idx.cells[key], i)
+		g := nativespatial.New(entitySpatialCellSize)
+		g.Build(xs, ys)
+		out[team] = &entitySpatialIndex{
+			cellSize:          entitySpatialCellSize,
+			native:            g,
+			teamLocalToEntity: idxs,
+		}
 	}
 	return out
 }
@@ -12291,20 +12306,34 @@ func (idx *buildingSpatialIndex) forEachInRange(x, y, radius float32, visit func
 }
 
 func (idx *entitySpatialIndex) forEachInRange(x, y, radius float32, visit func(i int)) {
-	if idx == nil || idx.cellSize <= 0 || visit == nil {
+	if idx == nil || idx.native == nil || visit == nil {
 		return
 	}
-	cell := float32(idx.cellSize)
-	minCX := int(math.Floor(float64((x - radius) / cell)))
-	maxCX := int(math.Floor(float64((x + radius) / cell)))
-	minCY := int(math.Floor(float64((y - radius) / cell)))
-	maxCY := int(math.Floor(float64((y + radius) / cell)))
-	for cy := minCY; cy <= maxCY; cy++ {
-		for cx := minCX; cx <= maxCX; cx++ {
-			for _, i := range idx.cells[packSpatialCell(cx, cy)] {
-				visit(i)
+	if cap(idx.query) < 256 {
+		idx.query = make([]int32, 0, 256)
+	}
+	// Grow until the query fits; cells only over-approximate the circle AABB.
+	buf := idx.query[:cap(idx.query)]
+	for {
+		n := idx.native.QueryRadius(x, y, radius, buf)
+		if n < len(buf) {
+			for k := 0; k < n; k++ {
+				slot := int(buf[k])
+				if idx.teamLocalToEntity != nil {
+					if slot < 0 || slot >= len(idx.teamLocalToEntity) {
+						continue
+					}
+					visit(idx.teamLocalToEntity[slot])
+					continue
+				}
+				visit(slot)
 			}
+			return
 		}
+		// Buffer full — enlarge and retry.
+		grown := make([]int32, len(buf)*2)
+		buf = grown
+		idx.query = buf[:0]
 	}
 }
 
