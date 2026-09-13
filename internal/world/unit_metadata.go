@@ -283,7 +283,16 @@ func (w *World) unitRuntimeProfileForTypeLocked(typeID int16) (unitRuntimeProfil
 	if w == nil {
 		return unitRuntimeProfile{}, false
 	}
-	return w.unitRuntimeProfileByNameLocked(w.unitLookupNameByID(typeID))
+	if w.unitRuntimeByType != nil {
+		if prof, ok := w.unitRuntimeByType[typeID]; ok {
+			return prof, true
+		}
+	}
+	prof, ok := w.unitRuntimeProfileByNameLocked(w.unitLookupNameByID(typeID))
+	if ok && w.unitRuntimeByType != nil {
+		w.unitRuntimeByType[typeID] = prof
+	}
+	return prof, ok
 }
 
 func (w *World) unitRuntimeProfileForEntityLocked(e RawEntity) (unitRuntimeProfile, bool) {

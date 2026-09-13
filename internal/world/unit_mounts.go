@@ -133,10 +133,21 @@ func (w *World) unitMountProfilesForEntity(e RawEntity) []unitWeaponMountProfile
 	if w == nil {
 		return nil
 	}
-	if name, ok := w.unitNamesByID[e.TypeID]; ok && name != "" {
-		if mounts, exists := w.unitMountProfilesByName[name]; exists && len(mounts) > 0 {
+	if w.unitMountsByType != nil {
+		if mounts, ok := w.unitMountsByType[e.TypeID]; ok {
 			return mounts
 		}
+	}
+	if name, ok := w.unitNamesByID[e.TypeID]; ok && name != "" {
+		if mounts, exists := w.unitMountProfilesByName[name]; exists && len(mounts) > 0 {
+			if w.unitMountsByType != nil {
+				w.unitMountsByType[e.TypeID] = mounts
+			}
+			return mounts
+		}
+	}
+	if w.unitMountsByType != nil {
+		w.unitMountsByType[e.TypeID] = nil
 	}
 	return nil
 }

@@ -152,6 +152,7 @@ type World struct {
 	blockLookupNamesByIndex     []string
 	powerStorageCapacityByBlock []float32
 	itemInsertNeverByBlock      []uint8
+	logisticsKindByBlock        []uint8
 	unitNamesByID               map[int16]string
 	unitNamesByIndex            []string
 	unitLookupNamesByID         map[int16]string
@@ -292,6 +293,20 @@ type World struct {
 	buildingProfilesByBlock   []buildingWeaponProfile
 	buildingProfileBlockState []uint8
 	buildingProfileCacheStep  bool
+	// TypeID caches: avoid per-entity string lookups every tick.
+	unitAIKindByType      map[int16]unitAIKind
+	unitRuntimeByType     map[int16]unitRuntimeProfile
+	unitMountsByType      map[int16][]unitWeaponMountProfile
+	entityByIDCache       map[int32]int
+	entityByIDCacheValid  bool
+	buildingProfilesDirty bool
+	entitySpatialScratch  *nativespatial.Grid
+	entitySpatialXS       []float32
+	entitySpatialYS       []float32
+	teamSpatialScratch    map[TeamID]*nativespatial.Grid
+	pendingPosByOwner     map[int32]int32
+	pendingOrderByOwner   map[int32]uint64
+	pendingBreakByOwner   map[int32]uint64
 	blockCostsByName          map[string][]ItemStack
 	blockBuildTimesByName     map[string]float32
 	blockArmorByName          map[string]float32
@@ -2093,6 +2108,14 @@ func New(cfg Config) *World {
 		unitProfilesByName:          map[string]weaponProfile{},
 		unitRuntimeProfilesByName:   map[string]unitRuntimeProfile{},
 		unitMountProfilesByName:     map[string][]unitWeaponMountProfile{},
+		unitAIKindByType:            map[int16]unitAIKind{},
+		unitRuntimeByType:           map[int16]unitRuntimeProfile{},
+		unitMountsByType:            map[int16][]unitWeaponMountProfile{},
+		entityByIDCache:             map[int32]int{},
+		pendingPosByOwner:           map[int32]int32{},
+		pendingOrderByOwner:         map[int32]uint64{},
+		pendingBreakByOwner:         map[int32]uint64{},
+		buildingProfilesDirty:       true,
 		buildingProfilesByName:      cloneBuildingWeaponProfiles(buildingWeaponProfilesByName),
 		blockCostsByName:            map[string][]ItemStack{},
 		blockBuildTimesByName:       map[string]float32{},
@@ -3322,6 +3345,69 @@ func (w *World) pushLiquidSourceLocked(pos int32, tile *Tile, liquid LiquidID, a
 	w.dumpLiquidProportionalLocked(pos, tile, liquid, 2)
 }
 
+func (w *World) logisticsKindLocked(blockID int16) uint8 {
+	if blockID <= 0 {
+		return logKindNone
+	}
+	if idx := int(blockID); idx < len(w.logisticsKindByBlock) {
+		return w.logisticsKindByBlock[idx]
+	}
+	return logKindNone
+}
+
+const (
+	logKindNone uint8 = iota
+	logKindConveyor
+	logKindFastConveyor
+	logKindStackConveyor
+	logKindSurgeConveyor
+	logKindDuct
+	logKindArmoredDuct
+	logKindDuctRouter
+	logKindOverflowDuct
+	logKindDuctBridge
+	logKindDuctUnloader
+	logKindRouter
+	logKindJunction
+	logKindBridgeConveyor
+	logKindMassDriver
+)
+
+func logisticsKindForName(name string) uint8 {
+	switch name {
+	case "conveyor":
+		return logKindConveyor
+	case "titanium-conveyor", "armored-conveyor":
+		return logKindFastConveyor
+	case "plastanium-conveyor":
+		return logKindStackConveyor
+	case "surge-conveyor":
+		return logKindSurgeConveyor
+	case "duct":
+		return logKindDuct
+	case "armored-duct":
+		return logKindArmoredDuct
+	case "duct-router", "surge-router":
+		return logKindDuctRouter
+	case "overflow-duct", "underflow-duct":
+		return logKindOverflowDuct
+	case "duct-bridge":
+		return logKindDuctBridge
+	case "duct-unloader":
+		return logKindDuctUnloader
+	case "router", "distributor":
+		return logKindRouter
+	case "junction":
+		return logKindJunction
+	case "bridge-conveyor", "phase-conveyor":
+		return logKindBridgeConveyor
+	case "mass-driver", "large-payload-mass-driver":
+		return logKindMassDriver
+	default:
+		return logKindNone
+	}
+}
+
 func (w *World) itemCapacityForBlockLocked(tile *Tile) int32 {
 	if tile == nil || tile.Block == 0 {
 		return 0
@@ -4441,15 +4527,26 @@ func (w *World) stepItemLogistics(delta time.Duration, profileDetails bool) item
 		if tile.Build == nil || tile.Block == 0 {
 			continue
 		}
-		switch w.blockNameByID(int16(tile.Block)) {
-		case "conveyor":
+		switch w.logisticsKindLocked(int16(tile.Block)) {
+		case logKindConveyor:
 			w.stepConveyorLocked(pos, tile, 0.03, dt)
-		case "titanium-conveyor", "armored-conveyor":
+		case logKindFastConveyor:
 			w.stepConveyorLocked(pos, tile, 0.08, dt)
-		case "plastanium-conveyor":
+		case logKindStackConveyor:
 			w.stepStackConveyorLocked(pos, tile, 4.0/60.0, 2, true, dt)
-		case "surge-conveyor":
+		case logKindSurgeConveyor:
 			w.stepStackConveyorLocked(pos, tile, 5.0/60.0, 2, false, dt)
+		default:
+			switch w.blockNameByID(int16(tile.Block)) {
+			case "conveyor":
+				w.stepConveyorLocked(pos, tile, 0.03, dt)
+			case "titanium-conveyor", "armored-conveyor":
+				w.stepConveyorLocked(pos, tile, 0.08, dt)
+			case "plastanium-conveyor":
+				w.stepStackConveyorLocked(pos, tile, 4.0/60.0, 2, true, dt)
+			case "surge-conveyor":
+				w.stepStackConveyorLocked(pos, tile, 5.0/60.0, 2, false, dt)
+			}
 		}
 	}
 	if profileDetails {
@@ -6172,6 +6269,59 @@ func (w *World) tryInsertItemLocked(fromPos, toPos int32, item ItemID, depth int
 	blockID := int16(toTile.Block)
 	if w.blockNeverAcceptsInsertedItemLocked(blockID) {
 		return false
+	}
+	switch w.logisticsKindLocked(blockID) {
+	case logKindConveyor, logKindFastConveyor:
+		return w.conveyorHandleItemLocked(fromPos, toPos, item)
+	case logKindDuct:
+		return w.ductHandleItemLocked(fromPos, toPos, item, false)
+	case logKindArmoredDuct:
+		return w.ductHandleItemLocked(fromPos, toPos, item, true)
+	case logKindDuctRouter:
+		return w.ductRouterHandleItemLocked(fromPos, toPos, item, false)
+	case logKindOverflowDuct:
+		return w.ductHandleItemLocked(fromPos, toPos, item, false)
+	case logKindDuctBridge:
+		if !w.ductBridgeAcceptsItemLocked(fromPos, toPos, item) {
+			return false
+		}
+		return w.addItemAtLocked(toPos, item, 1)
+	case logKindDuctUnloader:
+		return false
+	case logKindBridgeConveyor:
+		if !w.bridgeAllowsInputLocked(fromPos, toPos) {
+			return false
+		}
+		cap := w.itemCapacityAtLocked(toPos)
+		if w.totalItemsAtLocked(toPos) >= cap {
+			return false
+		}
+		return w.addItemAtLocked(toPos, item, 1)
+	case logKindMassDriver:
+		cap := w.itemCapacityAtLocked(toPos)
+		if cap <= 0 || w.totalItemsAtLocked(toPos) >= cap {
+			return false
+		}
+		if _, ok := w.massDriverTargetLocked(toPos, toTile); !ok {
+			return false
+		}
+		return w.addItemAtLocked(toPos, item, 1)
+	case logKindRouter:
+		st := w.routerStateLocked(toPos, toTile)
+		if st.HasItem || totalBuildingItems(toTile.Build) >= 1 {
+			return false
+		}
+		if !w.addItemAtLocked(toPos, item, 1) {
+			return false
+		}
+		st.LastItem = item
+		st.HasItem = true
+		st.Time = 0
+		st.LastInput = fromPos
+		w.routerInputPos[toPos] = fromPos
+		return true
+	case logKindStackConveyor:
+		return w.stackConveyorHandleItemLocked(fromPos, toPos, item)
 	}
 	switch w.blockNameByID(blockID) {
 	case "conveyor", "titanium-conveyor", "armored-conveyor":
@@ -8742,8 +8892,10 @@ func (w *World) SetModel(m *WorldModel) {
 		}
 		w.blockNamesByIndex = make([]string, int(maxBlockID)+1)
 		w.blockLookupNamesByIndex = make([]string, int(maxBlockID)+1)
+		w.buildingProfilesDirty = true
 		w.powerStorageCapacityByBlock = make([]float32, int(maxBlockID)+1)
 		w.itemInsertNeverByBlock = make([]uint8, int(maxBlockID)+1)
+		w.logisticsKindByBlock = make([]uint8, int(maxBlockID)+1)
 		for k, v := range m.BlockNames {
 			name := strings.ToLower(strings.TrimSpace(v))
 			lookupName := normalizeBlockLookupName(name)
@@ -8756,6 +8908,7 @@ func (w *World) SetModel(m *WorldModel) {
 				if blockNeverAcceptsInsertedItemName(name) {
 					w.itemInsertNeverByBlock[int(k)] = 1
 				}
+				w.logisticsKindByBlock[int(k)] = logisticsKindForName(name)
 			}
 		}
 	}
@@ -8919,6 +9072,14 @@ func (w *World) entityByIDLocked(id int32) (RawEntity, bool) {
 	if w == nil || w.model == nil || id == 0 {
 		return RawEntity{}, false
 	}
+	if w.entityByIDCacheValid {
+		if idx, ok := w.entityByIDCache[id]; ok {
+			if idx >= 0 && idx < len(w.model.Entities) && w.model.Entities[idx].ID == id {
+				return w.model.Entities[idx], true
+			}
+		}
+		return RawEntity{}, false
+	}
 	for _, entity := range w.model.Entities {
 		if entity.ID != id {
 			continue
@@ -8926,6 +9087,37 @@ func (w *World) entityByIDLocked(id int32) (RawEntity, bool) {
 		return entity, true
 	}
 	return RawEntity{}, false
+}
+
+func (w *World) rebuildEntityByIDCacheLocked() {
+	if w == nil || w.model == nil {
+		return
+	}
+	if w.entityByIDCache == nil {
+		w.entityByIDCache = make(map[int32]int, len(w.model.Entities))
+	} else {
+		clear(w.entityByIDCache)
+	}
+	for i := range w.model.Entities {
+		w.entityByIDCache[w.model.Entities[i].ID] = i
+	}
+	w.entityByIDCacheValid = true
+}
+
+func (w *World) invalidateEntityByIDCacheLocked() {
+	w.entityByIDCacheValid = false
+}
+
+func (w *World) invalidateUnitTypeCachesLocked() {
+	if w.unitAIKindByType != nil {
+		clear(w.unitAIKindByType)
+	}
+	if w.unitRuntimeByType != nil {
+		clear(w.unitRuntimeByType)
+	}
+	if w.unitMountsByType != nil {
+		clear(w.unitMountsByType)
+	}
 }
 
 func (w *World) appendBuildCancelledLocked(pos int32, st pendingBuildState) {
@@ -8957,8 +9149,18 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 	if dt <= 0 {
 		return
 	}
-	activePosByOwner := make(map[int32]int32, len(w.pendingBuilds))
-	activeOrderByOwner := make(map[int32]uint64, len(w.pendingBuilds))
+	if w.pendingPosByOwner == nil {
+		w.pendingPosByOwner = make(map[int32]int32, len(w.pendingBuilds))
+		w.pendingOrderByOwner = make(map[int32]uint64, len(w.pendingBuilds))
+		w.pendingBreakByOwner = make(map[int32]uint64, len(w.pendingBreaks))
+	} else {
+		clear(w.pendingPosByOwner)
+		clear(w.pendingOrderByOwner)
+		clear(w.pendingBreakByOwner)
+	}
+	activePosByOwner := w.pendingPosByOwner
+	activeOrderByOwner := w.pendingOrderByOwner
+	earliestBreakByOwner := w.pendingBreakByOwner
 	for pos, st := range w.pendingBuilds {
 		if st.Team == 0 {
 			continue
@@ -8977,7 +9179,6 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			activePosByOwner[ownerKey] = pos
 		}
 	}
-	earliestBreakByOwner := make(map[int32]uint64, len(w.pendingBreaks))
 	for _, st := range w.pendingBreaks {
 		if st.Team == 0 {
 			continue
@@ -9367,6 +9568,7 @@ func (w *World) LoadVanillaProfiles(path string) error {
 		w.unitProfilesByName = byName
 		w.unitRuntimeProfilesByName = metaByName
 		w.unitMountProfilesByName = mountsByName
+		w.invalidateUnitTypeCachesLocked()
 	}
 	if len(payload.UnitsByName) > 0 {
 		base := cloneUnitWeaponProfilesByName(w.unitProfilesByName)
@@ -9398,6 +9600,7 @@ func (w *World) LoadVanillaProfiles(path string) error {
 		w.unitProfilesByName = base
 		w.unitRuntimeProfilesByName = metaByName
 		w.unitMountProfilesByName = mountsByName
+		w.invalidateUnitTypeCachesLocked()
 	}
 	if len(payload.Turrets) > 0 {
 		base := cloneBuildingWeaponProfiles(buildingWeaponProfilesByName)
@@ -9415,6 +9618,7 @@ func (w *World) LoadVanillaProfiles(path string) error {
 			base[name] = p
 		}
 		w.buildingProfilesByName = base
+		w.buildingProfilesDirty = true
 	}
 	if len(payload.Blocks) > 0 {
 		costs := make(map[string][]ItemStack, len(payload.Blocks))
@@ -9863,6 +10067,7 @@ func (w *World) AddEntity(typeID int16, x, y float32, team TeamID) (RawEntity, e
 	if isEntityFlying(ent) {
 		ent.Elevation = 1
 	}
+	w.entityByIDCacheValid = false
 	return w.model.AddEntity(ent), nil
 }
 
@@ -9919,6 +10124,7 @@ func (w *World) AddEntityWithID(typeID int16, id int32, x, y float32, team TeamI
 	if isEntityFlying(ent) {
 		ent.Elevation = 1
 	}
+	w.entityByIDCacheValid = false
 	return w.model.AddEntity(ent), nil
 }
 
@@ -10930,12 +11136,18 @@ func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, build
 	movementStartedAt := time.Now()
 	maxX := float32(w.model.Width * 8)
 	maxY := float32(w.model.Height * 8)
-	idToIndex := make(map[int32]int, len(w.model.Entities))
+	if w.entityByIDCache == nil {
+		w.entityByIDCache = make(map[int32]int, len(w.model.Entities)*2)
+	} else {
+		clear(w.entityByIDCache)
+	}
+	idToIndex := w.entityByIDCache
+	w.entityByIDCacheValid = true
 	for i := range w.model.Entities {
 		w.ensureEntityDefaults(&w.model.Entities[i])
 		idToIndex[w.model.Entities[i].ID] = i
 	}
-	spatial := buildEntitySpatialIndex(w.model.Entities)
+	spatial := w.rebuildEntitySpatialLocked(w.model.Entities)
 	teamSpatial := buildTeamEntitySpatialIndexes(w.model.Entities)
 	for i := 0; i < len(w.model.Entities); {
 		e := &w.model.Entities[i]
@@ -11019,8 +11231,13 @@ func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, build
 		delete(w.unitAIStates, removed.ID)
 		delete(w.unitMiningStates, removed.ID)
 		last := len(w.model.Entities) - 1
+		movedID := w.model.Entities[last].ID
 		w.model.Entities[i] = w.model.Entities[last]
 		w.model.Entities = w.model.Entities[:last]
+		delete(idToIndex, removed.ID)
+		if movedID != removed.ID && last != i {
+			idToIndex[movedID] = i
+		}
 		w.model.EntitiesRev++
 		w.entityEvents = append(w.entityEvents, EntityEvent{
 			Kind:   EntityEventRemoved,
@@ -11033,14 +11250,15 @@ func (w *World) stepEntities(delta time.Duration) (movementDur, combatDur, build
 	for i := range w.model.Entities {
 		idToIndex[w.model.Entities[i].ID] = i
 	}
-	spatial = buildEntitySpatialIndex(w.model.Entities)
+	w.entityByIDCacheValid = true
+	spatial = w.rebuildEntitySpatialLocked(w.model.Entities)
 	teamSpatial = buildTeamEntitySpatialIndexes(w.model.Entities)
 	movementDur = time.Since(movementStartedAt)
 
 	// 能力阶段可能推动单位位置，但通常不增删实体；仅在位置变化时重建空间索引。
 	abilitiesMovedEntities := w.stepEntityAbilities(dt)
 	if abilitiesMovedEntities {
-		spatial = buildEntitySpatialIndex(w.model.Entities)
+		spatial = w.rebuildEntitySpatialLocked(w.model.Entities)
 		teamSpatial = buildTeamEntitySpatialIndexes(w.model.Entities)
 	}
 
@@ -11644,9 +11862,13 @@ func (w *World) rebuildBuildingProfileBlockCacheLocked() {
 	if w == nil {
 		return
 	}
+	if !w.buildingProfilesDirty && w.buildingProfileBlockState != nil && len(w.buildingProfilesByBlock) == len(w.blockNamesByIndex) {
+		return
+	}
 	if len(w.blockNamesByIndex) == 0 {
 		w.buildingProfilesByBlock = nil
 		w.buildingProfileBlockState = nil
+		w.buildingProfilesDirty = false
 		return
 	}
 	if cap(w.buildingProfilesByBlock) < len(w.blockNamesByIndex) {
@@ -11682,6 +11904,7 @@ func (w *World) rebuildBuildingProfileBlockCacheLocked() {
 			w.buildingProfileBlockState[id] = 2
 		}
 	}
+	w.buildingProfilesDirty = false
 }
 
 func (w *World) buildingHidesInventoryItemsLocked(pos int32, tile *Tile) bool {
@@ -12082,22 +12305,56 @@ func findNearestEnemyEntity(src RawEntity, ents []RawEntity, spatial *entitySpat
 }
 
 func buildEntitySpatialIndex(ents []RawEntity) *entitySpatialIndex {
+	return buildEntitySpatialIndexInto(ents, nil, nil, nil)
+}
+
+func buildEntitySpatialIndexInto(ents []RawEntity, reuse *nativespatial.Grid, xsScratch, ysScratch []float32) *entitySpatialIndex {
 	if len(ents) == 0 {
 		return nil
 	}
 	const entitySpatialCellSize = 64
-	xs := make([]float32, len(ents))
-	ys := make([]float32, len(ents))
+	xs := xsScratch
+	ys := ysScratch
+	if cap(xs) < len(ents) {
+		xs = make([]float32, len(ents))
+	} else {
+		xs = xs[:len(ents)]
+	}
+	if cap(ys) < len(ents) {
+		ys = make([]float32, len(ents))
+	} else {
+		ys = ys[:len(ents)]
+	}
 	for i := range ents {
 		xs[i] = ents[i].X
 		ys[i] = ents[i].Y
 	}
-	g := nativespatial.New(entitySpatialCellSize)
+	g := reuse
+	if g == nil || g.CellSize() != entitySpatialCellSize {
+		g = nativespatial.New(entitySpatialCellSize)
+	}
 	g.Build(xs, ys)
 	return &entitySpatialIndex{
 		cellSize: entitySpatialCellSize,
 		native:   g,
 	}
+}
+
+func (w *World) rebuildEntitySpatialLocked(ents []RawEntity) *entitySpatialIndex {
+	idx := buildEntitySpatialIndexInto(ents, w.entitySpatialScratch, w.entitySpatialXS, w.entitySpatialYS)
+	if idx == nil {
+		return nil
+	}
+	w.entitySpatialScratch = idx.native
+	// Keep backing arrays for next rebuild (Build copies into native CSR).
+	n := len(ents)
+	if cap(w.entitySpatialXS) < n {
+		w.entitySpatialXS = make([]float32, n)
+	}
+	if cap(w.entitySpatialYS) < n {
+		w.entitySpatialYS = make([]float32, n)
+	}
+	return idx
 }
 
 func buildTeamEntitySpatialIndexes(ents []RawEntity) map[TeamID]*entitySpatialIndex {

@@ -20,6 +20,7 @@ func (w *World) removeEntityLocked(id int32) (RawEntity, bool) {
 	if !ok {
 		return RawEntity{}, false
 	}
+	w.entityByIDCacheValid = false
 	delete(w.unitMountCDs, id)
 	delete(w.unitMountStates, id)
 	delete(w.unitTargets, id)

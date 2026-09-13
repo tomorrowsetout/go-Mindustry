@@ -157,17 +157,25 @@ func (w *World) unitNameForEntityLocked(e RawEntity) string {
 }
 
 func (w *World) unitAIKindForEntityLocked(e RawEntity) unitAIKind {
+	if w.unitAIKindByType != nil {
+		if kind, ok := w.unitAIKindByType[e.TypeID]; ok && kind != "" {
+			return kind
+		}
+	}
 	name := w.unitNameForEntityLocked(e)
 	prof, _ := w.unitRuntimeProfileForEntityLocked(e)
 	kind := defaultUnitAIKindByName(name, prof)
 	if kind == "" {
 		if isEntityFlying(e) {
-			return unitAIFlying
+			kind = unitAIFlying
+		} else if prof.Naval || prof.MovementClass == "naval" || isNavalUnitName(name) {
+			kind = unitAINaval
+		} else {
+			kind = unitAIGround
 		}
-		if prof.Naval || prof.MovementClass == "naval" || isNavalUnitName(name) {
-			return unitAINaval
-		}
-		return unitAIGround
+	}
+	if w.unitAIKindByType != nil {
+		w.unitAIKindByType[e.TypeID] = kind
 	}
 	return kind
 }
