@@ -792,11 +792,8 @@ type Remote_NetClient_sendChatMessage_16 struct {
 }
 
 func (p *Remote_NetClient_sendChatMessage_16) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player; wire is Message only.
+	p.Player = nil
 	v1, err := r.ReadStringNullable()
 	if err != nil {
 		return err
@@ -1283,11 +1280,8 @@ type Remote_NetServer_adminRequest_49 struct {
 }
 
 func (p *Remote_NetServer_adminRequest_49) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -1331,11 +1325,8 @@ type Remote_NetServer_clientLogicDataReliable_43 struct {
 }
 
 func (p *Remote_NetServer_clientLogicDataReliable_43) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
@@ -1371,11 +1362,8 @@ type Remote_NetServer_clientLogicDataUnreliable_44 struct {
 }
 
 func (p *Remote_NetServer_clientLogicDataUnreliable_44) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := readTypeIOString(r)
 	if err != nil {
 		return err
@@ -1443,6 +1431,7 @@ type Remote_NetServer_clientPlanSnapshotReceived_47 struct {
 }
 
 func (p *Remote_NetServer_clientPlanSnapshotReceived_47) Read(r *Reader, _ int) error {
+	// S→C includes the injected Player on the wire.
 	v0, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -1782,11 +1771,8 @@ type Remote_NetServer_requestBlockSnapshot_45 struct {
 }
 
 func (p *Remote_NetServer_requestBlockSnapshot_45) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := r.ReadInt32()
 	if err != nil {
 		return err
@@ -1812,11 +1798,8 @@ type Remote_NetServer_requestDebugStatus_36 struct {
 }
 
 func (p *Remote_NetServer_requestDebugStatus_36) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	return nil
 }
 
@@ -1836,6 +1819,7 @@ type Remote_NetServer_serverBinaryPacketReliable_41 struct {
 }
 
 func (p *Remote_NetServer_serverBinaryPacketReliable_41) Read(r *Reader, _ int) error {
+	// S→C includes the injected Player.
 	v0, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -1876,6 +1860,7 @@ type Remote_NetServer_serverBinaryPacketUnreliable_42 struct {
 }
 
 func (p *Remote_NetServer_serverBinaryPacketUnreliable_42) Read(r *Reader, _ int) error {
+	// S→C includes the injected Player.
 	v0, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -1916,6 +1901,7 @@ type Remote_NetServer_serverPacketReliable_39 struct {
 }
 
 func (p *Remote_NetServer_serverPacketReliable_39) Read(r *Reader, _ int) error {
+	// S→C includes the injected Player.
 	v0, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -1956,6 +1942,7 @@ type Remote_NetServer_serverPacketUnreliable_40 struct {
 }
 
 func (p *Remote_NetServer_serverPacketUnreliable_40) Read(r *Reader, _ int) error {
+	// S→C includes the injected Player.
 	v0, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -2256,11 +2243,8 @@ type Remote_InputHandler_buildingControlSelect_92 struct {
 }
 
 func (p *Remote_InputHandler_buildingControlSelect_92) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -2329,11 +2313,8 @@ type Remote_InputHandler_commandBuilding_77 struct {
 }
 
 func (p *Remote_InputHandler_commandBuilding_77) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadInts(r)
 	if err != nil {
 		return err
@@ -2373,11 +2354,8 @@ type Remote_InputHandler_commandUnits_74 struct {
 }
 
 func (p *Remote_InputHandler_commandUnits_74) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadInts(r)
 	if err != nil {
 		return err
@@ -2444,11 +2422,8 @@ type Remote_InputHandler_deletePlans_72 struct {
 }
 
 func (p *Remote_InputHandler_deletePlans_72) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadInts(r)
 	if err != nil {
 		return err
@@ -2475,11 +2450,8 @@ type Remote_InputHandler_dropItem_88 struct {
 }
 
 func (p *Remote_InputHandler_dropItem_88) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := r.ReadFloat32()
 	if err != nil {
 		return err
@@ -2709,11 +2681,8 @@ type Remote_InputHandler_requestBuildPayload_82 struct {
 }
 
 func (p *Remote_InputHandler_requestBuildPayload_82) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -2741,11 +2710,8 @@ type Remote_InputHandler_requestDropPayload_85 struct {
 }
 
 func (p *Remote_InputHandler_requestDropPayload_85) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := r.ReadFloat32()
 	if err != nil {
 		return err
@@ -2852,11 +2818,8 @@ type Remote_InputHandler_rotateBlock_89 struct {
 }
 
 func (p *Remote_InputHandler_rotateBlock_89) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -3114,11 +3077,8 @@ type Remote_InputHandler_setUnitCommand_75 struct {
 }
 
 func (p *Remote_InputHandler_setUnitCommand_75) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadInts(r)
 	if err != nil {
 		return err
@@ -3155,11 +3115,8 @@ type Remote_InputHandler_setUnitStance_76 struct {
 }
 
 func (p *Remote_InputHandler_setUnitStance_76) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadInts(r)
 	if err != nil {
 		return err
@@ -3252,11 +3209,8 @@ type Remote_InputHandler_tileConfig_90 struct {
 }
 
 func (p *Remote_InputHandler_tileConfig_90) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -3319,11 +3273,8 @@ type Remote_InputHandler_transferInventory_79 struct {
 }
 
 func (p *Remote_InputHandler_transferInventory_79) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err
@@ -3545,11 +3496,8 @@ type Remote_InputHandler_unitClear_95 struct {
 }
 
 func (p *Remote_InputHandler_unitClear_95) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// C→S omits the injected Player.
+	p.Player = nil
 	return nil
 }
 

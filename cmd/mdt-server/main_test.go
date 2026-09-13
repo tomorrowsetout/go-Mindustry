@@ -1936,7 +1936,12 @@ func TestSyncWorldDiffToConnReplaysTileConfigForUnchangedConfiguredSorter(t *tes
 			continue
 		}
 		typed := &protocol.Remote_InputHandler_tileConfig_90{}
-		if err := typed.Read(protocol.NewReaderWithContext(payload, srv.TypeIO), 0); err != nil {
+		r := protocol.NewReaderWithContext(payload, srv.TypeIO)
+		// S→C Write includes the injected Player; C→S Read omits it.
+		if _, err := protocol.ReadEntity(r, srv.TypeIO); err != nil {
+			t.Fatalf("skip S→C player: %v", err)
+		}
+		if err := typed.Read(r, 0); err != nil {
 			t.Fatalf("decode tileConfig failed: %v", err)
 		}
 		if typed.Build == nil || typed.Build.ID() != sorterPos {
