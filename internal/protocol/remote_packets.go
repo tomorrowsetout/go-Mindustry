@@ -6041,172 +6041,172 @@ func (p *Remote_UnitCargoLoader_unitTetherBlockSpawned_153) Priority() int { ret
 
 func remotePacketFactories() []PacketFactory {
 	return []PacketFactory{
-		func() Packet { return &Remote_WaveSpawner_spawnEffect_0{} },
-		func() Packet { return &Remote_Logic_gameOver_3{} },
-		func() Packet { return &Remote_Logic_researched_4{} },
-		func() Packet { return &Remote_Logic_sectorCapture_1{} },
-		func() Packet { return &Remote_Logic_updateGameOver_2{} },
-		func() Packet { return &Remote_NetClient_blockSnapshot_34{} },
-		func() Packet { return &Remote_NetClient_clearObjectives_26{} },
-		func() Packet { return &Remote_NetClient_clientBinaryPacketReliable_5{} },
-		func() Packet { return &Remote_NetClient_clientBinaryPacketUnreliable_6{} },
-		func() Packet { return &Remote_NetClient_clientPacketReliable_7{} },
-		func() Packet { return &Remote_NetClient_clientPacketUnreliable_8{} },
-		func() Packet { return &Remote_NetClient_completeObjective_27{} },
-		func() Packet { return &Remote_NetClient_connect_17{} },
-		func() Packet { return &Remote_NetClient_effect_11{} },
-		func() Packet { return &Remote_NetClient_effect_12{} },
-		func() Packet { return &Remote_NetClient_effectReliable_13{} },
-		func() Packet { return &Remote_NetClient_entitySnapshot_32{} },
-		func() Packet { return &Remote_NetClient_hiddenSnapshot_33{} },
-		func() Packet { return &Remote_NetClient_kick_22{} },
-		func() Packet { return &Remote_NetClient_kick_21{} },
-		func() Packet { return &Remote_NetClient_ping_18{} },
-		func() Packet { return &Remote_NetClient_pingResponse_19{} },
-		func() Packet { return &Remote_NetClient_playMusic{} },
-		func() Packet { return &Remote_NetClient_playerDisconnect_31{} },
-		func() Packet { return &Remote_NetClient_sendChatMessage_16{} },
-		func() Packet { return &Remote_NetClient_sendMessage_14{} },
-		func() Packet { return &Remote_NetClient_sendMessage_15{} },
-		func() Packet { return &Remote_NetClient_setCameraPosition_30{} },
-		func() Packet { return &Remote_NetClient_setObjectives_25{} },
-		func() Packet { return &Remote_NetClient_setPosition_29{} },
-		func() Packet { return &Remote_NetClient_setRule_24{} },
-		func() Packet { return &Remote_NetClient_setRules_23{} },
-		func() Packet { return &Remote_NetClient_sound_9{} },
-		func() Packet { return &Remote_NetClient_soundAt_10{} },
-		func() Packet { return &Remote_NetClient_stateSnapshot_35{} },
-		func() Packet { return &Remote_NetClient_traceInfo_20{} },
-		func() Packet { return &Remote_NetClient_worldDataBegin_28{} },
-		func() Packet { return &Remote_NetServer_adminRequest_49{} },
-		func() Packet { return &Remote_NetServer_clientLogicDataReliable_43{} },
-		func() Packet { return &Remote_NetServer_clientLogicDataUnreliable_44{} },
-		func() Packet { return &Remote_NetServer_clientPlanSnapshot_46{} },
-		func() Packet { return &Remote_NetServer_clientPlanSnapshotReceived_47{} },
-		func() Packet { return &Remote_NetServer_clientSnapshot_48{} },
-		func() Packet { return &Remote_NetServer_connectConfirm_50{} },
-		func() Packet { return &Remote_NetServer_debugStatusClient_37{} },
-		func() Packet { return &Remote_NetServer_debugStatusClientUnreliable_38{} },
-		func() Packet { return &Remote_NetServer_requestAssets{} },
-		func() Packet { return &Remote_NetServer_requestBlockSnapshot_45{} },
-		func() Packet { return &Remote_NetServer_requestDebugStatus_36{} },
-		func() Packet { return &Remote_NetServer_requestWorld{} },
-		func() Packet { return &Remote_NetServer_serverBinaryPacketReliable_41{} },
-		func() Packet { return &Remote_NetServer_serverBinaryPacketUnreliable_42{} },
-		func() Packet { return &Remote_NetServer_serverPacketReliable_39{} },
-		func() Packet { return &Remote_NetServer_serverPacketUnreliable_40{} },
-		func() Packet { return &Remote_Units_unitCapDeath_52{} },
-		func() Packet { return &Remote_Units_unitDeath_54{} },
-		func() Packet { return &Remote_Units_unitDespawn_56{} },
-		func() Packet { return &Remote_Units_unitDestroy_55{} },
-		func() Packet { return &Remote_Units_unitEnvDeath_53{} },
-		func() Packet { return &Remote_Units_unitSafeDeath_57{} },
-		func() Packet { return &Remote_Units_unitSpawn_51{} },
-		func() Packet { return &Remote_BulletType_createBullet_58{} },
-		func() Packet { return &Remote_Teams_destroyPayload_59{} },
-		func() Packet { return &Remote_InputHandler_buildingControlSelect_92{} },
-		func() Packet { return &Remote_InputHandler_clearItems_66{} },
-		func() Packet { return &Remote_InputHandler_clearLiquids_70{} },
-		func() Packet { return &Remote_InputHandler_commandBuilding_77{} },
-		func() Packet { return &Remote_InputHandler_commandUnits_74{} },
-		func() Packet { return &Remote_InputHandler_deletePlans_72{} },
-		func() Packet { return &Remote_InputHandler_dropItem_88{} },
-		func() Packet { return &Remote_InputHandler_payloadDropped_86{} },
-		func() Packet { return &Remote_InputHandler_pickedBuildPayload_84{} },
-		func() Packet { return &Remote_InputHandler_pickedUnitPayload_83{} },
-		func() Packet { return &Remote_InputHandler_pingLocation_73{} },
-		func() Packet { return &Remote_InputHandler_removeQueueBlock_80{} },
-		func() Packet { return &Remote_InputHandler_requestBuildPayload_82{} },
-		func() Packet { return &Remote_InputHandler_requestDropPayload_85{} },
-		func() Packet { return &Remote_InputHandler_requestItem_78{} },
-		func() Packet { return &Remote_InputHandler_requestUnitPayload_81{} },
-		func() Packet { return &Remote_InputHandler_rotateBlock_89{} },
-		func() Packet { return &Remote_InputHandler_setItem_63{} },
-		func() Packet { return &Remote_InputHandler_setItems_64{} },
-		func() Packet { return &Remote_InputHandler_setLiquid_67{} },
-		func() Packet { return &Remote_InputHandler_setLiquids_68{} },
-		func() Packet { return &Remote_InputHandler_setTileItems_65{} },
-		func() Packet { return &Remote_InputHandler_setTileLiquids_69{} },
-		func() Packet { return &Remote_InputHandler_setUnitCommand_75{} },
-		func() Packet { return &Remote_InputHandler_setUnitStance_76{} },
-		func() Packet { return &Remote_InputHandler_takeItems_61{} },
-		func() Packet { return &Remote_InputHandler_tileConfig_90{} },
-		func() Packet { return &Remote_InputHandler_tileTap_91{} },
-		func() Packet { return &Remote_InputHandler_transferInventory_79{} },
-		func() Packet { return &Remote_InputHandler_transferItemEffect_60{} },
-		func() Packet { return &Remote_InputHandler_transferItemTo_71{} },
-		func() Packet { return &Remote_InputHandler_transferItemToUnit_62{} },
-		func() Packet { return &Remote_InputHandler_unitBuildingControlSelect_93{} },
-		func() Packet { return &Remote_InputHandler_unitClear_95{} },
-		func() Packet { return &Remote_InputHandler_unitControl_94{} },
-		func() Packet { return &Remote_InputHandler_unitEnteredPayload_87{} },
-		func() Packet { return &Remote_LExecutor_createMarker_100{} },
-		func() Packet { return &Remote_LExecutor_logicExplosion_97{} },
-		func() Packet { return &Remote_LExecutor_removeMarker_101{} },
-		func() Packet { return &Remote_LExecutor_setFlag_99{} },
-		func() Packet { return &Remote_LExecutor_setMapArea_96{} },
-		func() Packet { return &Remote_LExecutor_syncVariable_98{} },
-		func() Packet { return &Remote_LExecutor_updateMarker_102{} },
-		func() Packet { return &Remote_LExecutor_updateMarkerText_103{} },
-		func() Packet { return &Remote_LExecutor_updateMarkerTexture_104{} },
-		func() Packet { return &Remote_Weather_createWeather_105{} },
-		func() Packet { return &Remote_Menus_announce_116{} },
-		func() Packet { return &Remote_Menus_copyToClipboard_129{} },
-		func() Packet { return &Remote_Menus_followUpMenu_107{} },
-		func() Packet { return &Remote_Menus_hideFollowUpMenu_108{} },
-		func() Packet { return &Remote_Menus_hideHudText_114{} },
-		func() Packet { return &Remote_Menus_hideMenuBuilder_160{} },
-		func() Packet { return &Remote_Menus_infoMessage_117{} },
-		func() Packet { return &Remote_Menus_infoPopup_118{} },
-		func() Packet { return &Remote_Menus_infoPopup_120{} },
-		func() Packet { return &Remote_Menus_infoPopupReliable_119{} },
-		func() Packet { return &Remote_Menus_infoPopupReliable_121{} },
-		func() Packet { return &Remote_Menus_infoToast_126{} },
-		func() Packet { return &Remote_Menus_label_124{} },
-		func() Packet { return &Remote_Menus_label_122{} },
-		func() Packet { return &Remote_Menus_label3{} },
-		func() Packet { return &Remote_Menus_labelReliable_125{} },
-		func() Packet { return &Remote_Menus_labelReliable_123{} },
-		func() Packet { return &Remote_Menus_labelReliable3{} },
-		func() Packet { return &Remote_Menus_menu_106{} },
-		func() Packet { return &Remote_Menus_menuBuilder_160{} },
-		func() Packet { return &Remote_Menus_menuBuilderChoose_160{} },
-		func() Packet { return &Remote_Menus_menuBuilderUpdate_160{} },
-		func() Packet { return &Remote_Menus_menuChoose_109{} },
-		func() Packet { return &Remote_Menus_openURI_128{} },
-		func() Packet { return &Remote_Menus_removeWorldLabel_130{} },
-		func() Packet { return &Remote_Menus_setHudText_113{} },
-		func() Packet { return &Remote_Menus_setHudTextReliable_115{} },
-		func() Packet { return &Remote_Menus_textInput_110{} },
-		func() Packet { return &Remote_Menus_textInput_111{} },
-		func() Packet { return &Remote_Menus_textInputResult_112{} },
-		func() Packet { return &Remote_Menus_warningToast_127{} },
-		func() Packet { return &Remote_HudFragment_setPlayerTeamEditor_131{} },
-		func() Packet { return &Remote_Build_beginBreak_132{} },
-		func() Packet { return &Remote_Build_beginPlace_133{} },
-		func() Packet { return &Remote_Tile_buildDestroyed_143{} },
-		func() Packet { return &Remote_Tile_buildHealthUpdate_144{} },
-		func() Packet { return &Remote_Tile_fillTileBlocks_160{} },
-		func() Packet { return &Remote_Tile_fillTileFloors_160{} },
-		func() Packet { return &Remote_Tile_fillTileOverlays_160{} },
-		func() Packet { return &Remote_Tile_removeTile_139{} },
-		func() Packet { return &Remote_Tile_setFloor_137{} },
-		func() Packet { return &Remote_Tile_setOverlay_138{} },
-		func() Packet { return &Remote_Tile_setTeam_141{} },
-		func() Packet { return &Remote_Tile_setTeams_142{} },
-		func() Packet { return &Remote_Tile_setTile_140{} },
-		func() Packet { return &Remote_Tile_setTileBlocks_134{} },
-		func() Packet { return &Remote_Tile_setTileFloors_135{} },
-		func() Packet { return &Remote_Tile_setTileOverlays_136{} },
-		func() Packet { return &Remote_ConstructBlock_constructFinish_146{} },
-		func() Packet { return &Remote_ConstructBlock_deconstructFinish_145{} },
-		func() Packet { return &Remote_LandingPad_landingPadLanded_147{} },
-		func() Packet { return &Remote_AutoDoor_autoDoorToggle_148{} },
-		func() Packet { return &Remote_CoreBlock_playerSpawn_149{} },
-		func() Packet { return &Remote_UnitAssembler_assemblerDroneSpawned_151{} },
-		func() Packet { return &Remote_UnitAssembler_assemblerUnitSpawned_150{} },
-		func() Packet { return &Remote_UnitBlock_unitBlockSpawn_152{} },
-		func() Packet { return &Remote_UnitCargoLoader_unitTetherBlockSpawned_153{} },
+		func() Packet { return &Remote_NetServer_adminRequest_49{} }, // 7 AdminRequest
+		func() Packet { return &Remote_Menus_announce_116{} }, // 8 Announce
+		func() Packet { return &Remote_UnitAssembler_assemblerDroneSpawned_151{} }, // 9 AssemblerDroneSpawned
+		func() Packet { return &Remote_UnitAssembler_assemblerUnitSpawned_150{} }, // 10 AssemblerUnitSpawned
+		func() Packet { return &Remote_AutoDoor_autoDoorToggle_148{} }, // 11 AutoDoorToggle
+		func() Packet { return &Remote_Build_beginBreak_132{} }, // 12 BeginBreak
+		func() Packet { return &Remote_Build_beginPlace_133{} }, // 13 BeginPlace
+		func() Packet { return &Remote_NetClient_blockSnapshot_34{} }, // 14 BlockSnapshot
+		func() Packet { return &Remote_Tile_buildDestroyed_143{} }, // 15 BuildDestroyed
+		func() Packet { return &Remote_Tile_buildHealthUpdate_144{} }, // 16 BuildHealthUpdate
+		func() Packet { return &Remote_InputHandler_buildingControlSelect_92{} }, // 17 BuildingControlSelect
+		func() Packet { return &Remote_InputHandler_clearItems_66{} }, // 18 ClearItems
+		func() Packet { return &Remote_InputHandler_clearLiquids_70{} }, // 19 ClearLiquids
+		func() Packet { return &Remote_NetClient_clearObjectives_26{} }, // 20 ClearObjectives
+		func() Packet { return &Remote_NetClient_clientBinaryPacketReliable_5{} }, // 21 ClientBinaryPacketReliable
+		func() Packet { return &Remote_NetClient_clientBinaryPacketUnreliable_6{} }, // 22 ClientBinaryPacketUnreliable
+		func() Packet { return &Remote_NetServer_clientLogicDataReliable_43{} }, // 23 ClientLogicDataReliable
+		func() Packet { return &Remote_NetServer_clientLogicDataUnreliable_44{} }, // 24 ClientLogicDataUnreliable
+		func() Packet { return &Remote_NetClient_clientPacketReliable_7{} }, // 25 ClientPacketReliable
+		func() Packet { return &Remote_NetClient_clientPacketUnreliable_8{} }, // 26 ClientPacketUnreliable
+		func() Packet { return &Remote_NetServer_clientPlanSnapshot_46{} }, // 27 ClientPlanSnapshot
+		func() Packet { return &Remote_NetServer_clientPlanSnapshotReceived_47{} }, // 28 ClientPlanSnapshotReceived
+		func() Packet { return &Remote_NetServer_clientSnapshot_48{} }, // 29 ClientSnapshot
+		func() Packet { return &Remote_InputHandler_commandBuilding_77{} }, // 30 CommandBuilding
+		func() Packet { return &Remote_InputHandler_commandUnits_74{} }, // 31 CommandUnits
+		func() Packet { return &Remote_NetClient_completeObjective_27{} }, // 32 CompleteObjective
+		func() Packet { return &Remote_NetClient_connect_17{} }, // 33 Connect
+		func() Packet { return &Remote_NetServer_connectConfirm_50{} }, // 34 ConnectConfirm
+		func() Packet { return &Remote_ConstructBlock_constructFinish_146{} }, // 35 ConstructFinish
+		func() Packet { return &Remote_Menus_copyToClipboard_129{} }, // 36 CopyToClipboard
+		func() Packet { return &Remote_BulletType_createBullet_58{} }, // 37 CreateBullet
+		func() Packet { return &Remote_LExecutor_createMarker_100{} }, // 38 CreateMarker
+		func() Packet { return &Remote_Weather_createWeather_105{} }, // 39 CreateWeather
+		func() Packet { return &Remote_NetServer_debugStatusClient_37{} }, // 40 DebugStatusClient
+		func() Packet { return &Remote_NetServer_debugStatusClientUnreliable_38{} }, // 41 DebugStatusClientUnreliable
+		func() Packet { return &Remote_ConstructBlock_deconstructFinish_145{} }, // 42 DeconstructFinish
+		func() Packet { return &Remote_InputHandler_deletePlans_72{} }, // 43 DeletePlans
+		func() Packet { return &Remote_Teams_destroyPayload_59{} }, // 44 DestroyPayload
+		func() Packet { return &Remote_InputHandler_dropItem_88{} }, // 45 DropItem
+		func() Packet { return &Remote_NetClient_effect_11{} }, // 46 Effect
+		func() Packet { return &Remote_NetClient_effect_12{} }, // 47 Effect
+		func() Packet { return &Remote_NetClient_effectReliable_13{} }, // 48 EffectReliable
+		func() Packet { return &Remote_NetClient_entitySnapshot_32{} }, // 49 EntitySnapshot
+		func() Packet { return &Remote_Tile_fillTileBlocks_160{} }, // 50 FillTileBlocks
+		func() Packet { return &Remote_Tile_fillTileFloors_160{} }, // 51 FillTileFloors
+		func() Packet { return &Remote_Tile_fillTileOverlays_160{} }, // 52 FillTileOverlays
+		func() Packet { return &Remote_Menus_followUpMenu_107{} }, // 53 FollowUpMenu
+		func() Packet { return &Remote_Logic_gameOver_3{} }, // 54 GameOver
+		func() Packet { return &Remote_NetClient_hiddenSnapshot_33{} }, // 55 HiddenSnapshot
+		func() Packet { return &Remote_Menus_hideFollowUpMenu_108{} }, // 56 HideFollowUpMenu
+		func() Packet { return &Remote_Menus_hideHudText_114{} }, // 57 HideHudText
+		func() Packet { return &Remote_Menus_hideMenuBuilder_160{} }, // 58 HideMenuBuilder
+		func() Packet { return &Remote_Menus_infoMessage_117{} }, // 59 InfoMessage
+		func() Packet { return &Remote_Menus_infoPopup_118{} }, // 60 InfoPopup
+		func() Packet { return &Remote_Menus_infoPopup_120{} }, // 61 InfoPopup
+		func() Packet { return &Remote_Menus_infoPopupReliable_119{} }, // 62 InfoPopupReliable
+		func() Packet { return &Remote_Menus_infoPopupReliable_121{} }, // 63 InfoPopupReliable
+		func() Packet { return &Remote_Menus_infoToast_126{} }, // 64 InfoToast
+		func() Packet { return &Remote_NetClient_kick_22{} }, // 65 Kick
+		func() Packet { return &Remote_NetClient_kick_21{} }, // 66 Kick
+		func() Packet { return &Remote_Menus_label_124{} }, // 67 Label
+		func() Packet { return &Remote_Menus_label_122{} }, // 68 Label
+		func() Packet { return &Remote_Menus_label3{} }, // 69 Label
+		func() Packet { return &Remote_Menus_labelReliable_125{} }, // 70 LabelReliable
+		func() Packet { return &Remote_Menus_labelReliable_123{} }, // 71 LabelReliable
+		func() Packet { return &Remote_Menus_labelReliable3{} }, // 72 LabelReliable
+		func() Packet { return &Remote_LandingPad_landingPadLanded_147{} }, // 73 LandingPadLanded
+		func() Packet { return &Remote_LExecutor_logicExplosion_97{} }, // 74 LogicExplosion
+		func() Packet { return &Remote_Menus_menu_106{} }, // 75 Menu
+		func() Packet { return &Remote_Menus_menuBuilder_160{} }, // 76 MenuBuilder
+		func() Packet { return &Remote_Menus_menuBuilderChoose_160{} }, // 77 MenuBuilderChoose
+		func() Packet { return &Remote_Menus_menuBuilderUpdate_160{} }, // 78 MenuBuilderUpdate
+		func() Packet { return &Remote_Menus_menuChoose_109{} }, // 79 MenuChoose
+		func() Packet { return &Remote_Menus_openURI_128{} }, // 80 OpenURI
+		func() Packet { return &Remote_InputHandler_payloadDropped_86{} }, // 81 PayloadDropped
+		func() Packet { return &Remote_InputHandler_pickedBuildPayload_84{} }, // 82 PickedBuildPayload
+		func() Packet { return &Remote_InputHandler_pickedUnitPayload_83{} }, // 83 PickedUnitPayload
+		func() Packet { return &Remote_NetClient_ping_18{} }, // 84 Ping
+		func() Packet { return &Remote_InputHandler_pingLocation_73{} }, // 85 PingLocation
+		func() Packet { return &Remote_NetClient_pingResponse_19{} }, // 86 PingResponse
+		func() Packet { return &Remote_NetClient_playMusic{} }, // 87 PlayMusic
+		func() Packet { return &Remote_NetClient_playerDisconnect_31{} }, // 88 PlayerDisconnect
+		func() Packet { return &Remote_CoreBlock_playerSpawn_149{} }, // 89 PlayerSpawn
+		func() Packet { return &Remote_LExecutor_removeMarker_101{} }, // 90 RemoveMarker
+		func() Packet { return &Remote_InputHandler_removeQueueBlock_80{} }, // 91 RemoveQueueBlock
+		func() Packet { return &Remote_Tile_removeTile_139{} }, // 92 RemoveTile
+		func() Packet { return &Remote_Menus_removeWorldLabel_130{} }, // 93 RemoveWorldLabel
+		func() Packet { return &Remote_NetServer_requestAssets{} }, // 94 RequestAssets
+		func() Packet { return &Remote_NetServer_requestBlockSnapshot_45{} }, // 95 RequestBlockSnapshot
+		func() Packet { return &Remote_InputHandler_requestBuildPayload_82{} }, // 96 RequestBuildPayload
+		func() Packet { return &Remote_NetServer_requestDebugStatus_36{} }, // 97 RequestDebugStatus
+		func() Packet { return &Remote_InputHandler_requestDropPayload_85{} }, // 98 RequestDropPayload
+		func() Packet { return &Remote_InputHandler_requestItem_78{} }, // 99 RequestItem
+		func() Packet { return &Remote_InputHandler_requestUnitPayload_81{} }, // 100 RequestUnitPayload
+		func() Packet { return &Remote_NetServer_requestWorld{} }, // 101 RequestWorld
+		func() Packet { return &Remote_Logic_researched_4{} }, // 102 Researched
+		func() Packet { return &Remote_InputHandler_rotateBlock_89{} }, // 103 RotateBlock
+		func() Packet { return &Remote_Logic_sectorCapture_1{} }, // 104 SectorCapture
+		func() Packet { return &Remote_NetClient_sendChatMessage_16{} }, // 105 SendChatMessage
+		func() Packet { return &Remote_NetClient_sendMessage_14{} }, // 106 SendMessage
+		func() Packet { return &Remote_NetClient_sendMessage_15{} }, // 107 SendMessage
+		func() Packet { return &Remote_NetServer_serverBinaryPacketReliable_41{} }, // 108 ServerBinaryPacketReliable
+		func() Packet { return &Remote_NetServer_serverBinaryPacketUnreliable_42{} }, // 109 ServerBinaryPacketUnreliable
+		func() Packet { return &Remote_NetServer_serverPacketReliable_39{} }, // 110 ServerPacketReliable
+		func() Packet { return &Remote_NetServer_serverPacketUnreliable_40{} }, // 111 ServerPacketUnreliable
+		func() Packet { return &Remote_NetClient_setCameraPosition_30{} }, // 112 SetCameraPosition
+		func() Packet { return &Remote_LExecutor_setFlag_99{} }, // 113 SetFlag
+		func() Packet { return &Remote_Tile_setFloor_137{} }, // 114 SetFloor
+		func() Packet { return &Remote_Menus_setHudText_113{} }, // 115 SetHudText
+		func() Packet { return &Remote_Menus_setHudTextReliable_115{} }, // 116 SetHudTextReliable
+		func() Packet { return &Remote_InputHandler_setItem_63{} }, // 117 SetItem
+		func() Packet { return &Remote_InputHandler_setItems_64{} }, // 118 SetItems
+		func() Packet { return &Remote_InputHandler_setLiquid_67{} }, // 119 SetLiquid
+		func() Packet { return &Remote_InputHandler_setLiquids_68{} }, // 120 SetLiquids
+		func() Packet { return &Remote_LExecutor_setMapArea_96{} }, // 121 SetMapArea
+		func() Packet { return &Remote_NetClient_setObjectives_25{} }, // 122 SetObjectives
+		func() Packet { return &Remote_Tile_setOverlay_138{} }, // 123 SetOverlay
+		func() Packet { return &Remote_HudFragment_setPlayerTeamEditor_131{} }, // 124 SetPlayerTeamEditor
+		func() Packet { return &Remote_NetClient_setPosition_29{} }, // 125 SetPosition
+		func() Packet { return &Remote_NetClient_setRule_24{} }, // 126 SetRule
+		func() Packet { return &Remote_NetClient_setRules_23{} }, // 127 SetRules
+		func() Packet { return &Remote_Tile_setTeam_141{} }, // 128 SetTeam
+		func() Packet { return &Remote_Tile_setTeams_142{} }, // 129 SetTeams
+		func() Packet { return &Remote_Tile_setTile_140{} }, // 130 SetTile
+		func() Packet { return &Remote_Tile_setTileBlocks_134{} }, // 131 SetTileBlocks
+		func() Packet { return &Remote_Tile_setTileFloors_135{} }, // 132 SetTileFloors
+		func() Packet { return &Remote_InputHandler_setTileItems_65{} }, // 133 SetTileItems
+		func() Packet { return &Remote_InputHandler_setTileLiquids_69{} }, // 134 SetTileLiquids
+		func() Packet { return &Remote_Tile_setTileOverlays_136{} }, // 135 SetTileOverlays
+		func() Packet { return &Remote_InputHandler_setUnitCommand_75{} }, // 136 SetUnitCommand
+		func() Packet { return &Remote_InputHandler_setUnitStance_76{} }, // 137 SetUnitStance
+		func() Packet { return &Remote_NetClient_sound_9{} }, // 138 Sound
+		func() Packet { return &Remote_NetClient_soundAt_10{} }, // 139 SoundAt
+		func() Packet { return &Remote_WaveSpawner_spawnEffect_0{} }, // 140 SpawnEffect
+		func() Packet { return &Remote_NetClient_stateSnapshot_35{} }, // 141 StateSnapshot
+		func() Packet { return &Remote_LExecutor_syncVariable_98{} }, // 142 SyncVariable
+		func() Packet { return &Remote_InputHandler_takeItems_61{} }, // 143 TakeItems
+		func() Packet { return &Remote_Menus_textInput_110{} }, // 144 TextInput
+		func() Packet { return &Remote_Menus_textInput_111{} }, // 145 TextInput
+		func() Packet { return &Remote_Menus_textInputResult_112{} }, // 146 TextInputResult
+		func() Packet { return &Remote_InputHandler_tileConfig_90{} }, // 147 TileConfig
+		func() Packet { return &Remote_InputHandler_tileTap_91{} }, // 148 TileTap
+		func() Packet { return &Remote_NetClient_traceInfo_20{} }, // 149 TraceInfo
+		func() Packet { return &Remote_InputHandler_transferInventory_79{} }, // 150 TransferInventory
+		func() Packet { return &Remote_InputHandler_transferItemEffect_60{} }, // 151 TransferItemEffect
+		func() Packet { return &Remote_InputHandler_transferItemTo_71{} }, // 152 TransferItemTo
+		func() Packet { return &Remote_InputHandler_transferItemToUnit_62{} }, // 153 TransferItemToUnit
+		func() Packet { return &Remote_UnitBlock_unitBlockSpawn_152{} }, // 154 UnitBlockSpawn
+		func() Packet { return &Remote_InputHandler_unitBuildingControlSelect_93{} }, // 155 UnitBuildingControlSelect
+		func() Packet { return &Remote_Units_unitCapDeath_52{} }, // 156 UnitCapDeath
+		func() Packet { return &Remote_InputHandler_unitClear_95{} }, // 157 UnitClear
+		func() Packet { return &Remote_InputHandler_unitControl_94{} }, // 158 UnitControl
+		func() Packet { return &Remote_Units_unitDeath_54{} }, // 159 UnitDeath
+		func() Packet { return &Remote_Units_unitDespawn_56{} }, // 160 UnitDespawn
+		func() Packet { return &Remote_Units_unitDestroy_55{} }, // 161 UnitDestroy
+		func() Packet { return &Remote_InputHandler_unitEnteredPayload_87{} }, // 162 UnitEnteredPayload
+		func() Packet { return &Remote_Units_unitEnvDeath_53{} }, // 163 UnitEnvDeath
+		func() Packet { return &Remote_Units_unitSafeDeath_57{} }, // 164 UnitSafeDeath
+		func() Packet { return &Remote_Units_unitSpawn_51{} }, // 165 UnitSpawn
+		func() Packet { return &Remote_UnitCargoLoader_unitTetherBlockSpawned_153{} }, // 166 UnitTetherBlockSpawned
+		func() Packet { return &Remote_Logic_updateGameOver_2{} }, // 167 UpdateGameOver
+		func() Packet { return &Remote_LExecutor_updateMarker_102{} }, // 168 UpdateMarker
+		func() Packet { return &Remote_LExecutor_updateMarkerText_103{} }, // 169 UpdateMarkerText
+		func() Packet { return &Remote_LExecutor_updateMarkerTexture_104{} }, // 170 UpdateMarkerTexture
+		func() Packet { return &Remote_Menus_warningToast_127{} }, // 171 WarningToast
+		func() Packet { return &Remote_NetClient_worldDataBegin_28{} }, // 172 WorldDataBegin
 	}
 }
 

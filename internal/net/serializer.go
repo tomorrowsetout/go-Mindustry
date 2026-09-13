@@ -87,20 +87,18 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 		readErr = rerr
 	}
 
-	// A few official client->server packets omit the injected player/entity
-	// parameter on the wire even though the generated packet struct keeps it.
-	// IDs are official 160.3 wire ids (TextureStream occupies framework id 6).
-	// 49 is retained as a 159-era connectConfirm fallback for mixed clients.
+	// Official 160.3 wire ids from Mindustry.jar Call.registerPackets.
+	// C→S packets that omit the injected Player on the wire.
 	switch id {
-	case 50, 49:
+	case 34:
 		return &protocol.Remote_NetServer_connectConfirm_50{}, nil
-	case 55:
+	case 97:
 		return &protocol.Remote_NetServer_requestDebugStatus_36{Player: nil}, nil
-	case 27:
+	case 84:
 		return readClientPingWithoutPlayer(payload)
-	case 54:
+	case 95:
 		return readRequestBlockSnapshotWithoutPlayer(payload)
-	case 103:
+	case 157:
 		return &protocol.Remote_InputHandler_unitClear_95{}, nil
 	default:
 		if readErr != nil {

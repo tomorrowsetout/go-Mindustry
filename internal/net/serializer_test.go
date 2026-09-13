@@ -55,36 +55,36 @@ func TestCriticalPacketIDsMatchRegistryOfficial157(t *testing.T) {
 		wantOfficial byte
 	}{
 		{
-			// Official 159.7 id 49 + TextureStream@6.
+			// Official 160.3 ConnectConfirm = 34.
 			name:         "connect confirm official alias",
 			packet:       &protocol.Remote_NetServer_connectConfirm_50{},
-			wantOfficial: 50,
+			wantOfficial: 34,
 		},
 		{
 			name:         "world data begin official",
 			packet:       &protocol.Remote_NetClient_worldDataBegin_28{},
-			wantOfficial: 43,
+			wantOfficial: 172,
 		},
 		{
 			name:         "unit clear official",
 			packet:       &protocol.Remote_InputHandler_unitClear_95{},
-			wantOfficial: 103,
+			wantOfficial: 157,
 		},
 		{
-			// Official 159.7 kick(KickReason)=25 / kick(String)=24 → +1.
+			// Official 160.3 Kick overloads: kick(String)=65, kick(KickReason)=66.
 			name:         "kick enum official",
 			packet:       &protocol.Remote_NetClient_kick_21{Reason: protocol.KickReasonKick},
-			wantOfficial: 26,
+			wantOfficial: 66,
 		},
 		{
 			name:         "kick string official",
 			packet:       &protocol.Remote_NetClient_kick_22{Reason: "map changed"},
-			wantOfficial: 25,
+			wantOfficial: 65,
 		},
 		{
 			name:         "ping response official",
 			packet:       &protocol.Remote_NetClient_pingResponse_19{Time: 99},
-			wantOfficial: 28,
+			wantOfficial: 86,
 		},
 	}
 
@@ -117,8 +117,8 @@ func TestSerializerDefaultReadWriteUseOfficialPacketIDs(t *testing.T) {
 		t.Fatalf("WriteObject: %v", err)
 	}
 	packetID, payloadLen, compressed := readSerializerHeader(t, buf.Bytes())
-	if packetID != 25 {
-		t.Fatalf("default WriteObject packet id=%d want 25", packetID)
+	if packetID != 65 {
+		t.Fatalf("default WriteObject packet id=%d want 65", packetID)
 	}
 	if payloadLen == 0 {
 		t.Fatal("expected kick packet payload")
@@ -127,7 +127,7 @@ func TestSerializerDefaultReadWriteUseOfficialPacketIDs(t *testing.T) {
 		t.Fatalf("expected uncompressed kick packet, got %d", compressed)
 	}
 
-	obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 103, nil))
+	obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 157, nil))
 	if err != nil {
 		t.Fatalf("ReadObject: %v", err)
 	}
@@ -153,8 +153,8 @@ func TestSerializerUpdateMarkerUsesMindustry157WireID(t *testing.T) {
 	}
 
 	packetID, payloadLen, compressed := readSerializerHeader(t, buf.Bytes())
-	if packetID != 112 {
-		t.Fatalf("updateMarker packet id=%d want 112", packetID)
+	if packetID != 168 {
+		t.Fatalf("updateMarker packet id=%d want 168", packetID)
 	}
 	if payloadLen == 0 {
 		t.Fatal("expected updateMarker payload")
@@ -186,7 +186,7 @@ func TestSerializerReadObjectOfficialZeroPayloadClientPackets(t *testing.T) {
 	}{
 		{
 			name:     "official connect confirm",
-			packetID: 50,
+			packetID: 34,
 			check: func(t *testing.T, obj any) {
 				t.Helper()
 				if _, ok := obj.(*protocol.Remote_NetServer_connectConfirm_50); !ok {
@@ -196,7 +196,7 @@ func TestSerializerReadObjectOfficialZeroPayloadClientPackets(t *testing.T) {
 		},
 		{
 			name:     "official unit clear",
-			packetID: 103,
+			packetID: 157,
 			check: func(t *testing.T, obj any) {
 				t.Helper()
 				if _, ok := obj.(*protocol.Remote_InputHandler_unitClear_95); !ok {
@@ -225,7 +225,7 @@ func TestSerializerReadObjectOfficialInjectedPlayerFallbacks(t *testing.T) {
 		if err := binary.Write(&payload, binary.BigEndian, int64(12345)); err != nil {
 			t.Fatalf("write ping payload: %v", err)
 		}
-		obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 27, payload.Bytes()))
+		obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 84, payload.Bytes()))
 		if err != nil {
 			t.Fatalf("ReadObject ping fallback: %v", err)
 		}
@@ -246,7 +246,7 @@ func TestSerializerReadObjectOfficialInjectedPlayerFallbacks(t *testing.T) {
 		if err := binary.Write(&payload, binary.BigEndian, int32(0x00110022)); err != nil {
 			t.Fatalf("write requestBlockSnapshot payload: %v", err)
 		}
-		obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 54, payload.Bytes()))
+		obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 95, payload.Bytes()))
 		if err != nil {
 			t.Fatalf("ReadObject requestBlockSnapshot fallback: %v", err)
 		}
@@ -263,7 +263,7 @@ func TestSerializerReadObjectOfficialInjectedPlayerFallbacks(t *testing.T) {
 	})
 
 	t.Run("request debug status without player", func(t *testing.T) {
-		obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 55, nil))
+		obj, err := srv.Serial.ReadObject(frameSerializerPacket(t, 97, nil))
 		if err != nil {
 			t.Fatalf("ReadObject requestDebugStatus fallback: %v", err)
 		}
