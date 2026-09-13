@@ -9,7 +9,8 @@ package protocol
 
 
 func readLenBytes(r *Reader) ([]byte, error) {
-	n, err := r.ReadInt32()
+	// TypeIO.readBytes uses a signed short length (Java write.s / read.s).
+	n, err := r.ReadInt16()
 	if err != nil {
 		return nil, err
 	}
@@ -19,16 +20,18 @@ func readLenBytes(r *Reader) ([]byte, error) {
 	return r.ReadBytes(int(n))
 }
 func writeLenBytes(w *Writer, b []byte) error {
+	// TypeIO.writeBytes: write.s((short)bytes.length); write.b(bytes)
 	if b == nil {
-		return w.WriteInt32(-1)
+		b = []byte{}
 	}
-	if err := w.WriteInt32(int32(len(b))); err != nil {
+	if err := w.WriteInt16(int16(len(b))); err != nil {
 		return err
 	}
 	return w.WriteBytes(b)
 }
 func readLenInt16s(r *Reader) ([]int16, error) {
-	n, err := r.ReadInt32()
+	// TypeIO int/short arrays use a short length prefix.
+	n, err := r.ReadInt16()
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +39,7 @@ func readLenInt16s(r *Reader) ([]int16, error) {
 		return nil, nil
 	}
 	out := make([]int16, n)
-	for i := int32(0); i < n; i++ {
+	for i := 0; i < int(n); i++ {
 		v, err := r.ReadInt16()
 		if err != nil {
 			return nil, err
@@ -47,9 +50,9 @@ func readLenInt16s(r *Reader) ([]int16, error) {
 }
 func writeLenInt16s(w *Writer, v []int16) error {
 	if v == nil {
-		return w.WriteInt32(-1)
+		v = []int16{}
 	}
-	if err := w.WriteInt32(int32(len(v))); err != nil {
+	if err := w.WriteInt16(int16(len(v))); err != nil {
 		return err
 	}
 	for _, x := range v {
