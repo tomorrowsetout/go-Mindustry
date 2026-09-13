@@ -69,25 +69,27 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 		return nil, ErrCompressedUnsupported
 	}
 
-	tryRead := func(pid byte) (any, bool) {
+	tryRead := func(pid byte) (any, bool, error) {
 		p, nerr := s.Registry.NewPacket(pid)
 		if nerr != nil {
-			return nil, false
+			return nil, false, nerr
 		}
 		if rerr := p.Read(protocol.NewReaderWithContext(payload, s.Ctx), int(length)); rerr != nil {
-			return nil, false
+			return nil, false, rerr
 		}
-		return p, true
+		return p, true, nil
 	}
 
-	if obj, ok := tryRead(id); ok {
+	var readErr error
+	if obj, ok, rerr := tryRead(id); ok {
 		return obj, nil
+	} else {
+		readErr = rerr
 	}
 
 	// A few official client->server packets omit the injected player/entity
 	// parameter on the wire even though the generated packet struct keeps it.
-	// IDs are 160.3 wire ids (TextureStream occupies framework id 6, so remotes
-	// are 159.7 official ids + 1; later remotes also shift for new 160 methods).
+	// IDs are official 160.3 wire ids (TextureStream occupies framework id 6).
 	switch id {
 	case 50:
 		return &protocol.Remote_NetServer_connectConfirm_50{}, nil
@@ -100,8 +102,22 @@ func (s *Serializer) ReadObject(buf *bytes.Reader) (any, error) {
 	case 103:
 		return &protocol.Remote_InputHandler_unitClear_95{}, nil
 	default:
+		if readErr != nil {
+			return nil, fmt.Errorf("unknown packet id: %d (%T read: %w)", id, mustPacketType(s.Registry, id), readErr)
+		}
 		return nil, fmt.Errorf("unknown packet id: %d", id)
 	}
+}
+
+func mustPacketType(reg *protocol.PacketRegistry, id byte) any {
+	if reg == nil {
+		return nil
+	}
+	p, err := reg.NewPacket(id)
+	if err != nil {
+		return nil
+	}
+	return p
 }
 
 // WriteObject writes a framed object to buf.

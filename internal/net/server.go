@@ -1950,6 +1950,13 @@ func (s *Server) handlePacket(c *Conn, obj any, fromTCP bool) {
 		if s.DevLogger != nil {
 			s.DevLogger.LogPacketReceived(c.id, c.playerID, 78, "Remote_InputHandler_requestItem_78", "request_item")
 		}
+		// Custom/demo clients may emit gameplay packets before connectConfirm.
+		// Treat the first successful C→S gameplay packet as proof the world load
+		// finished so post-connect/respawn still run.
+		if c != nil && !c.hasConnected && c.hasBegunConnecting {
+			s.emitEvent(c, "connect_confirm_gameplay_fallback", fmt.Sprintf("%T", v), "request_item")
+			s.handleOfficialConnectConfirm(c, &protocol.Remote_NetServer_connectConfirm_50{})
+		}
 		if s.OnRequestItem != nil && v.Build != nil && v.Item != nil {
 			s.OnRequestItem(c, v.Build.ID(), v.Item.ID(), v.Amount)
 		}

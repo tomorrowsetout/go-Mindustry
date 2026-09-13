@@ -2759,18 +2759,17 @@ func (p *Remote_InputHandler_requestDropPayload_85) Write(w *Writer) error {
 func (p *Remote_InputHandler_requestDropPayload_85) Priority() int { return PriorityNormal }
 
 type Remote_InputHandler_requestItem_78 struct {
+	// Player is injected on the server from the connection; client→server
+	// wire payload is Building, Item, amount only.
 	Player Entity
-	Build Entity
-	Item Item
+	Build  Entity
+	Item   Item
 	Amount int32
 }
 
 func (p *Remote_InputHandler_requestItem_78) Read(r *Reader, _ int) error {
-	v0, err := ReadEntity(r, r.Ctx)
-	if err != nil {
-		return err
-	}
-	p.Player = v0
+	// Official C→S omits the injected Player parameter.
+	p.Player = nil
 	v1, err := ReadEntity(r, r.Ctx)
 	if err != nil {
 		return err

@@ -1188,6 +1188,9 @@ func main() {
 	var playerIdentityStore *persist.PlayerIdentityStore
 
 	srv := netserver.NewServer(*addr, *buildVersion)
+	// If a client streams the world then emits clientSnapshot/requestItem before
+	// connectConfirm, treat that as join so respawn/post-connect still run.
+	srv.SetClientSnapshotConnectFallbackEnabled(true)
 	applyAdmissionPolicy := func(loaded config.Config) error {
 		var entries []netserver.AdmissionWhitelistEntry
 		if loaded.Admin.WhitelistEnabled {
