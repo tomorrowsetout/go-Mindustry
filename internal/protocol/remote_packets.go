@@ -1,11 +1,11 @@
 package protocol
 
 // Regenerated from Mindustry build-159.7 @Remote method signatures by
-// tools/gen_packets.py. Wire IDs follow the official 159.7 registration order
-// (see MD/wire-protocol.md). Each Java parameter type is mapped to the matching
-// protocol Read*/Write* helper, which already implements Mindustry's exact wire
-// format. The 5 new 159.7 packets (playMusic, requestAssets, requestWorld,
-// label3, labelReliable3) are defined in remote_packets_159.go.
+// tools/gen_packets.py. The factory list is method-name ordered and is NOT
+// guaranteed to equal the official wire table until gen_registry.py is re-run
+// against Mindustry 160.3. TextureStream is framework id 6; the seven new
+// 160.3 remotes live in remote_packets_160.go. Each Java parameter type is
+// mapped to the matching protocol Read*/Write* helper.
 
 
 func readLenBytes(r *Reader) ([]byte, error) {

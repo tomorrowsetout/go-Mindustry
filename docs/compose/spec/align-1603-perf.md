@@ -1,6 +1,6 @@
 ---
 feature: align-1603-perf
-status: in-progress
+status: delivered
 updated: 2026-09-13
 branch: feature/align-1603-perf
 commits: 
@@ -73,8 +73,8 @@ commits:
 
 ## Report
 
-**What was built** — The Go server now defaults to Mindustry **build 160** only, registers `TextureStream` at framework packet id 6, and inserts the seven new 160.3 `@Remote` slots so later wire IDs stay aligned. Runtime core budget auto-scales to `NumCPU` (capped), dual-core IO workers grow with core count, and the process sets `GOMAXPROCS` once. World tick hot paths stop rebuilding entity indexes three times per step and stop double-resolving drill profiles. A new `internal/nativespatial` package provides a CSR uniform-grid spatial index (optional C++ via cgo, pure-Go fallback by default on this Windows host) and is wired into `entitySpatialIndex`.
+**What was built** — The Go server now defaults to Mindustry **build 160** only (`cmd/mdt-server` and `internal/net`), registers `TextureStream` at framework packet id 6, and inserts the seven new 160.3 `@Remote` slots so factory-list indices shift consistently. Runtime core budget auto-scales to `NumCPU` (capped), dual-core IO workers grow with core count, and the process sets `GOMAXPROCS` once. Entity spatial queries use a new `internal/nativespatial` CSR uniform grid (optional C++ via cgo; pure-Go fallback is the default on this Windows host). World-step single-rebuild / drill-profile caching landed in the baseline import, not this commit.
 
-**Verification** — `CGO_ENABLED=0 go test ./internal/nativespatial ./internal/world ./internal/sim ./cmd/mdt-server` → all `ok`. Protocol/net layout tests that fail also fail on baseline (`PRE-EXISTING`). Bench (`internal/world`, 30 iters): `BenchmarkWorldStepCurrentMap` 7.38ms → with scheduler 4.68ms; `BenchmarkWorldStepOfficialCompareMap` 786µs → with scheduler 687µs.
+**Verification** — `CGO_ENABLED=0 go test ./internal/nativespatial ./internal/world ./internal/sim ./cmd/mdt-server` → all `ok`. Protocol/net layout tests that fail also fail on baseline (`PRE-EXISTING`). Official 159 wire-ID assertions remain as a skipped tracking test. Bench (`internal/world`, 30 iters): `BenchmarkWorldStepCurrentMap` 7.38ms → with scheduler 4.68ms; `BenchmarkWorldStepOfficialCompareMap` 786µs → with scheduler 687µs.
 
-**Journey log** — (1) Full 800-file Java port is not a first feature; existing Go base + Java as oracle is. (2) Factory remote order in Go does not match historical official 159 wire IDs (pre-existing; tests already failed). (3) Windows host has no gcc; cgo module is opt-in behind `//go:build cgo`. (4) Child dual-core IPC was left alone this pass. (5) Next: regenerate remote registry from 160.3 Java, full TypeIO for menuBuilder, then C++ logistics if benches show need.
+**Journey log** — (1) Full 800-file Java port is not a first feature; existing Go base + Java as oracle is. (2) Go `remotePacketFactories()` order ≠ official wire table (pre-existing); factory-order tests must not be labeled official. (3) Windows host has no gcc; cgo path is opt-in behind `//go:build cgo`. (4) Dual-core IPC left alone. (5) Next: regenerate remote registry from 160.3 Java, full TypeIO for menuBuilder, then C++ logistics if benches show need.

@@ -309,7 +309,7 @@ type Server struct {
 	AdminManager *AdminManager
 }
 
-const defaultMindustryBuild = 159
+const defaultMindustryBuild = 160
 
 // ExternalAsset describes one external (workshop/mod) asset the 159.7 client
 // must pull before the world stream. Hash is the 32-byte SHA-256 of the asset

@@ -24,7 +24,7 @@ func TestPacketRegistryUsesOfficialBasePacketOrder(t *testing.T) {
 	assertPacketID("TextureStream", &TextureStream{}, 6)
 }
 
-func TestPacketRegistryUsesOfficialSyncRemotePacketIDs(t *testing.T) {
+func TestPacketRegistryUsesFactoryRemotePacketOrder(t *testing.T) {
 	reg := NewRegistry()
 	assertPacketID := func(name string, packet Packet, want byte) {
 		t.Helper()
@@ -37,9 +37,8 @@ func TestPacketRegistryUsesOfficialSyncRemotePacketIDs(t *testing.T) {
 		}
 	}
 
-	// Go factory list is method-name ordered (not the historical 159 wire
-	// table). TextureStream at id 6 shifts every remote by +1 vs baseline
-	// (baseline entitySnapshot was 22; 160.3 is 23).
+	// These are Go factory-list indices after TextureStream@6, not official
+	// Mindustry wire IDs. Official remote table regen is still outstanding.
 	assertPacketID("Remote_NetClient_entitySnapshot_32", &Remote_NetClient_entitySnapshot_32{}, 23)
 	assertPacketID("Remote_NetClient_hiddenSnapshot_33", &Remote_NetClient_hiddenSnapshot_33{}, 24)
 	assertPacketID("Remote_NetClient_blockSnapshot_34", &Remote_NetClient_blockSnapshot_34{}, 12)
@@ -47,6 +46,32 @@ func TestPacketRegistryUsesOfficialSyncRemotePacketIDs(t *testing.T) {
 	assertPacketID("Remote_NetServer_clientPlanSnapshot_46", &Remote_NetServer_clientPlanSnapshot_46{}, 47)
 	assertPacketID("Remote_NetServer_clientSnapshot_48", &Remote_NetServer_clientSnapshot_48{}, 49)
 	assertPacketID("Remote_NetServer_connectConfirm_50", &Remote_NetServer_connectConfirm_50{}, 50)
+}
+
+// TestPacketRegistryOfficial159SyncRemotePacketIDs documents the historical
+// official 159 wire IDs. The Go factory list currently disagrees (pre-existing).
+// Re-enable once gen_registry.py is regenerated from Mindustry 160.3.
+func TestPacketRegistryOfficial159SyncRemotePacketIDs(t *testing.T) {
+	t.Skip("PRE-EXISTING: factory list ≠ official wire table; regenerate from 160.3 Java")
+	reg := NewRegistry()
+	assertPacketID := func(name string, packet Packet, want byte) {
+		t.Helper()
+		got, ok := reg.PacketID(packet)
+		if !ok {
+			t.Fatalf("packet id missing for %s (%T)", name, packet)
+		}
+		if got != want {
+			t.Fatalf("packet id mismatch for %s: got=%d want=%d", name, got, want)
+		}
+	}
+
+	assertPacketID("Remote_NetClient_entitySnapshot_32", &Remote_NetClient_entitySnapshot_32{}, 46)
+	assertPacketID("Remote_NetClient_hiddenSnapshot_33", &Remote_NetClient_hiddenSnapshot_33{}, 49)
+	assertPacketID("Remote_NetClient_blockSnapshot_34", &Remote_NetClient_blockSnapshot_34{}, 11)
+	assertPacketID("Remote_NetClient_stateSnapshot_35", &Remote_NetClient_stateSnapshot_35{}, 126)
+	assertPacketID("Remote_NetServer_clientPlanSnapshot_46", &Remote_NetServer_clientPlanSnapshot_46{}, 24)
+	assertPacketID("Remote_NetServer_clientSnapshot_48", &Remote_NetServer_clientSnapshot_48{}, 26)
+	assertPacketID("Remote_NetServer_connectConfirm_50", &Remote_NetServer_connectConfirm_50{}, 31)
 }
 
 func TestCriticalSyncPacketsKeepOfficialPriorities(t *testing.T) {
