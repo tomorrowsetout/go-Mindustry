@@ -98,13 +98,10 @@ func (u *UnitEntitySync) WriteSync(w *Writer) error {
 	if err := WriteItems(w, u.Stack); err != nil {
 		return err
 	}
-	if err := w.WriteInt32(int32(len(u.Statuses))); err != nil {
+	// Empty status list: avoids TypeIO.readStatus NPE when effect id is unknown
+	// on the client (status content IDs are not fully synced yet).
+	if err := w.WriteInt32(0); err != nil {
 		return err
-	}
-	for _, st := range u.Statuses {
-		if err := WriteStatus(w, st); err != nil {
-			return err
-		}
 	}
 	if err := WriteTeam(w, &Team{ID: u.TeamID}); err != nil {
 		return err

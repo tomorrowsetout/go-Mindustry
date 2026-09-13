@@ -80,6 +80,17 @@ func IsKnownUnitEntityClassID(classID byte) bool {
 	return ok
 }
 
+// UnitEntityLayoutNeedsExtraFields reports whether the class's writeSync
+// includes fields our UnitEntity-aligned WriteSync does not emit
+// (baseRotation / payloads / building / timedKill).
+func UnitEntityLayoutNeedsExtraFields(classID byte) bool {
+	layout, ok := unitEntityLayoutByClassID(classID)
+	if !ok {
+		return true
+	}
+	return layout.baseRotation || layout.payloads || layout.building || layout.timedKill
+}
+
 func unitEntityLayoutByName(name string) (unitEntityLayout, bool) {
 	switch normalizeUnitEntityName(name) {
 	case "alpha":

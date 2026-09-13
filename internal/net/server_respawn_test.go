@@ -1561,8 +1561,10 @@ func TestPrepareUnitEntitySnapshotAppliesPayloadUnitLayout(t *testing.T) {
 	if !srv.prepareUnitEntitySnapshot(unit) {
 		t.Fatal("expected payload core unit snapshot to stay valid")
 	}
-	if got := unit.ClassID(); got != 5 {
-		t.Fatalf("expected emanate unit class id 5, got %d", got)
+	// PayloadUnit class (5) has extra writeSync fields we do not emit; forced
+	// to UnitEntity class 0 so the official client can readSync without NPE.
+	if got := unit.ClassID(); got != 0 {
+		t.Fatalf("expected payload unit forced to class 0, got %d", got)
 	}
 
 	w := protocol.NewWriterWithContext(srv.TypeIO)

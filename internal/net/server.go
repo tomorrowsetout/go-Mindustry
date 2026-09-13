@@ -6213,6 +6213,14 @@ func (s *Server) prepareUnitEntitySnapshot(u *protocol.UnitEntitySync) bool {
 	if normalized := s.normalizedUnitTypeID(u.TypeID, u.Controller); normalized > 0 {
 		u.TypeID = normalized
 		s.applyUnitEntityLayout(u)
+		// Our WriteSync matches UnitEntity (alpha/water-move field order).
+		// Classes with extra fields (PayloadUnit etc.) crash the official
+		// client's readSync — force UnitEntity class 0 for those.
+		if !protocol.IsKnownUnitEntityClassID(u.ClassID()) || protocol.UnitEntityLayoutNeedsExtraFields(u.ClassID()) {
+			u.ClassIDValue = 0
+			u.ClassIDSet = true
+		}
+		u.Statuses = nil
 		return true
 	}
 	return false
