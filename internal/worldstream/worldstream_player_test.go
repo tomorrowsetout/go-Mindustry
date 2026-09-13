@@ -328,8 +328,8 @@ func TestBuildWorldStreamFromMSAVPreservesWorldSections(t *testing.T) {
 	}
 
 	var expectedTeamBlocks bytes.Buffer
-	if err := writeMinimalTeamBlocks(&javaWriter{buf: &expectedTeamBlocks}); err != nil {
-		t.Fatalf("write minimal team blocks: %v", err)
+	if err := writeMinimalEntities(&javaWriter{buf: &expectedTeamBlocks}); err != nil {
+		t.Fatalf("write minimal entities: %v", err)
 	}
 
 	expectedMarkers := data.Markers

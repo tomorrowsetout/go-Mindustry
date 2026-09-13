@@ -112,8 +112,9 @@ build:
 	// section preserved inside an arbitrary save file. Old saves can carry plan config
 	// objects that deserialize differently clientside, so keep join-world payloads on
 	// the safest legal representation until runtime-owned team plans are tracked.
-	var teamBlocks bytes.Buffer
-	if err := writeMinimalTeamBlocks(&javaWriter{buf: &teamBlocks}); err != nil {
+	// Must include entityMapping + teamBlocks + worldEntities (Java writeEntities).
+	var entities bytes.Buffer
+	if err := writeMinimalEntities(&javaWriter{buf: &entities}); err != nil {
 		return nil, err
 	}
 
@@ -202,7 +203,7 @@ build:
 	if err := w.WriteBytes(mapChunk); err != nil {
 		return nil, err
 	}
-	if err := w.WriteBytes(teamBlocks.Bytes()); err != nil {
+	if err := w.WriteBytes(entities.Bytes()); err != nil {
 		return nil, err
 	}
 	markers := data.Markers
@@ -1186,6 +1187,19 @@ func writeMinimalTeamBlocks(w *javaWriter) error {
 	return w.WriteInt32(0)
 }
 
+// writeMinimalEntities mirrors Java SaveVersion.writeEntities:
+// entityMapping (short count + entries) + teamBlocks + worldEntities (int count).
+// Vanilla has an empty customIdMap and no serialized world entities on join.
+func writeMinimalEntities(w *javaWriter) error {
+	if err := w.WriteInt16(0); err != nil {
+		return err
+	}
+	if err := writeMinimalTeamBlocks(w); err != nil {
+		return err
+	}
+	return w.WriteInt32(0)
+}
+
 func writeMinimalCustomChunks(w *javaWriter) error {
 	return w.WriteInt32(0)
 }
@@ -1385,12 +1399,12 @@ func inspectWorldSections(raw []byte, start int) (contentEnd, patchesEnd, mapEnd
 	// immediately followed by the map chunk with NOTHING in between. Go's world
 	// stream writers no longer emit the MSAV content-patches section here, so
 	// try the network-correct layout first. Require the full chain (map +
-	// teamBlocks + markers/custom) to validate before accepting it.
+	// entities(mapping+teamBlocks+worldEntities) + markers/custom) to validate.
 	mapReader := newJavaReader(raw[contentEnd:])
 	if skipMapData(mapReader) == nil {
 		candidateMapEnd := contentEnd + mapReader.Offset()
 		teamReaderA := newJavaReader(raw[candidateMapEnd:])
-		if teamBlocksA, _, tErr := readModernTeamBlocksRaw(teamReaderA, raw[candidateMapEnd:]); tErr == nil {
+		if teamBlocksA, _, tErr := readNetworkEntitiesRaw(teamReaderA, raw[candidateMapEnd:]); tErr == nil {
 			tailA := raw[candidateMapEnd+len(teamBlocksA):]
 			if markersA, customA, sErr := splitRawMarkersAndCustom(tailA); sErr == nil {
 				// Valid network layout; there is no patches section (patchesEnd == contentEnd).

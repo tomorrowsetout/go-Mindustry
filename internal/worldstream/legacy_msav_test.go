@@ -680,11 +680,11 @@ func TestLoadLegacyMSAVModelBuildWorldStreamUsesMinimalTeamBlocks(t *testing.T) 
 	}
 
 	var expected bytes.Buffer
-	if err := writeMinimalTeamBlocks(&javaWriter{buf: &expected}); err != nil {
-		t.Fatalf("write minimal team blocks: %v", err)
+	if err := writeMinimalEntities(&javaWriter{buf: &expected}); err != nil {
+		t.Fatalf("write minimal entities: %v", err)
 	}
 	_, _, _, builtTeamBlocks, _, _ := readWorldStreamCoreSections(t, payload, expected.Len(), 2, 4)
 	if !bytes.Equal(builtTeamBlocks, expected.Bytes()) {
-		t.Fatal("expected model-built world stream to use minimal legal runtime team blocks")
+		t.Fatal("expected model-built world stream to use minimal legal runtime entities (mapping+team+count)")
 	}
 }

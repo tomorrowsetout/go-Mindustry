@@ -307,6 +307,45 @@ func readModernTeamBlocksRaw(r *javaReader, raw []byte) ([]byte, int, error) {
 	return raw[start:end], end, nil
 }
 
+// readNetworkEntitiesRaw consumes Java writeEntities for join-world streams:
+// entityMapping + teamBlocks + worldEntities count. Returns the raw slice covering
+// all three sections (starting at the mapping short).
+func readNetworkEntitiesRaw(r *javaReader, raw []byte) ([]byte, int, error) {
+	start := r.Offset()
+	mapCount, err := r.ReadInt16()
+	if err != nil {
+		return nil, 0, err
+	}
+	if mapCount < 0 {
+		return nil, 0, ErrInvalidMSAV
+	}
+	for i := 0; i < int(mapCount); i++ {
+		if _, err := r.ReadInt16(); err != nil {
+			return nil, 0, err
+		}
+		if err := r.SkipUTF(); err != nil {
+			return nil, 0, err
+		}
+	}
+	if _, _, err := readModernTeamBlocksRaw(r, raw); err != nil {
+		return nil, 0, err
+	}
+	entityCount, err := r.ReadInt32()
+	if err != nil {
+		return nil, 0, err
+	}
+	if entityCount < 0 {
+		return nil, 0, ErrInvalidMSAV
+	}
+	if entityCount != 0 {
+		// Join streams from this server emit zero world entities; leftover
+		// entity chunks would be markers misparse. Fail closed for inspect.
+		return nil, 0, fmt.Errorf("unexpected world entity count in join stream: %d", entityCount)
+	}
+	end := r.Offset()
+	return raw[start:end], end, nil
+}
+
 func readWorldEntityShortChunks(r *javaReader, withIDs bool) ([]msavWorldEntityChunk, error) {
 	count, err := r.ReadInt32()
 	if err != nil {

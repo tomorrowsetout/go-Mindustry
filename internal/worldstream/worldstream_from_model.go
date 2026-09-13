@@ -113,11 +113,11 @@ func buildWorldStreamFromModelState(model *world.WorldModel, tags map[string]str
 	if err := w.WriteBytes(mapChunk); err != nil {
 		return nil, err
 	}
-	var teamBlocks bytes.Buffer
-	if err := writeMinimalTeamBlocks(&javaWriter{buf: &teamBlocks}); err != nil {
+	var entities bytes.Buffer
+	if err := writeMinimalEntities(&javaWriter{buf: &entities}); err != nil {
 		return nil, err
 	}
-	if err := w.WriteBytes(teamBlocks.Bytes()); err != nil {
+	if err := w.WriteBytes(entities.Bytes()); err != nil {
 		return nil, err
 	}
 	markers := model.Markers

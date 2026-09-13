@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-09T08:57:12Z",
+  "updated_at": "2026-09-13T16:05:46Z",
   "by_uuid": {
     "5PpOkquATQUAAAAAcsDOSg==": {
       "conn_uuid": "25248",
@@ -22,6 +22,13 @@
       "ip": "127.0.0.1",
       "first_seen": "2026-04-08T08:43:51Z",
       "last_seen": "2026-04-23T05:03:57Z"
+    },
+    "bRea8YRoGToAAAAAPO9P1Q==": {
+      "conn_uuid": "78934",
+      "name": "[#00ffffff]月[#8982edff]子[#87ceebff]",
+      "ip": "127.0.0.1",
+      "first_seen": "2026-09-13T16:05:31Z",
+      "last_seen": "2026-09-13T16:05:46Z"
     },
     "iP8N5P0wKpkAAAAAoN+11Q==": {
       "conn_uuid": "62511",
