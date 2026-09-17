@@ -1,6 +1,0 @@
-{"timestamp":"2026-08-09T08:57:00.4733688Z","kind":"connection_open","trigger":11,"detail":"tcp=192.168.0.101:59379 udp=","conn_id":2110356335,"ip":"192.168.0.101:59379"}
-{"timestamp":"2026-08-09T08:57:00.4739446Z","kind":"tcp_accept","conn_id":2110356335,"ip":"192.168.0.101"}
-{"timestamp":"2026-09-13T16:05:31.8842639Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:58679 udp=","conn_id":671074429,"ip":"127.0.0.1:58679"}
-{"timestamp":"2026-09-13T16:05:31.8849108Z","kind":"tcp_accept","conn_id":671074429,"ip":"127.0.0.1"}
-{"timestamp":"2026-09-13T16:05:46.1492879Z","kind":"connection_open","trigger":11,"detail":"tcp=127.0.0.1:64842 udp=","conn_id":62321641,"ip":"127.0.0.1:64842"}
-{"timestamp":"2026-09-13T16:05:46.1508145Z","kind":"tcp_accept","conn_id":62321641,"ip":"127.0.0.1"}
