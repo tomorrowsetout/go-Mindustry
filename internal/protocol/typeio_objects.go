@@ -217,22 +217,23 @@ func (i ItemRef) ContentType() ContentType { return ContentItem }
 func (i ItemRef) ID() int16                { return i.ItmID }
 func (i ItemRef) Name() string             { return i.ItmName }
 
+// PackPoint2 matches arc.math.geom.Point2.pack: x in low 16 bits, y in high 16.
 func PackPoint2(x, y int32) int32 {
-	return (x&0xFFFF)<<16 | (y & 0xFFFF)
+	return (x & 0xFFFF) | ((y & 0xFFFF) << 16)
 }
 
 func UnpackPoint2(v int32) Point2 {
-	x := int16((v >> 16) & 0xFFFF)
-	y := int16(v & 0xFFFF)
+	x := int16(v & 0xFFFF)
+	y := int16((v >> 16) & 0xFFFF)
 	return Point2{X: int32(x), Y: int32(y)}
 }
 
 func UnpackPoint2X(v int32) int32 {
-	return int32(int16((v >> 16) & 0xFFFF))
+	return int32(int16(v & 0xFFFF))
 }
 
 func UnpackPoint2Y(v int32) int32 {
-	return int32(int16(v & 0xFFFF))
+	return int32(int16((v >> 16) & 0xFFFF))
 }
 
 type Vec2 struct {

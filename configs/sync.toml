@@ -1,9 +1,10 @@
 # 同步配置
+# entity/state: 越小同步越频繁（ms）。默认 200 → 50 提升单位/建造动画流畅度。
 
 [sync]
 block_sync_logs_enabled = false
-entity_ms = 200
-state_ms = 200
+entity_ms = 50
+state_ms = 50
 udp_fallback_tcp = true
 udp_retry_count = 2
 udp_retry_delay_ms = 5

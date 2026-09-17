@@ -594,3 +594,129 @@ func TestRemoteMenusInfoPopupWithIDUsesStringLayout(t *testing.T) {
 		t.Fatalf("decoded packet mismatch: got %+v want %+v", decoded, packet)
 	}
 }
+
+func TestRemoteBuildBeginPlaceMatchesJavaWriteUnitWriteBlockLayout(t *testing.T) {
+	// Client BeginPlaceCallPacket / generated Call: writeUnit(unit), writeBlock(result), writeTeam, i x,y,rot, writeObject
+	wire := NewWriter()
+	if err := WriteUnit(wire, nil); err != nil {
+		t.Fatalf("write unit: %v", err)
+	}
+	if err := WriteBlock(wire, BlockRef{BlkID: 257, BlkName: "conveyor"}); err != nil {
+		t.Fatalf("write block: %v", err)
+	}
+	if err := WriteTeam(wire, &Team{ID: 1}); err != nil {
+		t.Fatalf("write team: %v", err)
+	}
+	for _, v := range []int32{10, 20, 1} {
+		if err := wire.WriteInt32(v); err != nil {
+			t.Fatalf("write coord: %v", err)
+		}
+	}
+	if err := WriteObject(wire, nil, nil); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var packet Remote_Build_beginPlace_133
+	if err := packet.Read(NewReader(wire.Bytes()), len(wire.Bytes())); err != nil {
+		t.Fatalf("read beginPlace: %v", err)
+	}
+	if packet.Unit != nil {
+		t.Fatalf("expected nil unit, got %#v", packet.Unit)
+	}
+	if packet.Result == nil || packet.Result.ID() != 257 {
+		t.Fatalf("expected block 257, got %#v", packet.Result)
+	}
+	if packet.Team.ID != 1 || packet.X != 10 || packet.Y != 20 || packet.Rotation != 1 {
+		t.Fatalf("unexpected fields: %+v", packet)
+	}
+	if packet.PlaceConfig != nil {
+		t.Fatalf("expected nil placeConfig, got %#v", packet.PlaceConfig)
+	}
+
+	// Packet.Write must produce the same layout.
+	out := NewWriter()
+	src := Remote_Build_beginPlace_133{
+		Unit:     nil,
+		Result:   BlockRef{BlkID: 257},
+		Team:     Team{ID: 1},
+		X:        10,
+		Y:        20,
+		Rotation: 1,
+	}
+	if err := src.Write(out); err != nil {
+		t.Fatalf("write beginPlace: %v", err)
+	}
+	if string(out.Bytes()) != string(wire.Bytes()) {
+		t.Fatalf("Write layout mismatch\n got %v\nwant %v", out.Bytes(), wire.Bytes())
+	}
+}
+
+func TestRemoteNetClientBlockSnapshotUsesTypeIOShortByteLength(t *testing.T) {
+	payload := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	packet := Remote_NetClient_blockSnapshot_34{Amount: 2, Data: payload}
+	wire := NewWriter()
+	if err := packet.Write(wire); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	bytes := wire.Bytes()
+	if len(bytes) < 4 {
+		t.Fatalf("wire too short: %v", bytes)
+	}
+	// amount int16 BE + TypeIO.writeBytes short length BE
+	if bytes[0] != 0 || bytes[1] != 2 {
+		t.Fatalf("expected amount=2 BE, got %v", bytes[:2])
+	}
+	if bytes[2] != 0 || bytes[3] != byte(len(payload)) {
+		t.Fatalf("expected short length %d BE, got bytes[2:4]=%v", len(payload), bytes[2:4])
+	}
+
+	var decoded Remote_NetClient_blockSnapshot_34
+	if err := decoded.Read(NewReader(bytes), len(bytes)); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if decoded.Amount != 2 || string(decoded.Data) != string(payload) {
+		t.Fatalf("round-trip mismatch: %+v", decoded)
+	}
+}
+
+func TestRemoteConstructBlockDeconstructFinishMatchesJavaWriteUnitBuilder(t *testing.T) {
+	// Client DeconstructFinishCallPacket.handled → TypeIO.readUnit for builder.
+	pos := PackPoint2(12, 34)
+	wire := NewWriter()
+	if err := WriteTile(wire, TileBox{PosValue: pos}); err != nil {
+		t.Fatalf("write tile: %v", err)
+	}
+	if err := WriteBlock(wire, BlockRef{BlkID: 223, BlkName: ""}); err != nil {
+		t.Fatalf("write block: %v", err)
+	}
+	if err := WriteUnit(wire, nil); err != nil {
+		t.Fatalf("write builder: %v", err)
+	}
+
+	var packet Remote_ConstructBlock_deconstructFinish_145
+	if err := packet.Read(NewReader(wire.Bytes()), len(wire.Bytes())); err != nil {
+		t.Fatalf("read deconstructFinish: %v", err)
+	}
+	if packet.Tile == nil || packet.Tile.Pos() != pos {
+		t.Fatalf("expected tile %d, got %#v", pos, packet.Tile)
+	}
+	if packet.Block == nil || packet.Block.ID() != 223 {
+		t.Fatalf("expected block 223, got %#v", packet.Block)
+	}
+	if packet.Builder != nil {
+		t.Fatalf("expected nil builder, got %#v", packet.Builder)
+	}
+
+	out := NewWriter()
+	src := Remote_ConstructBlock_deconstructFinish_145{
+		Tile:   TileBox{PosValue: pos},
+		Block:  BlockRef{BlkID: 223},
+		Builder: nil,
+	}
+	if err := src.Write(out); err != nil {
+		t.Fatalf("write deconstructFinish: %v", err)
+	}
+	if string(out.Bytes()) != string(wire.Bytes()) {
+		t.Fatalf("Write layout mismatch\n got %v\nwant %v", out.Bytes(), wire.Bytes())
+	}
+}

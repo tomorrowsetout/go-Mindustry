@@ -76,10 +76,17 @@ func (w *World) checkSimBulletCollisionsLocked(idx int, b *simBullet) bool {
 			if pos >= 0 && int(pos) < len(w.model.Tiles) {
 				tile := &w.model.Tiles[pos]
 				if tile.Build != nil && tile.Build.Team != b.Team && tile.Build.Health > 0 {
-					// Hit building
-					tile.Build.Health -= b.BuildingDamage
-					w.despawnSimBulletLocked(idx, b)
-					return true
+					// Full path: armor, buildHealth events, destroy at 0 (was raw -= multiplier only).
+					if w.applyDamageToBuildingProfile(pos, b.Damage*b.BuildingDamage, damageApplyProfile{
+						PierceArmor:       b.PierceArmor,
+						ArmorMultiplier:   b.ArmorMultiplier,
+						MaxDamageFraction: b.MaxDamageFraction,
+					}) {
+						if !b.PierceBuilding {
+							w.despawnSimBulletLocked(idx, b)
+							return true
+						}
+					}
 				}
 			}
 		}

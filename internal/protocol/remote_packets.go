@@ -5297,7 +5297,7 @@ func (p *Remote_Build_beginPlace_133) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Unit = v0
-	v1, err := ReadContent(r, r.Ctx)
+	v1, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5334,7 +5334,7 @@ func (p *Remote_Build_beginPlace_133) Write(w *Writer) error {
 	if err := WriteUnit(w, p.Unit); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Result); err != nil {
+	if err := WriteBlock(w, p.Result); err != nil {
 		return err
 	}
 	if err := WriteTeam(w, &p.Team); err != nil {
@@ -5435,12 +5435,12 @@ func (p *Remote_Tile_setFloor_137) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Tile = v0
-	v1, err := ReadContent(r, r.Ctx)
+	v1, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
 	p.Floor = v1
-	v2, err := ReadContent(r, r.Ctx)
+	v2, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5452,10 +5452,10 @@ func (p *Remote_Tile_setFloor_137) Write(w *Writer) error {
 	if err := WriteTile(w, p.Tile); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Floor); err != nil {
+	if err := WriteBlock(w, p.Floor); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Overlay); err != nil {
+	if err := WriteBlock(w, p.Overlay); err != nil {
 		return err
 	}
 	return nil
@@ -5474,7 +5474,7 @@ func (p *Remote_Tile_setOverlay_138) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Tile = v0
-	v1, err := ReadContent(r, r.Ctx)
+	v1, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5486,7 +5486,7 @@ func (p *Remote_Tile_setOverlay_138) Write(w *Writer) error {
 	if err := WriteTile(w, p.Tile); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Overlay); err != nil {
+	if err := WriteBlock(w, p.Overlay); err != nil {
 		return err
 	}
 	return nil
@@ -5569,7 +5569,7 @@ func (p *Remote_Tile_setTile_140) Read(r *Reader, _ int) error {
 		return err
 	}
 	p.Tile = v0
-	v1, err := ReadContent(r, r.Ctx)
+	v1, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5591,7 +5591,7 @@ func (p *Remote_Tile_setTile_140) Write(w *Writer) error {
 	if err := WriteTile(w, p.Tile); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Block); err != nil {
+	if err := WriteBlock(w, p.Block); err != nil {
 		return err
 	}
 	if err := WriteTeam(w, &p.Team); err != nil {
@@ -5612,7 +5612,7 @@ type Remote_Tile_setTileBlocks_134 struct {
 }
 
 func (p *Remote_Tile_setTileBlocks_134) Read(r *Reader, _ int) error {
-	v0, err := ReadContent(r, r.Ctx)
+	v0, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5631,7 +5631,7 @@ func (p *Remote_Tile_setTileBlocks_134) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Tile_setTileBlocks_134) Write(w *Writer) error {
-	if err := WriteContent(w, p.Block); err != nil {
+	if err := WriteBlock(w, p.Block); err != nil {
 		return err
 	}
 	if err := WriteTeam(w, &p.Team); err != nil {
@@ -5651,7 +5651,7 @@ type Remote_Tile_setTileFloors_135 struct {
 }
 
 func (p *Remote_Tile_setTileFloors_135) Read(r *Reader, _ int) error {
-	v0, err := ReadContent(r, r.Ctx)
+	v0, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5665,7 +5665,7 @@ func (p *Remote_Tile_setTileFloors_135) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Tile_setTileFloors_135) Write(w *Writer) error {
-	if err := WriteContent(w, p.Block); err != nil {
+	if err := WriteBlock(w, p.Block); err != nil {
 		return err
 	}
 	if err := WriteInts(w, p.Positions); err != nil {
@@ -5682,7 +5682,7 @@ type Remote_Tile_setTileOverlays_136 struct {
 }
 
 func (p *Remote_Tile_setTileOverlays_136) Read(r *Reader, _ int) error {
-	v0, err := ReadContent(r, r.Ctx)
+	v0, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5696,7 +5696,7 @@ func (p *Remote_Tile_setTileOverlays_136) Read(r *Reader, _ int) error {
 }
 
 func (p *Remote_Tile_setTileOverlays_136) Write(w *Writer) error {
-	if err := WriteContent(w, p.Block); err != nil {
+	if err := WriteBlock(w, p.Block); err != nil {
 		return err
 	}
 	if err := WriteInts(w, p.Positions); err != nil {
@@ -5722,12 +5722,13 @@ func (p *Remote_ConstructBlock_constructFinish_146) Read(r *Reader, _ int) error
 		return err
 	}
 	p.Tile = v0
-	v1, err := ReadContent(r, r.Ctx)
+	v1, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
 	p.Block = v1
-	v2, err := ReadEntity(r, r.Ctx)
+	// Java constructFinish builder is Unit → TypeIO.writeUnit/readUnit
+	v2, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5754,10 +5755,10 @@ func (p *Remote_ConstructBlock_constructFinish_146) Write(w *Writer) error {
 	if err := WriteTile(w, p.Tile); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Block); err != nil {
+	if err := WriteBlock(w, p.Block); err != nil {
 		return err
 	}
-	if err := WriteEntity(w, p.Builder); err != nil {
+	if err := WriteUnit(w, p.Builder); err != nil {
 		return err
 	}
 	if err := w.WriteByte(p.Rotation); err != nil {
@@ -5786,12 +5787,13 @@ func (p *Remote_ConstructBlock_deconstructFinish_145) Read(r *Reader, _ int) err
 		return err
 	}
 	p.Tile = v0
-	v1, err := ReadContent(r, r.Ctx)
+	v1, err := ReadBlock(r, r.Ctx)
 	if err != nil {
 		return err
 	}
 	p.Block = v1
-	v2, err := ReadEntity(r, r.Ctx)
+	// Client DeconstructFinishCallPacket uses TypeIO.readUnit for builder.
+	v2, err := ReadUnit(r, r.Ctx)
 	if err != nil {
 		return err
 	}
@@ -5803,10 +5805,10 @@ func (p *Remote_ConstructBlock_deconstructFinish_145) Write(w *Writer) error {
 	if err := WriteTile(w, p.Tile); err != nil {
 		return err
 	}
-	if err := WriteContent(w, p.Block); err != nil {
+	if err := WriteBlock(w, p.Block); err != nil {
 		return err
 	}
-	if err := WriteEntity(w, p.Builder); err != nil {
+	if err := WriteUnit(w, p.Builder); err != nil {
 		return err
 	}
 	return nil

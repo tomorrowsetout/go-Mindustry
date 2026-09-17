@@ -1741,10 +1741,10 @@ func normalize(cfg *Config) {
 		cfg.Runtime.VirtualPlayers = 0
 	}
 	if cfg.Net.SyncEntityMs <= 0 {
-		cfg.Net.SyncEntityMs = 200
+		cfg.Net.SyncEntityMs = 50
 	}
 	if cfg.Net.SyncStateMs <= 0 {
-		cfg.Net.SyncStateMs = 200
+		cfg.Net.SyncStateMs = 50
 	}
 	if strings.TrimSpace(cfg.Runtime.AssetsDir) == "" {
 		cfg.Runtime.AssetsDir = "assets"
@@ -2180,8 +2180,8 @@ func Default() Config {
 			UdpRetryCount:   2,
 			UdpRetryDelayMs: 5,
 			UdpFallbackTCP:  true,
-			SyncEntityMs:    200,
-			SyncStateMs:     200,
+			SyncEntityMs:    50,
+			SyncStateMs:     50,
 		},
 		Sync: SyncConfig{
 			Strategy:               AuthoritySyncDynamic,

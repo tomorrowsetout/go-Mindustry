@@ -21,6 +21,7 @@ type blockSyncKind byte
 const (
 	blockSyncNone blockSyncKind = iota
 	blockSyncBaseOnly
+	blockSyncConstruct
 	blockSyncConveyor
 	blockSyncStackConveyor
 	blockSyncMassDriver
@@ -152,6 +153,7 @@ func (w *World) filterSyncedBuildingsByRouteLocked(positions []int32, itemTurret
 		// restart those animations from a recomputed local state.
 		switch kind {
 		case blockSyncBaseOnly,
+			blockSyncConstruct, // ConstructBuild progress animation
 			blockSyncConveyor,
 			blockSyncStackConveyor,
 			blockSyncStorage,              // container, vault
@@ -543,6 +545,11 @@ func (w *World) blockSyncSnapshotsForTilePositionsLocked(tilePositions []int32, 
 
 func classifyBlockSyncKind(name string) blockSyncKind {
 	switch name {
+	case "build1", "build2", "build3", "build4", "build5", "build6",
+		"build7", "build8", "build9", "build10", "build11", "build12",
+		"build13", "build14", "build15", "build16":
+		// ConstructBlock: sync=true; writeSync = base + ConstructBuild.write tail.
+		return blockSyncConstruct
 	case "battery", "battery-large",
 		"unit-repair-tower",
 		"power-node", "power-node-large", "surge-tower", "beam-link", "power-source",
@@ -686,6 +693,10 @@ func (w *World) serializeBlockSyncLocked(pos int32, tile *Tile, name string, kin
 	}
 
 	switch kind {
+	case blockSyncConstruct:
+		if err := writeConstructBuildSyncTail(writer, tile); err != nil {
+			return nil, false
+		}
 	case blockSyncConveyor:
 		if err := w.writeBlockConveyorSyncLocked(writer, pos, tile); err != nil {
 			return nil, false
@@ -1183,6 +1194,64 @@ func writeBlockLiquidModule(writer *protocol.Writer, build *Building) error {
 			return err
 		}
 		if err := writer.WriteFloat32(stack.Amount); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeConstructBuildSyncTail matches ConstructBlock.ConstructBuild.write after writeBase:
+// f progress, s previous.id, s current.id, b accLen (-1 or n), n*(f,f,i).
+func writeConstructBuildSyncTail(writer *protocol.Writer, tile *Tile) error {
+	if tile == nil || tile.Build == nil {
+		return writer.WriteByte(0xFF)
+	}
+	b := tile.Build
+	progress := b.ConstructProgress
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	if err := writer.WriteFloat32(progress); err != nil {
+		return err
+	}
+	if err := writer.WriteInt16(int16(b.ConstructPrevious)); err != nil {
+		return err
+	}
+	if err := writer.WriteInt16(int16(b.ConstructCurrent)); err != nil {
+		return err
+	}
+	if len(b.ConstructAccum) == 0 {
+		return writer.WriteByte(0xFF)
+	}
+	n := len(b.ConstructAccum)
+	if n > 127 {
+		n = 127
+	}
+	if err := writer.WriteByte(byte(n)); err != nil {
+		return err
+	}
+	for i := 0; i < n; i++ {
+		var acc, total float32
+		var left int32
+		if i < len(b.ConstructAccum) {
+			acc = b.ConstructAccum[i]
+		}
+		if i < len(b.ConstructTotalAccum) {
+			total = b.ConstructTotalAccum[i]
+		}
+		if i < len(b.ConstructItemsLeft) {
+			left = b.ConstructItemsLeft[i]
+		}
+		if err := writer.WriteFloat32(acc); err != nil {
+			return err
+		}
+		if err := writer.WriteFloat32(total); err != nil {
+			return err
+		}
+		if err := writer.WriteInt32(left); err != nil {
 			return err
 		}
 	}

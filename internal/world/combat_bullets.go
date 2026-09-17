@@ -144,6 +144,7 @@ func (w *World) spawnBulletWithAngle(src RawEntity, tx, ty, angle, speedScale fl
 		HitBuilds:          src.AttackBuildings,
 		BulletType:         src.AttackBulletType,
 		SplashRadius:       src.AttackSplashRadius,
+		// Multiplier only; actual hit uses Damage * BuildingDamage.
 		BuildingDamage:     buildingMul,
 		ArmorMultiplier:    src.AttackArmorMultiplier,
 		MaxDamageFraction:  src.AttackMaxDamageFraction,
@@ -273,12 +274,32 @@ func (w *World) stepBullets(dt float32, idToIndex map[int32]int, spatial *entity
 			}
 		}
 		if !hit && b.HitBuilds {
-			if pos, _, _, ok := w.findNearestEnemyBuilding(RawEntity{X: b.X, Y: b.Y, Team: b.Team}, b.Radius); ok {
-				initialHealth := float32(0)
-				if pos >= 0 && int(pos) < len(w.model.Tiles) && w.model.Tiles[pos].Build != nil {
-					initialHealth = w.model.Tiles[pos].Build.Health
+			// Prefer the tile the bullet is on (vanilla-style), then a nearby
+			// enemy building center. Radius-only center search misses 1x1 walls.
+			buildPos := int32(-1)
+			if w.model != nil {
+				tx := int(b.X / 8)
+				ty := int(b.Y / 8)
+				if w.model.InBounds(tx, ty) {
+					p := int32(ty*w.model.Width + tx)
+					t := &w.model.Tiles[p]
+					if t.Build != nil && t.Build.Team != b.Team && t.Build.Health > 0 {
+						buildPos = p
+					}
 				}
-				if w.applyDamageToBuildingProfile(pos, b.Damage*b.BuildingDamage, bulletDamageApplyProfile(*b)) {
+			}
+			if buildPos < 0 {
+				searchR := maxf(b.Radius, 12)
+				if pos, _, _, ok := w.findNearestEnemyBuilding(RawEntity{X: b.X, Y: b.Y, Team: b.Team}, searchR); ok {
+					buildPos = pos
+				}
+			}
+			if buildPos >= 0 {
+				initialHealth := float32(0)
+				if int(buildPos) < len(w.model.Tiles) && w.model.Tiles[buildPos].Build != nil {
+					initialHealth = w.model.Tiles[buildPos].Build.Health
+				}
+				if w.applyDamageToBuildingProfile(buildPos, b.Damage*b.BuildingDamage, bulletDamageApplyProfile(*b)) {
 					applyPierceDamageLoss(&b.Damage, b.PierceDamageFactor, initialHealth)
 					w.applySplashDamage(*b)
 					hit = true
@@ -719,6 +740,8 @@ func (w *World) applyDamageToBuildingRaw(pos int32, damage float32) bool {
 	w.setBuildingOccupancyLocked(pos, t, false)
 	t.Build = nil
 	t.Block = 0
+	t.Team = 0
+	t.Rotation = 0
 	delete(w.buildStates, pos)
 	w.clearBuildingRuntimeLocked(pos)
 	if powerRelevant {

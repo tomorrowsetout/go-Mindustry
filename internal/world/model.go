@@ -76,6 +76,14 @@ type Building struct {
 	MapPowerLinks     []int32
 	MapPowerStatus    float32
 	MapPowerStatusSet bool
+	// ConstructBuild sync (vanilla ConstructBlock.ConstructBuild.write tail).
+	Construct           bool
+	ConstructProgress   float32
+	ConstructPrevious   BlockID
+	ConstructCurrent    BlockID
+	ConstructAccum      []float32
+	ConstructTotalAccum []float32
+	ConstructItemsLeft  []int32
 }
 
 // GetX 获取X坐标

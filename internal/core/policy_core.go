@@ -156,10 +156,16 @@ func (c4 *Core4) Stop() {
 	}
 }
 
-func (c4 *Core4) Send(msg Message) bool {
+func (c4 *Core4) Send(msg Message) (ok bool) {
 	if c4 == nil || msg == nil {
 		return false
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			c4.stats.AddDropped(1)
+		}
+	}()
 	select {
 	case c4.messages <- msg:
 		c4.stats.AddQueueSize(1)

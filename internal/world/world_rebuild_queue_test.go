@@ -58,6 +58,7 @@ func TestInstantDeconstructDoesNotQueueRebuildPlan(t *testing.T) {
 	rules := w.GetRulesManager().Get()
 	rules.GhostBlocks = true
 	rules.InstantBuild = true
+	rules.InfiniteResources = true
 
 	placeTestBuilding(t, w, 5, 5, 45, 1, 0)
 
@@ -91,6 +92,7 @@ func TestPlacedBuildingClearsOverlappingRebuildPlans(t *testing.T) {
 	rules := w.GetRulesManager().Get()
 	rules.GhostBlocks = true
 	rules.InstantBuild = true
+	rules.InfiniteResources = true
 
 	placeTestBuilding(t, w, 6, 6, 100, 1, 0)
 

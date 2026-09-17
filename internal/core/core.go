@@ -716,7 +716,7 @@ func (c2 *Core2) handleLoadWorld(m *PersistenceMessage) {
 }
 
 // Send 发送消息到 IO Core
-func (c2 *Core2) Send(msg Message) bool {
+func (c2 *Core2) Send(msg Message) (ok bool) {
 	if c2 == nil || msg == nil {
 		return false
 	}
@@ -728,6 +728,14 @@ func (c2 *Core2) Send(msg Message) bool {
 			return c2.sendRemoteWorldStream(remote, m)
 		}
 	}
+	// Stop() may close the channel concurrently; sending on a closed channel panics.
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			c2.stats.AddDropped(1)
+			c2.stats.AddQueueSize(-1)
+		}
+	}()
 	c2.stats.AddQueueSize(1)
 	select {
 	case c2.messages <- msg:

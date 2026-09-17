@@ -3254,7 +3254,7 @@ func broadcastUnitDestroy(srv *netserver.Server, entityID int32) {
 }
 
 func unpackTilePos(pos int32) (int32, int32) {
-	return int32(uint16((pos >> 16) & 0xFFFF)), int32(uint16(pos & 0xFFFF))
+	return int32(uint16(pos & 0xFFFF)), int32(uint16((pos >> 16) & 0xFFFF))
 }
 
 func broadcastSetTile(srv *netserver.Server, buildPos int32, blockID int16, rot int8, team byte) {
@@ -3297,6 +3297,11 @@ func broadcastBuildConstructedState(srv *netserver.Server, wld *world.World, ev 
 		return
 	}
 	cfgValue := buildConstructConfigValue(wld, ev)
+	// Push construct progress to 100% first: client constructFinish does
+	// block.health * healthf() from the local ConstructBuild. Mid-queue health
+	// updates use constructBlockHealthMax (~10); finishing at ~50% would place
+	// the block at half HP.
+	broadcastBuildHealthUpdate(srv, []int32{ev.BuildPos, int32(math.Float32bits(world.ConstructBlockHealthMax()))})
 	// Finish the client's ConstructBuild first. Sending setTile before this can
 	// leave the client stuck on build2 and cause later blockSnapshot mismatches.
 	broadcastConstructFinish(srv, ev.BuildPos, ev.BuildBlock, ev.BuildRot, byte(ev.BuildTeam), builderUnitForOwner(srv, ev.BuildOwner), cfgValue)
@@ -5370,9 +5375,8 @@ func syncBuilderStateFromConnSnapshot(wld *world.World, c *netserver.Conn, owner
 	}
 	snapX, snapY := c.SnapshotPos()
 	active := builderSnapshotActive(c.IsDead(), c.UnitID(), c.IsBuilding(), plans, forceActive)
-	if !active && wld.HasPendingPlansForOwner(owner) {
-		active = true
-	}
+	// Do not force active from leftover pending plans: client pause (IsBuilding=false)
+	// must stop construct progress while the queue remains.
 	// UnitType.buildRange defaults to Vars.buildingRange in 157.
 	wld.UpdateBuilderState(owner, team, c.UnitID(), snapX, snapY, active, 220)
 }

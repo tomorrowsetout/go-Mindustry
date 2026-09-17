@@ -216,6 +216,21 @@ func (s *Service) SyncPlans(owner int32, team world.TeamID, plans []*protocol.Bu
 		return
 	}
 	if len(plans) == 0 {
+		// Empty snapshot after a non-empty queue means the client cleared
+		// building (pause/Q). Reconcile so pending work stops immediately.
+		s.mu.Lock()
+		had := false
+		if prev, ok := s.lastByOwner[owner]; ok && len(prev) > 0 {
+			had = true
+		}
+		if had {
+			s.lastByOwner[owner] = nil
+			delete(s.lastAtByOwner, owner)
+		}
+		s.mu.Unlock()
+		if had {
+			_ = s.w.ApplyBuildPlanSnapshotForOwner(owner, team, nil)
+		}
 		return
 	}
 	width, height, ok := s.w.Bounds()
@@ -261,7 +276,9 @@ func (s *Service) SyncPlans(owner int32, team world.TeamID, plans []*protocol.Bu
 	s.lastAtByOwner[owner] = time.Now()
 	s.mu.Unlock()
 
-	s.w.ApplyBuildPlansForOwner(owner, team, ops)
+	// Full client plan snapshot: reconcile so cancelled queue entries disappear.
+	// Incremental ApplyBuildPlans only adds/updates and leaves stale plans running.
+	_ = s.w.ApplyBuildPlanSnapshotForOwner(owner, team, ops)
 }
 
 func (s *Service) Tick() int {

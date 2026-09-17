@@ -38,6 +38,15 @@ type buildHookState struct {
 	snapshotLogBy map[int32]snapshotLogKey
 	ownerActorMu  sync.RWMutex
 	ownerActorBy  map[int32]string
+	// planPresence tracks whether this owner's last clientSnapshot carried
+	// build plans, so Q-cancel (empty queue) can clear server pending state.
+	planPresenceMu sync.Mutex
+	planPresenceBy map[int32]planPresenceState
+}
+
+type planPresenceState struct {
+	hadPlans  bool
+	lastSeen  time.Time
 }
 
 type snapshotLogKey struct {
@@ -92,7 +101,49 @@ func newBuildHookState(
 		},
 		snapshotLogBy: make(map[int32]snapshotLogKey),
 		ownerActorBy:  make(map[int32]string),
+		planPresenceBy: make(map[int32]planPresenceState),
 	}
+}
+
+// maybeReconcileEmptyPlanSnapshot clears server pending plans when the official
+// client has emptied its builder queue (Q / clearBuilding). Empty snapshots are
+// otherwise no-ops to survive connect-time omissions, so only cancel shortly
+// after this owner actually had plans.
+func (bs *buildHookState) maybeReconcileEmptyPlanSnapshot(owner int32, team world.TeamID) {
+	if owner == 0 || bs.wld == nil {
+		return
+	}
+	now := time.Now()
+	bs.planPresenceMu.Lock()
+	st := bs.planPresenceBy[owner]
+	bs.planPresenceMu.Unlock()
+	if !st.hadPlans {
+		return
+	}
+	if now.Sub(st.lastSeen) > 5*time.Second {
+		return
+	}
+	if !bs.wld.HasPendingPlansForOwner(owner) {
+		return
+	}
+	_ = bs.wld.ApplyBuildPlanSnapshotForOwner(owner, team, nil)
+	if bs.logSnapshots() {
+		fmt.Printf("[buildtrace] reconcile empty client queue owner=%d team=%d cancelled-pending\n", owner, team)
+	}
+}
+
+func (bs *buildHookState) notePlanPresence(owner int32, hadPlans bool) {
+	if owner == 0 {
+		return
+	}
+	bs.planPresenceMu.Lock()
+	st := bs.planPresenceBy[owner]
+	st.hadPlans = hadPlans
+	if hadPlans {
+		st.lastSeen = time.Now()
+	}
+	bs.planPresenceBy[owner] = st
+	bs.planPresenceMu.Unlock()
 }
 
 func (bs *buildHookState) buildActor(owner int32, team world.TeamID) string {
@@ -131,6 +182,9 @@ func (bs *buildHookState) bindBuildPlanHooks(srv *netserver.Server) {
 		syncBuilderStateFromConnSnapshot(wld, c, owner, team, plans, false)
 		bs.rememberBuildOwner(c, owner)
 		if len(plans) == 0 {
+			// Reconcile while presence still shows prior plans; then mark empty.
+			bs.maybeReconcileEmptyPlanSnapshot(owner, team)
+			bs.notePlanPresence(owner, false)
 			key := snapshotLogKey{count: 0}
 			bs.snapshotLogMu.Lock()
 			prev, ok := bs.snapshotLogBy[c.PlayerID()]
@@ -143,6 +197,7 @@ func (bs *buildHookState) bindBuildPlanHooks(srv *netserver.Server) {
 				fmt.Printf("[buildtrace] recv snapshot player=%d remote=%s count=0\n", c.PlayerID(), c.RemoteAddr().String())
 			}
 		} else {
+			bs.notePlanPresence(owner, true)
 			first := plans[0]
 			blockID := int16(0)
 			if first != nil && !first.Breaking && first.Block != nil {
@@ -206,6 +261,20 @@ func (bs *buildHookState) bindBuildPlanHooks(srv *netserver.Server) {
 		buildService.CancelPositions(owner, []int32{protocol.PackPoint2(x, y)})
 		wld.CancelBuildAtForOwner(owner, x, y, breaking)
 	}
+	srv.OnOfficialUnitClear = func(c *netserver.Conn) {
+		if c == nil {
+			return
+		}
+		owner := resolveBuildOwner(c)
+		// Official Q/unitClear empties the client builder queue; mirror on server
+		// so stale pendingBreaks do not fire when the player next mines/builds.
+		buildService.ClearOwner(owner)
+		wld.ClearBuilderState(owner)
+		wld.CancelBuildPlansByOwner(owner)
+		if bs.logSnapshots() && !cfg.Building.Translated {
+			fmt.Printf("[buildtrace] unitClear cancel plans player=%d owner=%d\n", c.PlayerID(), owner)
+		}
+	}
 	srv.OnCommandUnits = func(c *netserver.Conn, unitIDs []int32, buildTarget any, unitTarget any, posTarget any, queueCommand bool, _ bool) {
 		bs.unitCmds.applyCommandUnits(c, wld, unitIDs, buildTarget, unitTarget, posTarget, queueCommand)
 	}
@@ -233,7 +302,7 @@ func (bs *buildHookState) runEventLoop(srv *netserver.Server) {
 		}()
 		t := time.NewTicker(time.Second / time.Duration(bs.gameTPS))
 		defer t.Stop()
-		nextBlockSnapshotSync := time.Now().Add(6 * time.Second)
+		nextBlockSnapshotSync := time.Now().Add(2 * time.Second)
 		nextPlanPreviewSync := time.Now()
 		eventBuf := make([]world.EntityEvent, 0, 1024)
 		for range t.C {
@@ -402,7 +471,7 @@ func (bs *buildHookState) runEventLoop(srv *netserver.Server) {
 			}
 			if !now.Before(nextBlockSnapshotSync) {
 				broadcastBlockSnapshots(srv, wld)
-				nextBlockSnapshotSync = now.Add(6 * time.Second)
+				nextBlockSnapshotSync = now.Add(2 * time.Second)
 			}
 			if bs.logBreakDone() {
 				logGroupedReactorExplosions(wld, evs, groupedExplosionBuilds)

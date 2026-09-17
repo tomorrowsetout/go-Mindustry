@@ -51,8 +51,8 @@ func ReadPlan(r *Reader, ctx *TypeIOContext) (*BuildPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	x := int32(int16((pos >> 16) & 0xFFFF))
-	y := int32(int16(pos & 0xFFFF))
+	x := int32(int16(pos & 0xFFFF))
+	y := int32(int16((pos >> 16) & 0xFFFF))
 
 	if t == 1 {
 		return &BuildPlan{Breaking: true, X: x, Y: y}, nil

@@ -134,10 +134,16 @@ func (c3 *Core3) Stop() {
 	}
 }
 
-func (c3 *Core3) Send(msg Message) bool {
+func (c3 *Core3) Send(msg Message) (ok bool) {
 	if c3 == nil || msg == nil {
 		return false
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			c3.stats.AddDropped(1)
+		}
+	}()
 	select {
 	case c3.messages <- msg:
 		c3.stats.AddQueueSize(1)

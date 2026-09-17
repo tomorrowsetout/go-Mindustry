@@ -1298,7 +1298,7 @@ func (w *World) buildDurationSecondsForOwnerLocked(blockID int16, owner int32, t
 }
 
 func (w *World) buildDurationSecondsForBuilderSpeedLocked(blockID int16, team TeamID, rules *Rules, builderSpeed float32) float32 {
-	if rules != nil && (rules.InstantBuild || rules.Editor) {
+	if rules != nil && rules.InstantBuild && (rules.InfiniteResources || rules.Editor) {
 		return 0.01
 	}
 	name := w.blockNameByID(blockID)

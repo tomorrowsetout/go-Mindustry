@@ -447,6 +447,11 @@ type pendingBreakState struct {
 
 const constructBlockHealthMax = float32(10)
 
+// ConstructBlockHealthMax is the client ConstructBuild health scale used for
+// progress (healthf = health/max). Finishing a build must push this to max
+// before constructFinish so the placed block is not half-healed.
+func ConstructBlockHealthMax() float32 { return constructBlockHealthMax }
+
 type factoryState struct {
 	Progress    float32
 	UnitType    int16
@@ -908,12 +913,13 @@ func (w *World) DebugItemTurretAmmoPacked(packedPos int32) string {
 		packedPos, tile.X, tile.Y, name, tile.Team, tile.Build.Team, totalAmmo, w.debugItemStacksLocked(tile.Build.Items))
 }
 
+// packTilePos matches arc Point2.pack / Java Tile.pos(): x low 16, y high 16.
 func packTilePos(x, y int) int32 {
-	return (int32(x)&0xFFFF)<<16 | (int32(y) & 0xFFFF)
+	return (int32(x) & 0xFFFF) | ((int32(y) & 0xFFFF) << 16)
 }
 
 func unpackTilePos(pos int32) (int, int) {
-	return int(uint16((pos >> 16) & 0xFFFF)), int(uint16(pos & 0xFFFF))
+	return int(uint16(pos & 0xFFFF)), int(uint16((pos >> 16) & 0xFFFF))
 }
 
 type BulletEvent struct {
@@ -8804,6 +8810,11 @@ func (w *World) SetModel(m *WorldModel) {
 	w.tick = 0
 	w.timeSec = 0
 	w.buildStates = map[int32]buildCombatState{}
+	w.turretStates = map[int32]*turretRuntimeState{}
+	w.mendProjectorStates = map[int32]*mendProjectorState{}
+	w.overdriveProjectorStates = map[int32]*overdriveProjectorState{}
+	w.forceProjectorStates = map[int32]*forceProjectorState{}
+	w.entityByIDCacheValid = false
 	w.tickStartTurretCoolants = nil
 	w.tickLiquidReceipts = nil
 	w.pendingBuilds = map[int32]pendingBuildState{}
@@ -9213,8 +9224,130 @@ func (w *World) appendBuildCancelledLocked(pos int32, st pendingBuildState) {
 
 func (w *World) cancelPendingBuildLocked(pos int32, st pendingBuildState) {
 	delete(w.pendingBuilds, pos)
+	w.clearConstructScaffoldLocked(pos, st)
 	w.refundPendingBuildConsumedLocked(st)
 	w.appendBuildCancelledLocked(pos, st)
+}
+
+// constructBlockIDForTargetLocked resolves build1..buildN for a target block size.
+func (w *World) constructBlockIDForTargetLocked(target BlockID) BlockID {
+	size := blockSizeByName(w.blockNameByID(int16(target)))
+	if size < 1 {
+		size = 1
+	}
+	if size > 12 {
+		size = 12
+	}
+	want := "build" + itoaSize(size)
+	if id, ok := w.blockIDByNameLocked(want); ok {
+		return id
+	}
+	// Fallback: any buildN in content.
+	for _, n := range []string{"build1", "build2", "build3", "build4", "build5", "build6", "build7", "build8", "build9"} {
+		if id, ok := w.blockIDByNameLocked(n); ok {
+			return id
+		}
+	}
+	return 0
+}
+
+func itoaSize(n int) string {
+	if n <= 9 {
+		return string(rune('0' + n))
+	}
+	if n == 10 {
+		return "10"
+	}
+	return "11"
+}
+
+func (w *World) blockIDByNameLocked(name string) (BlockID, bool) {
+	if w.blockNamesByID == nil {
+		return 0, false
+	}
+	for id, n := range w.blockNamesByID {
+		if n == name {
+			return BlockID(id), true
+		}
+	}
+	return 0, false
+}
+
+// placeConstructScaffoldLocked installs a ConstructBuild tile so clients can
+// animate via ConstructBuild.writeSync (progress + previous/current ids).
+func (w *World) placeConstructScaffoldLocked(pos int32, tile *Tile, team TeamID, st pendingBuildState) {
+	if tile == nil || w.model == nil {
+		return
+	}
+	consID := w.constructBlockIDForTargetLocked(BlockID(st.BlockID))
+	if consID <= 0 {
+		return
+	}
+	prev := BlockID(tile.Block)
+	// Clear previous building runtime if replacing empty/air only.
+	if tile.Build != nil && tile.Block != 0 {
+		// Overwriting a live building: keep as previous visual; still replace with construct.
+		prev = tile.Block
+	}
+	tile.Block = consID
+	tile.Team = team
+	tile.Rotation = st.Rotation
+	tile.Build = &Building{
+		Block:             consID,
+		Team:              team,
+		Rotation:          st.Rotation,
+		X:                 tile.X,
+		Y:                 tile.Y,
+		Health:            constructBlockHealthMax * clampf(st.Progress, 0, 1),
+		MaxHealth:         constructBlockHealthMax,
+		Construct:         true,
+		ConstructProgress: clampf(st.Progress, 0, 1),
+		ConstructPrevious: prev,
+		ConstructCurrent:  BlockID(st.BlockID),
+	}
+	if tile.Build.Health < 1 {
+		tile.Build.Health = 1
+	}
+	w.setBuildingOccupancyLocked(pos, tile, true)
+	w.indexActiveTileLocked(pos, tile)
+}
+
+func (w *World) updateConstructScaffoldProgressLocked(pos int32, tile *Tile, st pendingBuildState) {
+	if tile == nil || tile.Build == nil || !tile.Build.Construct {
+		return
+	}
+	p := clampf(st.Progress, 0, 1)
+	tile.Build.ConstructProgress = p
+	hp := constructBlockHealthMax * p
+	if hp < 1 {
+		hp = 1
+	}
+	tile.Build.Health = hp
+}
+
+func (w *World) clearConstructScaffoldLocked(pos int32, st pendingBuildState) {
+	if w.model == nil || pos < 0 || int(pos) >= len(w.model.Tiles) {
+		return
+	}
+	tile := &w.model.Tiles[pos]
+	if tile.Build == nil || !tile.Build.Construct {
+		return
+	}
+	// Remove scaffold; final block is applied by constructFinish / placeCompleted.
+	w.removeActiveTileIndexLocked(pos, tile)
+	w.setBuildingOccupancyLocked(pos, tile, false)
+	tile.Block = tile.Build.ConstructPrevious
+	if tile.Block == 0 {
+		tile.Build = nil
+		tile.Team = 0
+		tile.Rotation = 0
+	} else {
+		// Restore previous as empty air-floor style only if previous was air.
+		tile.Build = nil
+		tile.Team = 0
+		tile.Rotation = 0
+	}
+	w.clearBuildingRuntimeLocked(pos)
 }
 
 func (w *World) stepPendingBuilds(delta time.Duration) {
@@ -9307,6 +9440,10 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 				w.pendingBuilds[pos] = st
 				continue
 			}
+			// Vanilla beginPlace: setTile to ConstructBlock.get(size) so clients
+			// animate via ConstructBuild.writeSync in blockSnapshot.
+			prevBlock := int16(tile.Block)
+			w.placeConstructScaffoldLocked(pos, tile, st.Team, st)
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:        EntityEventBuildPlaced,
 				BuildPos:    packTilePos(tile.X, tile.Y),
@@ -9318,6 +9455,7 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			})
 			st.VisualPlaced = true
 			st.LastHP = 1
+			_ = prevBlock
 			w.entityEvents = append(w.entityEvents, EntityEvent{
 				Kind:     EntityEventBuildHealth,
 				BuildPos: packTilePos(tile.X, tile.Y),
@@ -9325,6 +9463,7 @@ func (w *World) stepPendingBuilds(delta time.Duration) {
 			})
 		}
 		st.Progress = clampf(st.Progress+progressStep, 0, 1)
+		w.updateConstructScaffoldProgressLocked(pos, tile, st)
 		hpNow := constructBlockHealthMax * clampf(st.Progress, 0, 1)
 		if hpNow < 1 {
 			hpNow = 1
@@ -10191,6 +10330,7 @@ func (w *World) AddEntityWithID(typeID int16, id int32, x, y float32, team TeamI
 		StatusBuildSpeedMul: 1,
 		StatusDragMul:       1,
 		StatusArmorOverride: -1,
+		Statuses:            nil,
 		RuntimeInit:         true,
 		MineTilePos:         invalidEntityTilePos,
 		Team:                team,
@@ -10741,7 +10881,7 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 			delete(w.pendingBreaks, pos)
 			return
 		}
-		if rules := w.rulesMgr.Get(); rules != nil && (rules.InstantBuild || rules.Editor) {
+		if rules := w.rulesMgr.Get(); rules != nil && rules.InstantBuild && (rules.InfiniteResources || rules.Editor) {
 			w.destroyTileLocked(tile, team, owner)
 			delete(w.pendingBreaks, pos)
 			addChanged(pos)
@@ -10832,7 +10972,8 @@ func (w *World) applyBuildPlanOpLocked(owner int32, team TeamID, op BuildPlanOp,
 		delete(w.pendingBuilds, pos)
 		return
 	}
-	if rules := w.rulesMgr.Get(); rules != nil && (rules.InstantBuild || rules.Editor) {
+	// Vanilla BuilderComp: instant only when instantBuild && infiniteResources.
+	if rules := w.rulesMgr.Get(); rules != nil && rules.InstantBuild && (rules.InfiniteResources || rules.Editor) {
 		w.placeTileLocked(tile, team, op.BlockID, int8(op.Rotation), op.Config, owner)
 		delete(w.pendingBuilds, pos)
 		delete(w.pendingBreaks, pos)
@@ -10883,7 +11024,8 @@ func (w *World) placeCompletedBuildingLocked(pos int32, tile *Tile, team TeamID,
 	prevPayload := []byte(nil)
 	prevHealth := float32(1000)
 	prevMaxHealth := float32(1000)
-	if tile.Build != nil && tile.Block == BlockID(blockID) {
+	replacingSameBlock := tile.Build != nil && tile.Block == BlockID(blockID)
+	if replacingSameBlock {
 		prevItems = cloneItemStacks(tile.Build.Items)
 		prevLiquids = cloneLiquidStacks(tile.Build.Liquids)
 		prevPayload = cloneBytes(tile.Build.Payload)
@@ -10931,6 +11073,10 @@ func (w *World) placeCompletedBuildingLocked(pos int32, tile *Tile, team TeamID,
 		if tile.Build.Health <= 0 {
 			tile.Build.Health = tile.Build.MaxHealth
 		}
+	}
+	// New placement (not overwrite): always full health. Overwrites keep prev ratio.
+	if !replacingSameBlock {
+		tile.Build.Health = tile.Build.MaxHealth
 	}
 
 	if prevPowerRelevant || w.isPowerRelevantBuildingLocked(tile) {

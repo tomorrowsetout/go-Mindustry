@@ -184,6 +184,8 @@ type Server struct {
 	// Optional hooks: cancel queued build plans from client side.
 	OnDeletePlans               func(*Conn, []int32)
 	OnRemoveQueueBlock          func(*Conn, int32, int32, bool)
+	// Optional hook: Q / unitClear — drop that owner's pending build/break queue.
+	OnOfficialUnitClear         func(*Conn)
 	OnRequestUnitPayload        func(*Conn, int32)
 	OnRequestBuildPayload       func(*Conn, int32)
 	OnRequestDropPayload        func(*Conn, float32, float32)
@@ -359,7 +361,7 @@ func NewServer(addr string, build int) *Server {
 		UdpFallbackTCP:     true,
 		RespawnDelayFrames: 60,
 	}
-	s.SetSnapshotIntervals(200, 200)
+	s.SetSnapshotIntervals(50, 50)
 	s.verboseNetLog.Store(false)
 	s.packetRecvEventsEnabled.Store(false)
 	s.packetSendEventsEnabled.Store(false)
@@ -5099,6 +5101,11 @@ func (s *Server) handleOfficialUnitClear(c *Conn) {
 		return
 	}
 	defer c.endRespawnChain("official-unitClear")
+	// Q/unitClear must drop pending build/break work immediately; otherwise
+	// the next builder activity resumes a cancelled plan after a lag.
+	if s.OnOfficialUnitClear != nil {
+		s.OnOfficialUnitClear(c)
+	}
 	if s.connUnitAlive(c) {
 		if s.tryDockedUnitClearRespawn(c, "unitClear-91") {
 			return

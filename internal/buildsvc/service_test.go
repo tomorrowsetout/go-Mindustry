@@ -41,7 +41,7 @@ func newBuildSvcTestWorld(t *testing.T) *world.World {
 	return w
 }
 
-func TestSyncPlansEmptyDoesNotClearExistingOwnerQueue(t *testing.T) {
+func TestSyncPlansEmptyAfterNonEmptyClearsOwnerQueue(t *testing.T) {
 	w := newBuildSvcTestWorld(t)
 	svc := New(w, Options{})
 
@@ -53,13 +53,14 @@ func TestSyncPlansEmptyDoesNotClearExistingOwnerQueue(t *testing.T) {
 		t.Fatal("expected non-empty sync to create pending owner plans")
 	}
 
+	// Vanilla clearBuilding + empty plan packet: stop the queue.
 	svc.SyncPlans(101, 1, nil)
-	if !w.HasPendingPlansForOwner(101) {
-		t.Fatal("expected empty sync to leave existing owner plans intact")
+	if w.HasPendingPlansForOwner(101) {
+		t.Fatal("expected empty sync after plans to clear owner queue")
 	}
 }
 
-func TestSyncPlansAddsIncrementalOpsInsteadOfReplacingQueue(t *testing.T) {
+func TestSyncPlansReplacesQueueOnNonEmptySnapshot(t *testing.T) {
 	w := newBuildSvcTestWorld(t)
 	svc := New(w, Options{})
 
@@ -72,7 +73,8 @@ func TestSyncPlansAddsIncrementalOpsInsteadOfReplacingQueue(t *testing.T) {
 		Block: protocol.BlockRef{BlkID: 45, BlkName: "duo"},
 	}})
 
-	if next, ok := w.FindNextPendingBuildPlan(1, 101); !ok || next.X != 2 || next.Y != 2 {
-		t.Fatalf("expected first queued build plan to remain at (2,2), got %+v ok=%v", next, ok)
+	// Non-empty snapshots are authoritative: cancelled (2,2) must be gone.
+	if next, ok := w.FindNextPendingBuildPlan(1, 101); !ok || next.X != 3 || next.Y != 2 {
+		t.Fatalf("expected only remaining plan (3,2), got %+v ok=%v", next, ok)
 	}
 }
