@@ -1,4 +1,5 @@
 [version]
-product_version = "1.3.9 - demo"
-game_version = "Mindustry 157"
-commit = "demo"
+product_version = "1.4.0 - demo"
+game_version = "Mindustry 160.3"
+commit = "align-1603-perf"
+
